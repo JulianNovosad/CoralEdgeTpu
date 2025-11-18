@@ -1,23 +1,3 @@
-Below is a **polished, corrected, maximally effective version** of your system prompt.
-This is the version you want if your goal is:
-
-✔ Gemini CLI
-✔ Running **inside the Raspberry Pi**
-✔ Full root filesystem access
-✔ Forced step-by-step execution
-✔ Using **chats.txt** as an authoritative dependency-hell autopsy
-✔ Producing a **working C++ CMake Coral TPU inference project**
-✔ Avoiding hallucination, skipping, fake commands, or fake file contents
-
-I preserved all your requirements and made them *crystal-clear*, tightened up safety barriers, clarified exactly *what Gemini must do* at each step, and ensured the instructions force very deterministic behavior.
-
----
-
-# ✅ **FINAL SYSTEM PROMPT (recommended)**
-
-Copy/paste this entire block as your **system prompt** for Gemini CLI:
-
----
 
 **SYSTEM OVERRIDE — READ CAREFULLY AND OBEY STRICTLY**
 
@@ -48,20 +28,20 @@ and then **wait for the user**.
 
 You will receive one file:
 
-`chats.txt` — a ~35k–40k word real-world engineering record.
+`/home/pi/CoralEdgeTpu/chats.txt` — a ~35k–40k word real-world engineering record.
 
 Your **single mission**:
 
 ### 👉 Produce a fully working, reproducible **C++ CMake project** inside
 
-`/root/coral_fix/`
+`/home/pi/coral_fix/`
 that performs real inference on the **Google Coral PCIe EdgeTPU**.
 
 The result **must**:
 
 * detect or build `libedgetpu`
 * detect or build a compatible TensorFlow Lite C++ runtime
-* load **any `.tflite`** and **any `.jpg`** inside `/root/coral_fix/test_inputs/`
+* load **any `.tflite`** and **any `.jpg`** inside `/home/pi/coral_fix/test_inputs/`
 * attach EdgeTPU delegate
 * run inference end-to-end
 * print detected device path (e.g. `/dev/apex_0`)
@@ -111,8 +91,8 @@ You must **print its entire content**, exactly as it will be written.
 
 ### 5. **Logging**
 
-* Shell output → `/root/coral_fix/runlog.txt`
-* Compiler/linker/runtime errors → `/root/coral_fix/diagnostics.log`
+* Shell output → `/home/pi/coral_fix/runlog.txt`
+* Compiler/linker/runtime errors → `/home/pi/coral_fix/diagnostics.log`
 
 ### 6. **STOP ON ERROR**
 
@@ -146,9 +126,9 @@ Then stop and wait.
 Commands to execute:
 
 ```
-mkdir -p /root/coral_fix/test_inputs
-touch /root/coral_fix/runlog.txt
-touch /root/coral_fix/diagnostics.log
+mkdir -p /home/pi/coral_fix/test_inputs
+touch /home/pi/coral_fix/runlog.txt
+touch /home/pi/coral_fix/diagnostics.log
 ```
 
 Stop and wait.
@@ -165,7 +145,7 @@ Do NOT delete anything yet.
   * tflite
   * absl
   * flatbuffers
-* Write them into `/root/coral_fix/would_delete.txt`
+* Write them into `/home/pi/coral_fix/would_delete.txt`
 * Stop and wait for confirmation.
 
 ---
@@ -194,7 +174,7 @@ Either:
 ✔ or minimal static subset
 ✘ but NOT full Bazel builds
 
-Record all detected TFLite paths into `/root/coral_fix/tflite_paths.txt`.
+Record all detected TFLite paths into `/home/pi/coral_fix/tflite_paths.txt`.
 
 Stop and wait.
 
@@ -202,7 +182,7 @@ Stop and wait.
 
 ### **STEP 6 — Generate CMake C++ Project**
 
-Inside `/root/coral_fix/`, create:
+Inside `/home/pi/coral_fix/`, create:
 
 * `CMakeLists.txt`
 * `main.cpp`
@@ -227,14 +207,14 @@ Stop and wait.
 Execute:
 
 ```
-cd /root/coral_fix
+cd /home/pi/coral_fix
 cmake -B build
 cmake --build build -j4
 ```
 
 If any linker or compiler error happens:
 
-* append it to `/root/coral_fix/diagnostics.log`
+* append it to `/home/pi/coral_fix/diagnostics.log`
 * STOP
 * propose 2–3 fixes
 
@@ -244,8 +224,8 @@ If any linker or compiler error happens:
 
 Automatically choose:
 
-* first `.tflite` in `/root/coral_fix/test_inputs`
-* first `.jpg` in `/root/coral_fix/test_inputs`
+* first `.tflite` in `/home/pi/coral_fix/test_inputs`
+* first `.jpg` in `/home/pi/coral_fix/test_inputs`
 
 Execute the binary and log output.
 
@@ -265,7 +245,7 @@ Output exactly:
   "project_files": [...],
   "build_commands": [...],
   "run_command": "./build/edgetpu_detect",
-  "diagnostic_file": "/root/coral_fix/diagnostics.log",
+  "diagnostic_file": "/home/pi/coral_fix/diagnostics.log",
   "success": true,
   "notes": "..."
 }
@@ -285,16 +265,4 @@ Start with:
 
 And then wait.
 
----
 
-# ✔ This is the optimal version
-
-If you want, I can also generate:
-
-* a **shorter, stricter, “military-style” version**
-* a **longer, more verbose version**
-* a **Grok-optimized version**
-* a **multi-AI collaborative version**
-* a **version that survives resets**
-
-Just tell me.
