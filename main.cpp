@@ -1,10 +1,127 @@
-// camera_producer_host.cpp
-// A multi-threaded camera producer that provides two streams:
-// 1. 100 FPS raw frames to a Unix socket for a local TPU.
-// 2. 45 FPS JPEG-encoded frames to a TCP socket for a remote client (phone).
+// A C++ application for real-time object detection using a Raspberry Pi Camera
+// and Google Coral Edge TPU. This application captures frames from libcamera,
+// resizes them to the model's input dimensions, performs inference on the Edge TPU,
+// and logs performance metrics.
 //
-// Compilation:
-// g++ -o camera_producer_host camera_producer_host.cpp -O3 -std=c++17 -lcamera -pthread
+// This project is developed according to a Stage-Gate plan, and this code
+// represents the successful completion of Stage 0 for the TPU component.
+//
+// --- Usage Instructions (README) ---
+//
+// 1.  **System Requirements:**
+//     *   Raspberry Pi 5 with Debian Bookworm (ARM64 architecture).
+//     *   Raspberry Pi Camera Module connected and enabled.
+//     *   Google Coral Edge TPU (PCIe) connected.
+//     *   Kernel 6.6.51+rpt-rpi-v8 (or compatible) with custom Device Tree Blob (DTB)
+//         modifications for MSI-X (Enable+ Count=128) for optimal TPU performance.
+//         (Refer to project documentation for DTB modification details if not already applied).
+//
+// 2.  **Dependencies Installation:**
+//     *   **Build Tools & Libraries:**
+//         ```bash
+//         sudo apt-get update
+//         sudo apt-get install -y build-essential cmake git curl lshw python3-pip libusb-1.0-0-dev libcamera-dev
+//         ```
+//     *   **Google Coral Edge TPU Runtime:**
+//         ```bash
+//         echo "deb [arch=arm64 signed-by=/usr/share/keyrings/coral-edgetpu-archive-keyring.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" | sudo tee /etc/apt/sources.list.d/coral-edgetpu.list
+//         curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo tee /usr/share/keyrings/coral-edgetpu-archive-keyring.gpg >/dev/null
+//         sudo apt-get update
+//         sudo apt-get install -y libedgetpu1-std
+//         ```
+//
+// 3.  **External Source Code (for building TensorFlow Lite and Headers):**
+//     *   **TensorFlow Lite (v2.5.0):**
+//         ```bash
+//         git clone --depth 1 --branch v2.5.0 https://github.com/tensorflow/tensorflow.git ~/tensorflow_src
+//         # Note: Replace ~/tensorflow_src with the actual path if cloned elsewhere.
+//         ```
+//     *   **FlatBuffers (v1.12.0):**
+//         ```bash
+//         git clone --depth 1 --branch v1.12.0 https://github.com/google/flatbuffers.git ~/flatbuffers_src
+//         # Note: Replace ~/flatbuffers_src with the actual path if cloned elsewhere.
+//         ```
+//     *   **libedgetpu Source (for Headers):**
+//         ```bash
+//         git clone https://github.com/google-coral/libedgetpu.git ~/libedgetpu_src
+//         # Note: Replace ~/libedgetpu_src with the actual path if cloned elsewhere.
+//         ```
+//
+// 4.  **Build and Install FlatBuffers:**
+//     ```bash
+//     rm -rf /usr/local/include/flatbuffers /usr/local/lib/libflatbuffers.a # Clean old installs
+//     mkdir -p ~/flatbuffers_src/build && cd ~/flatbuffers_src/build
+//     cmake -DFLATBUFFERS_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
+//     sudo make install
+//     sudo ldconfig
+//     cd - # Return to previous directory
+//     ```
+//
+// 5.  **Build TensorFlow Lite (v2.5.0) Shared Library & Apply Patches:**
+//     ```bash
+//     cd ~/tensorflow_src
+//     # Apply patches for missing includes (crucial for older TensorFlow versions with modern GCC)
+//     sed -i '1i#include <limits>' tensorflow/lite/ruy/ruy/block_map.cc
+//     sed -i '2i#include <cstddef>' tensorflow/lite/ruy/ruy/block_map.cc
+//     sed -i '1i#include <cstddef>' tensorflow/lite/gemmlowp/fixedpoint/fixedpoint.h
+//     sed -i '1i#include <cstddef>' tensorflow/lite/gemmlowp/public/gemmlowp.h
+//     
+//     # Modify Makefile to build shared library
+//     sed -i 's/LIB_NAME = libtensorflow-lite.a/LIB_NAME = libtensorflow-lite.so/' tensorflow/lite/tools/make/Makefile
+//     sed -i 's/ar rc \$(LIB_NAME)/\$(CXX) -shared -o \$(LIB_NAME)/' tensorflow/lite/tools/make/Makefile
+//     sed -i 's/\$(OBJS)/\$(OBJS) \$(LDFLAGS)/' tensorflow/lite/tools/make/Makefile
+//     
+//     make -f tensorflow/lite/tools/make/Makefile -j$(nproc)
+//     cd - # Return to previous directory
+//     ```
+//
+// 6.  **Prepare Project Directories & Copy Artifacts:**
+//     ```bash
+//     mkdir -p ~/CoralEdgeTpu/include/tensorflow ~/CoralEdgeTpu/include/edgetpu ~/CoralEdgeTpu/include/tflite/public ~/CoralEdgeTpu/lib ~/CoralEdgeTpu/DAILYLOGS
+//     
+//     # Copy TensorFlow Lite build artifact
+//     cp ~/tensorflow_src/tensorflow/lite/libtensorflow-lite.so ~/CoralEdgeTpu/lib/
+//     
+//     # Copy TensorFlow Lite headers (core TFLite API)
+//     rm -rf ~/CoralEdgeTpu/include/tensorflow/lite # Clean previous copies
+//     cp -r ~/tensorflow_src/tensorflow/lite ~/CoralEdgeTpu/include/tensorflow/
+//     
+//     # Copy Edge TPU delegate specific headers (from libedgetpu source)
+//     cp ~/libedgetpu_src/tflite/edgetpu_delegate_for_custom_op.h ~/CoralEdgeTpu/include/edgetpu/
+//     cp ~/libedgetpu_src/tflite/public/edgetpu.h ~/CoralEdgeTpu/include/tflite/public/
+//     
+//     # Copy model and labels
+//     cp ~/CoralEdgeTpu/modernizeddockertpurunfile/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite ~/CoralEdgeTpu/
+//     cp ~/CoralEdgeTpu/modernizeddockertpurunfile/coco_labels.txt ~/CoralEdgeTpu/
+//     ```
+//
+// 7.  **Compile the `detector` Application:**
+//     ```bash
+//     g++ -O3 -std=c++17 /home/pi/CoralEdgeTpu/main.cpp \
+//         -I/home/pi/CoralEdgeTpu/include \
+//         -I/usr/include/libcamera \
+//         /home/pi/CoralEdgeTpu/lib/libtensorflow-lite.so \
+//         -L/usr/lib/aarch64-linux-gnu \
+//         -ledgetpu \
+//         -lcamera \
+//         -lcamera-base \
+//         -o /home/pi/CoralEdgeTpu/detector \
+//         -lpthread -lm -lz -ldl -lusb-1.0
+//     ```
+//
+// 8.  **Run the `detector` Application:**
+//     ```bash
+//     /home/pi/CoralEdgeTpu/detector /home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite /home/pi/CoralEdgeTpu/coco_labels.txt
+//     ```
+//
+// 9.  **Output Files:**
+//     *   Console output provides real-time inference logs and a final benchmark summary.
+//     *   `/home/pi/CoralEdgeTpu/DAILYLOGS/tpu_benchmark.csv`: Contains the aggregate benchmark report (FPS, P50/P95/P99 latency).
+//     *   `/home/pi/CoralEdgeTpu/DAILYLOGS/tpu_frame_latency.csv`: Contains individual frame-by-frame latency data for detailed analysis and graphing.
+//
+// --- End Usage Instructions ---
+
+
 
 #include <tensorflow/lite/interpreter.h>
 #include <tensorflow/lite/kernels/register.h>
@@ -302,6 +419,19 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
     auto benchmark_start_time = std::chrono::high_resolution_clock::now();
     int frames_processed = 0;
 
+    // --- Individual Frame Latency CSV Output ---
+    const std::string frame_latency_csv_filename = "/home/pi/CoralEdgeTpu/DAILYLOGS/tpu_frame_latency.csv";
+    std::ofstream frame_latency_csv_file(frame_latency_csv_filename, std::ios::app); // Open in append mode
+    if (!frame_latency_csv_file.is_open()) {
+        std::cerr << "[" << get_timestamp() << "] [TPU Thread] ERROR: Could not open " << frame_latency_csv_filename << " for writing individual frame latencies." << std::endl;
+    } else {
+        // Write header if file is new/empty
+        if (frame_latency_csv_file.tellp() == 0) {
+            frame_latency_csv_file << "timestamp_utc,frame_id,inference_latency_ms,top1_result,top1_score\n";
+        }
+    }
+
+
     RawFrame frame;
     while (running && inference_queue.pop(frame)) {
         // Log the actual frame size from camera
@@ -342,11 +472,26 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
                 top_index = i;
             }
         }
+        
+        std::string current_top1_result = "N/A";
+        int current_top1_score = 0;
 
         if (top_index < labels.size()) {
-            std::cout << "[" << get_timestamp() << "] [TPU Thread] Top-1 result: " << labels[top_index] << " (score: " << static_cast<int>(max_score) << ")" << std::endl;
+            current_top1_result = labels[top_index];
+            current_top1_score = static_cast<int>(max_score);
+            std::cout << "[" << get_timestamp() << "] [TPU Thread] Top-1 result: " << current_top1_result << " (score: " << current_top1_score << ")" << std::endl;
         } else {
             std::cout << "[" << get_timestamp() << "] [TPU Thread] Top-1 index out of bounds for labels. Index: " << top_index << ", Labels size: " << labels.size() << std::endl;
+        }
+
+        // Write individual frame latency to CSV
+        if (frame_latency_csv_file.is_open()) {
+            frame_latency_csv_file << get_timestamp() << ","
+                                   << frames_processed << ","
+                                   << std::fixed << std::setprecision(3) << current_latency_ms << ","
+                                   << current_top1_result << ","
+                                   << current_top1_score << "\n";
+            frame_latency_csv_file.flush(); // Ensure data is written immediately
         }
 
         frames_processed++;
@@ -355,6 +500,11 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
             running = false; // Stop the main loop
             break;
         }
+    }
+
+    // Close individual frame latency CSV
+    if (frame_latency_csv_file.is_open()) {
+        frame_latency_csv_file.close();
     }
 
     // --- Benchmark Report ---
