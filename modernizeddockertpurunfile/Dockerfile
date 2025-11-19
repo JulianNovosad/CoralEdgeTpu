@@ -10,12 +10,15 @@ RUN echo "deb http://archive.debian.org/debian/  buster main" > /etc/apt/sources
     echo "deb http://archive.debian.org/debian-security/  buster/updates main" >> /etc/apt/sources.list && \
     echo "deb http://archive.debian.org/debian/  buster-updates main" >> /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    cmake \
+    libusb-1.0-0-dev \
+    libatlas-base-dev \
+    libhdf5-dev \
     ca-certificates \
     curl \
     gnupg \
-    python3-numpy \
-    python3-pil \
-    python3-posix-ipc \
     procps \
     lsof \
     && rm -rf /var/lib/apt/lists/*
@@ -24,26 +27,19 @@ RUN echo "deb http://archive.debian.org/debian/  buster main" > /etc/apt/sources
 RUN echo "deb https://packages.cloud.google.com/apt  coral-edgetpu-stable main" | tee /etc/apt/sources.list.d/coral-edgetpu.list
 RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 
-# Install Coral TPU libraries
-# libedgetpu1-std supports PCIe TPUs.
-# python3-pycoral provides the Python API.
-# python3-tflite-runtime provides the TensorFlow Lite runtime.
+# Install Coral TPU libraries (libedgetpu1-std only, as TFLite is built from source)
 RUN apt-get update && apt-get install -y \
     libedgetpu1-std \
-    python3-pycoral \
-    python3-tflite-runtime \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up the application directory
-WORKDIR /app
+# Install TensorFlow Lite from source
+WORKDIR /
+RUN git clone https://github.com/tensorflow/tensorflow.git
+WORKDIR /tensorflow
+RUN ./tensorflow/lite/tools/make/download_dependencies.sh
+RUN make -f tensorflow/lite/tools/make/Makefile -j$(nproc)
 
-# Create socket directory with proper permissions (defensive programming)
-RUN mkdir -p /app/socket && chmod 777 /app/socket
+# Set up environment variables
+ENV LD_LIBRARY_PATH=/tensorflow/tensorflow/lite/tools/make/gen/lib:$LD_LIBRARY_PATH
 
-# Copy the inference server script and model files
-COPY tpu_server.py /app/tpu_server.py
-COPY coco_labels.txt /app/coco_labels.txt
-COPY ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite /app/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite
-
-# Set the entrypoint for the container, ensuring unbuffered output
-ENTRYPOINT ["python3", "-u", "/app/tpu_server.py"]
+WORKDIR /workspace
