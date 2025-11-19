@@ -1,2 +1,6 @@
 timestamp_utc,module,stage,p50_latency_ms,p95_latency_ms,p99_latency_ms,avg_fps,min_latency_ms,max_latency_ms,avg_latency_ms,frames_processed,total_time_ms
 2025-11-19 22:27:43,TPU_Inference,Stage0,8.360,9.395,13.162,14.96,8.135,31.853,8.579,1000,66846.566
+2025-11-19 22:50:35,TPU_Inference,Stage0,8.348,9.848,13.721,14.96,8.150,32.953,8.621,1000,66839.465
+2025-11-19 22:54:00,TPU_Inference,Stage0,8.321,10.240,12.820,14.97,8.086,31.550,8.619,1000,66822.497
+2025-11-19 22:58:22,TPU_Inference,Stage0,8.294,10.485,13.798,14.96,8.076,32.581,8.654,1000,66842.402
+2025-11-19 23:04:50,TPU_Inference,Stage0,8.111,8.205,8.258,14.97,7.983,36.803,8.149,1000,66821.865
