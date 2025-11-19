@@ -10,7 +10,7 @@
 #include <tensorflow/lite/kernels/register.h>
 #include <tensorflow/lite/model.h>
 #include <tensorflow/lite/op_resolver.h>
-#include "edgetpu/edgetpu.h"
+#include "edgetpu/edgetpu_delegate_for_custom_op.h"
 #include <tensorflow/lite/c/common.h> // For TfLiteDelegate definition
 #include <tensorflow/lite/builtin_op_data.h>
 #include <fstream> // Required for ReadLabels
@@ -215,6 +215,8 @@ extern "C" {
 TfLiteDelegate* tflite_plugin_create_delegate(const void* options);
 void tflite_plugin_destroy_delegate(TfLiteDelegate* delegate);
 }
+
+
 
 
 // --- Thread 2: TPU Inference Thread ---
