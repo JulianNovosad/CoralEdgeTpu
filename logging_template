@@ -1,0 +1,308 @@
+# Advanced Edge / Coral Reproducible Logging Template
+
+> Purpose: capture a complete, reproducible snapshot of system state, configuration, runtime behavior, problems observed, and steps taken to diagnose and fix issues. Use this as a single canonical incident / experiment log for R&D, regression hunting, or publishing reproducible results.
+
+---
+
+## 1 — Record header
+
+* **Log ID:** `YYYYMMDD-HHMMSS-<short-tag>`
+* **Author / Owner:**
+* **Project / Repo:** (git remote + branch + commit hash)
+* **Purpose / short description:**
+* **Start time (UTC):**
+* **End time (UTC):**
+* **Tags:** (e.g. `coral`, `edgetpu`, `rpi`, `performance`, `profiling`)
+
+---
+
+## 2 — Host & environment snapshot (commands to run and paste output)
+
+Paste outputs of each command below (include stdout + stderr) and the exact command run.
+
+### 2.1 — Kernel & OS
+
+* Command: `uname -a`
+* Command: `cat /etc/os-release`
+* Command: `lsb_release -a` (if available)
+
+### 2.2 — Hardware
+
+* Command: `lscpu`
+* Command: `cat /proc/cpuinfo`
+* Command: `lsblk` (paste relevant block device info)
+* Command: `free -h`
+* Command: `vcgencmd measure_temp` (Raspberry Pi only)
+* Command: `sudo lshw -short` (if available)
+
+### 2.3 — PCI / USB / Devices
+
+* Command: `lspci -nnk` (if applicable)
+* Command: `lsusb -v` (or `lsusb`)
+* Command: `dmesg | tail -n 200` (from boot or after connecting device)
+* Command: `journalctl -k --since "-1h"` (if using systemd)
+
+### 2.4 — Drivers & kernel modules
+
+* Command: `lsmod`
+* Command: `modinfo <module>` for relevant modules (e.g. `edgetpu`, `uinput`, `wlcore`)
+* Command: `cat /proc/modules`
+
+### 2.5 — Filesystem & permissions
+
+* Command: `df -h`
+* Command: `mount | column -t`
+* Command: `stat -c "%n %U %G %a" <important-files-or-sockets>`
+
+---
+
+## 3 — Toolchain & compiler snapshot
+
+For reproducibility, include exact compiler and toolchain outputs.
+
+* Command: `gcc --version`
+* Command: `clang --version` (if used)
+* Command: `g++ --version`
+* Command: `ld --version`
+* Command: `cmake --version`
+* Command: `make --version`
+* Command: `ccache --version` (if used)
+* Command: `pip --version` and `python3 --version` (or `python --version`)
+* Command: `python3 -c "import sys; print(sys.executable, sys.version)"`
+
+### 3.1 — Compiler flags & environment
+
+* Show `CFLAGS`, `CXXFLAGS`, `LDFLAGS`, `CPPFLAGS` environment variables: `env | grep -E 'CFLAGS|CXXFLAGS|LDFLAGS|CPPFLAGS'`
+* Show `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, `PATH` and any relevant variables.
+
+---
+
+## 4 — Installed packages & libraries
+
+**Debian/apt-based:** `dpkg -l | grep -E '(python|tensorflow|libedgetpu|coral|gcc|cmake|libc)'`
+
+**RPM-based:** `rpm -qa | grep -E 'tensorflow|edgetpu|gcc'`
+
+**Python:**
+
+* `pip3 freeze` (or inside virtualenv: `source venv/bin/activate && pip freeze`)
+* `python -c "import pip; print(pip.__version__)"`
+
+**System libs & headers:**
+
+* `ldconfig -p | egrep 'tflite|tensorflow|edgetpu|libtensorflow'`
+* `pkg-config --list-all | egrep 'tensorflow|edgetpu'`
+
+---
+
+## 5 — Coral / Edge TPU specific
+
+* Edge TPU runtime & driver version: command and output.
+
+  * `dpkg -l | grep edgetpu` or `apt show libedgetpu1-std` (Debian)
+  * `edgetpu_demo` output (if available)
+* Edge TPU device enumeration: `lsusb -v` and `dmesg | grep -i edgetpu` or `dmesg | grep -i usb` after plugin
+* Firmware / firmware version (if available via vendor tools)
+* TensorFlow Lite delegate info: show the exact tflite delegate library used and its path, e.g. `/usr/lib/.../libedgetpu.so.1` (use `readlink -f`)
+* Coral model details: exact model file name, filesize, checksum (sha256), input shape, quantization type
+
+  * `sha256sum model.tflite`
+  * `xxd -s 0 -l 64 model.tflite | head -n 20` (optional binary head)
+
+---
+
+## 6 — Source tree & build metadata
+
+* Git remote: `git remote -v`
+* Git branch and HEAD: `git branch --show-current`, `git rev-parse --short HEAD`
+* Full `git status --porcelain` (paste)
+* Build directory path used and full build command(s) executed (copy/paste exact commands)
+* Build log attachments: include full build stdout/stderr (compress and attach if large)
+* CMakeCache.txt snippet: paste `grep -E '(TFLITE|EDGETPU|PROFILE|PROTOBUF|CUDA|ARM|NEON)' CMakeCache.txt || true`
+* Any applied patches: include patch files or `git apply --check` outputs
+
+---
+
+## 7 — Runtime invocation & parameters
+
+* Exact command line used to run the program (copy/paste):
+
+  * Include working directory, environment variables, and wrappers (e.g. `LD_PRELOAD`, `taskset`, `numactl`, `perf record`, `gdb --args`)
+* Example: `LD_LIBRARY_PATH=/usr/local/lib:... taskset -c 0-3 ./coral_test --model model.tflite --input sample.jpg --delegate edgetpu`
+* If running under a container: include full `docker run` command and Dockerfile (or container image hash)
+
+---
+
+## 8 — Observed problem / symptoms
+
+* **Short title:**
+* **Severity (blocker/minor):**
+* **Exact time observed (UTC):**
+* **Observed stdout/stderr (raw paste):**
+* **Observed metrics:** (latency, FPS, memory usage, CPU%, GPU% — values + how measured)
+* **Repro steps (minimal):** step-by-step exactly how to reproduce
+
+---
+
+## 9 — Diagnostics performed (detailed)
+
+List each diagnostic action, exact command used, timestamp, and results. Examples:
+
+* `strace -f -o /tmp/strace.log ./coral_test ...` — attach first 500 lines
+* `LD_DEBUG=libs ./coral_test` — paste relevant lines
+* `gdb --args ./coral_test ...` — include backtrace (`bt full`) from crash
+* `perf record -g -- ./coral_test ...` then `perf report` — paste top samples
+* `valgrind --leak-check=full ./coral_test ...` (if useful)
+* `readelf -sW /path/to/binary | grep -E 'profiler|tsl|tensorflow'` (show undefined symbols)
+* `nm -D /usr/local/lib/libtensorflow-lite.so | grep profiler` (show exported symbols)
+* `ldd ./coral_test` — paste output
+* `ldd /usr/local/lib/libtensorflow-lite.so` — paste output
+
+For each diagnostic, include interpretation and whether it ruled in/out a hypothesis.
+
+---
+
+## 10 — Hypotheses (chronological)
+
+For each hypothesis explain:
+
+* Hypothesis statement
+* Evidence for/against (with command outputs cited)
+* Status: `open`, `ruled out`, `confirmed`
+* Next steps
+
+---
+
+## 11 — Fixes attempted (chronological)
+
+Record each attempted fix with:
+
+* Exact commands/patches applied
+* Files changed (paths + short diff)
+* Test performed after fix and result
+* Was the fix reverted? How (git revert / patch revert)
+
+---
+
+## 12 — Final resolution / root cause
+
+* Short summary
+* Root cause analysis (be specific and cite evidence)
+* Final commands/patches that resolved the issue (copy/paste)
+* If unresolved: current blocking hypothesis and suggested next steps
+
+---
+
+## 13 — Artifacts & attachments
+
+List all attached artifacts (relative path in archive) and a short description:
+
+* `build.log.gz` — full build output
+* `dmesg-boot.log` — kernel ring buffer from boot
+* `strace.log` — up to first X lines
+* `core.<pid>` — core file (if present)
+* `perf.data` and `perf-report.txt`
+* `model.tflite.sha256`
+* `git-diff.patch`
+
+Attach checksum for each artifact: `sha256sum <file>`
+
+---
+
+## 14 — Repro archive & instructions (single-click)
+
+Provide a reproducible archive (tar.gz) layout and exact commands to recreate environment on a clean system.
+
+* Example folder layout inside `repro-YYYYMMDD-HHMMSS.tar.gz`:
+
+  ```
+  repro/
+  repro/README.md            # this file
+  repro/model/your_model.tflite
+  repro/toolchain/           # packages to install or dpkg list
+  repro/build/               # CMakeCache.txt and patch files
+  repro/run/run.sh           # exact wrapper script to run
+  repro/artifacts/           # logs, perf data
+  ```
+* Exact commands to recreate (apt-get install list, pip install list, export env vars). Example:
+
+  ```bash
+  sudo apt-get update && sudo apt-get install -y build-essential cmake git python3-pip libusb-1.0-0-dev
+  python3 -m venv venv && source venv/bin/activate
+  pip install -r toolchain/requirements.txt
+  tar xzf repro-YYYYMMDD-HHMMSS.tar.gz && cd repro/run && ./run.sh
+  ```
+
+---
+
+## 15 — Continuous logging helpers (scripts)
+
+Include short scripts you keep next to logs to automatically gather the above info. Example `collect_system_snapshot.sh` (paste contents) — the script should:
+
+* Create a timestamped directory
+* Capture `uname`, `lscpu`, `lsusb`, `dmesg`, `journalctl`, `dpkg -l`, `pip freeze`, `ldd` on target binaries, kernel modules, and copy `/var/log/syslog` or `/var/log/messages` snippet
+* Compute sha256 of model files and binaries
+
+**Suggestion:** store these snapshots compressed under `repro/snapshots/` and reference in logs.
+
+---
+
+## 16 — Privacy & sensitive info checklist
+
+Before sharing logs externally, scrub or redact:
+
+* Private SSH keys, tokens, API keys
+* MAC addresses or serials you don't want shared
+* Home directory absolute paths that reveal personal info
+* Any PII that might be present in logs
+
+---
+
+## 17 — Minimal-copy paste template (for quick issue reports)
+
+Use this condensed template when opening a GitHub issue. Fill the fields briefly and attach the full snapshot archive.
+
+```
+Title: <short>
+OS: <distro + kernel>
+Hardware: <board, CPU>
+EdgeTPU runtime: <version>
+Model: <name + sha256>
+Symptoms: <crash / slow / wrong outputs>
+Repro steps: <1-3 lines>
+Logs: <link to attached repro-YYYYMMDD.tar.gz>
+```
+
+---
+
+## 18 — Example „how-to-gather“ commands (copy to terminal)
+
+```
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+OUT=log-snapshot-${TS}
+mkdir -p ${OUT}
+uname -a > ${OUT}/uname.txt
+cat /etc/os-release > ${OUT}/os-release.txt
+gcc --version > ${OUT}/gcc-version.txt
+python3 --version > ${OUT}/python-version.txt
+pip3 freeze > ${OUT}/pip-freeze.txt
+lscpu > ${OUT}/lscpu.txt
+lsusb -v > ${OUT}/lsusb.txt
+dmesg | tail -n 500 > ${OUT}/dmesg-tail.txt
+ldd ./coral_test > ${OUT}/ldd-coral_test.txt
+sha256sum model.tflite > ${OUT}/model.sha256
+tar czf ${OUT}.tar.gz ${OUT}
+```
+
+---
+
+## 19 — Notes & best practices
+
+* Always gather the snapshot immediately after the observed failure — kernel ring buffer and dmesg get overwritten.
+* Prefer attaching compressed artifacts instead of pasting massive logs into issue trackers.
+* Use deterministic builds (record toolchain + checksums) and avoid building with `-j` flags you don’t document.
+* Version control your diagnostics helpers and small `run.sh` wrappers for reproducible runs.
+
+---
+
+*End of template.*
