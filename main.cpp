@@ -421,12 +421,22 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
 
     // --- Individual Frame Latency CSV Output ---
     const std::string frame_latency_csv_filename = "/home/pi/CoralEdgeTpu/DAILYLOGS/tpu_frame_latency.csv";
-    std::ofstream frame_latency_csv_file(frame_latency_csv_filename, std::ios::app); // Open in append mode
+    std::ofstream frame_latency_csv_file;
+    bool write_frame_header = false;
+
+    // Check if file exists and is empty to determine if header is needed
+    std::ifstream check_file(frame_latency_csv_filename, std::ios::ate); // Open at end to get size
+    if (check_file.is_open() && check_file.tellg() == 0) {
+        write_frame_header = true;
+    }
+    check_file.close();
+
+    frame_latency_csv_file.open(frame_latency_csv_filename, std::ios::app); // Open in append mode
+    
     if (!frame_latency_csv_file.is_open()) {
         std::cerr << "[" << get_timestamp() << "] [TPU Thread] ERROR: Could not open " << frame_latency_csv_filename << " for writing individual frame latencies." << std::endl;
     } else {
-        // Write header if file is new/empty
-        if (frame_latency_csv_file.tellp() == 0) {
+        if (write_frame_header) {
             frame_latency_csv_file << "timestamp_utc,frame_id,inference_latency_ms,top1_result,top1_score\n";
         }
     }
@@ -491,7 +501,7 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
                                    << std::fixed << std::setprecision(3) << current_latency_ms << ","
                                    << current_top1_result << ","
                                    << current_top1_score << "\n";
-            frame_latency_csv_file.flush(); // Ensure data is written immediately
+            // frame_latency_csv_file.flush(); // Ensure data is written immediately
         }
 
         frames_processed++;
@@ -710,6 +720,12 @@ void requestComplete(Request *request) {
 int main() {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+
+    // Ensure DAILYLOGS directory exists for benchmark outputs
+    if (mkdir("/home/pi/CoralEdgeTpu/DAILYLOGS/", 0755) == -1 && errno != EEXIST) {
+        perror("mkdir /home/pi/CoralEdgeTpu/DAILYLOGS/");
+        return 1;
+    }
 
     // Create directory for Unix socket (Removed after UDS refactor)
     // if (mkdir(UNIX_SOCK_DIR, 0755) == -1 && errno != EEXIST) {
