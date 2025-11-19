@@ -132,6 +132,11 @@
 #include <tensorflow/lite/builtin_op_data.h>
 #include <fstream> // Required for ReadLabels
 
+#include <fstream> // Required for ReadLabels
+
+#include "pca9685.h"
+#include <jpeglib.h>
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -191,19 +196,25 @@ const char* PHONE_IP = "192.168.37.27";
 const int PHONE_PORT = 8080; // TCP port for phone frames
 const int UDP_PHONE_PORT = 9090; // UDP port for phone detections
 
-// Frame dimensions
-const int RAW_FRAME_WIDTH = 300;
-const int RAW_FRAME_HEIGHT = 300;
-const int RAW_FRAME_SIZE = RAW_FRAME_WIDTH * RAW_FRAME_HEIGHT * 3; // For BGR888
+const int STREAM_WIDTH = 1536;
+const int STREAM_HEIGHT = 864;
+const int TPU_INPUT_WIDTH = 300;
+const int TPU_INPUT_HEIGHT = 300;
+const int RAW_FRAME_SIZE = STREAM_WIDTH * STREAM_HEIGHT * 3; // For BGR888
 
 // Placeholder for JPEG frame size (actual size will vary)
 const size_t JPEG_FRAME_MAX_SIZE = 300 * 1024; // 300 KB
 const int MAX_QUEUE_SIZE = 10; // Max number of frames to buffer in memory
+const int MJPEG_STREAM_PORT = 8080; // Port for MJPEG streaming server
 
 // --- Globals ---
 std::atomic<bool> running(true);
 std::atomic<uint32_t> tpu_frame_counter(0); // Frame ID counter for TPU thread
 std::atomic<uint32_t> phone_frame_counter(0); // Frame ID counter for Phone thread
+std::unique_ptr<PCA9685> pca9685_controller; // Global PCA9685 controller instance
+std::vector<std::string> labels; // Global labels
+
+// --- Thread 2: TPU Inference Thread ---
 
 // --- Thread-safe Queue for Frames ---
 template<typename T>
@@ -248,8 +259,32 @@ private:
 using RawFrame = std::vector<uint8_t>;
 using JpegFrame = std::vector<uint8_t>;
 
-ThreadSafeQueue<RawFrame> inference_queue;
-ThreadSafeQueue<JpegFrame> phone_queue;
+// To be passed from camera to TPU thread
+struct FramePacket {
+    std::shared_ptr<RawFrame> high_res_frame; // Use shared_ptr to avoid copies
+    int high_res_width;
+    int high_res_height;
+};
+
+// To hold TPU results
+struct DetectionResult {
+    int class_id;
+    float score;
+    // BBox coordinates are normalized (0.0 to 1.0)
+    float ymin, xmin, ymax, xmax;
+};
+
+// To be passed from TPU to MJPEG thread
+struct ProcessedPacket {
+    std::shared_ptr<RawFrame> high_res_frame;
+    int high_res_width;
+    int high_res_height;
+    std::vector<DetectionResult> detections;
+};
+
+ThreadSafeQueue<FramePacket> inference_queue;
+ThreadSafeQueue<JpegFrame> phone_queue; // Kept for future use
+ThreadSafeQueue<ProcessedPacket> processed_frame_queue;
 
 #include <iomanip>
 #include <ctime>
@@ -305,6 +340,21 @@ void signal_handler(int signum) {
 //     return true;
 // }
 
+// --- Helper function to send all data ---
+bool send_all(int sock, const char* data, size_t size) {
+    while (size > 0) {
+        ssize_t sent = send(sock, data, size, MSG_NOSIGNAL);
+        if (sent <= 0) {
+            if (errno == EINTR) continue; // Interrupted by signal, retry
+            perror("send");
+            return false; // Connection closed or error
+        }
+        data += sent;
+        size -= sent;
+    }
+    return true;
+}
+
 // --- Image Resizing Utility (Nearest Neighbor) ---
 RawFrame resize_image_rgb(const RawFrame& input_frame, int input_width, int input_height, int output_width, int output_height) {
     RawFrame output_frame(output_width * output_height * 3); // 3 for RGB
@@ -326,6 +376,120 @@ RawFrame resize_image_rgb(const RawFrame& input_frame, int input_width, int inpu
         }
     }
     return output_frame;
+}
+
+// Utility function to encode RGB RawFrame to JPEG
+std::vector<uint8_t> encode_rgb_to_jpeg(const RawFrame& rgb_frame, int width, int height, int quality) {
+    std::vector<uint8_t> jpeg_buffer;
+    struct jpeg_compress_struct cinfo;
+    struct jpeg_error_mgr jerr;
+
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+
+    // Set up destination manager to write to memory
+    unsigned char* outbuffer = nullptr;
+    unsigned long outsize = 0;
+    jpeg_mem_dest(&cinfo, &outbuffer, &outsize);
+
+    cinfo.image_width = width;
+    cinfo.image_height = height;
+    cinfo.input_components = 3; // RGB
+    cinfo.in_color_space = JCS_RGB;
+
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, quality, TRUE);
+    jpeg_start_compress(&cinfo, TRUE);
+
+    JSAMPROW row_pointer[1];
+    while (cinfo.next_scanline < cinfo.image_height) {
+        row_pointer[0] = (JSAMPROW)&rgb_frame[cinfo.next_scanline * width * 3];
+        jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    }
+
+    jpeg_finish_compress(&cinfo);
+    
+    // Copy data from outbuffer to jpeg_buffer
+    if (outsize > 0 && outbuffer != nullptr) {
+        jpeg_buffer.assign(outbuffer, outbuffer + outsize);
+    }
+    
+    jpeg_destroy_compress(&cinfo);
+    if (outbuffer != nullptr) {
+        free(outbuffer); // Free memory allocated by jpeg_mem_dest
+    }
+
+    return jpeg_buffer;
+}
+
+// Simple function to draw a rectangle on an RGB frame
+void draw_rectangle(RawFrame& frame, int width, int height, int x, int y, int w, int h, uint8_t r, uint8_t g, uint8_t b, int thickness) {
+    // Clip rectangle to image bounds
+    int x1 = std::max(0, x);
+    int y1 = std::max(0, y);
+    int x2 = std::min(width - 1, x + w - 1);
+    int y2 = std::min(height - 1, y + h - 1);
+
+    for (int i = 0; i < thickness; ++i) {
+        // Top line
+        for (int cur_x = x1; cur_x <= x2; ++cur_x) {
+            if (y1 + i < height && y1 + i >=0 && cur_x >=0 && cur_x < width) {
+                size_t index = ((y1 + i) * width + cur_x) * 3;
+                frame[index] = r;
+                frame[index + 1] = g;
+                frame[index + 2] = b;
+            }
+        }
+        // Bottom line
+        for (int cur_x = x1; cur_x <= x2; ++cur_x) {
+            if (y2 - i >= 0 && y2 - i < height && cur_x >=0 && cur_x < width) {
+                size_t index = ((y2 - i) * width + cur_x) * 3;
+                frame[index] = r;
+                frame[index + 1] = g;
+                frame[index + 2] = b;
+            }
+        }
+        // Left line
+        for (int cur_y = y1; cur_y <= y2; ++cur_y) {
+            if (x1 + i < width && x1 + i >=0 && cur_y >=0 && cur_y < height) {
+                size_t index = (cur_y * width + (x1 + i)) * 3;
+                frame[index] = r;
+                frame[index + 1] = g;
+                frame[index + 2] = b;
+            }
+        }
+        // Right line
+        for (int cur_y = y1; cur_y <= y2; ++cur_y) {
+            if (x2 - i >= 0 && x2 - i < width && cur_y >=0 && cur_y < height) {
+                size_t index = (cur_y * width + (x2 - i)) * 3;
+                frame[index] = r;
+                frame[index + 1] = g;
+                frame[index + 2] = b;
+            }
+        }
+    }
+}
+
+// Simple function to draw text (very basic, for debugging)
+// This is extremely basic and will just draw a few pixels for character representation.
+// For robust text rendering, a font library like FreeType would be needed, which is out of scope for now.
+// For now, let's represent text by drawing a filled rectangle.
+void draw_text(RawFrame& frame, int width, int height, int x, int y, const std::string& text, uint8_t r, uint8_t g, uint8_t b) {
+    int char_width = 6;  // Approximate pixel width for a character
+    int char_height = 8; // Approximate pixel height for a character
+    int text_width = text.length() * char_width;
+
+    // Draw a filled rectangle as background for text
+    for (int cur_y = y; cur_y < y + char_height && cur_y < height; ++cur_y) {
+        for (int cur_x = x; cur_x < x + text_width && cur_x < width; ++cur_x) {
+            if (cur_x >= 0 && cur_y >= 0) {
+                size_t index = (cur_y * width + cur_x) * 3;
+                frame[index] = r;
+                frame[index + 1] = g;
+                frame[index + 2] = b;
+            }
+        }
+    }
 }
 
 extern "C" {
@@ -405,7 +569,7 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
         }
         return labels;
     };
-    std::vector<std::string> labels = ReadLabels(labels_path);
+    labels = ReadLabels(labels_path); // Populate global labels vector
     if (labels.empty()) {
         std::cerr << "[" << get_timestamp() << "] [TPU Thread] Failed to load labels or labels file is empty." << std::endl;
         running = false;
@@ -442,17 +606,13 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
     }
 
 
-    RawFrame frame;
-    while (running && inference_queue.pop(frame)) {
-        // Log the actual frame size from camera
-        std::cout << "[" << get_timestamp() << "] [TPU Thread] Raw frame received (size: " << frame.size() << " bytes, "
-                  << RAW_FRAME_WIDTH << "x" << RAW_FRAME_HEIGHT << " RGB)" << std::endl;
-
-        // Resize the frame
-        RawFrame resized_frame = resize_image_rgb(frame, RAW_FRAME_WIDTH, RAW_FRAME_HEIGHT, input_width, input_height);
+    FramePacket packet;
+    while (running && inference_queue.pop(packet)) {
+        // Resize the high-res frame for TPU input
+        RawFrame resized_frame = resize_image_rgb(*packet.high_res_frame, packet.high_res_width, packet.high_res_height, input_width, input_height);
 
         if (resized_frame.size() != interpreter->input_tensor(0)->bytes) {
-            std::cerr << "[" << get_timestamp() << "] [TPU Thread] Error: Resized frame size mismatch with tensor size. Expected: " << interpreter->input_tensor(0)->bytes << ", Got: " << resized_frame.size() << std::endl;
+            std::cerr << "[" << get_timestamp() << "] [TPU Thread] Error: Resized frame size mismatch with tensor size." << std::endl;
             continue;
         }
         memcpy(interpreter->input_tensor(0)->data.uint8, resized_frame.data(), resized_frame.size());
@@ -468,41 +628,34 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
         inference_latencies.push_back(current_latency_ms);
         std::cout << "[" << get_timestamp() << "] [TPU Thread] Inference took " << current_latency_ms << " ms" << std::endl;
 
-        // Get output tensor details
-        TfLiteIntArray* output_dims = interpreter->output_tensor(0)->dims;
-        int output_size = output_dims->data[output_dims->size - 1];
+        // --- NEW OBJECT DETECTION LOGIC ---
+        const float* detection_boxes = interpreter->typed_output_tensor<float>(0);
+        const float* detection_classes = interpreter->typed_output_tensor<float>(1);
+        const float* detection_scores = interpreter->typed_output_tensor<float>(2);
+        const float* num_detections_ptr = interpreter->typed_output_tensor<float>(3);
+        const int num_detections = static_cast<int>(*num_detections_ptr);
+        
+        const float score_threshold = 0.5f;
 
-        // Get top-1 result (assuming classification model)
-        const uint8_t* output = interpreter->output_tensor(0)->data.uint8;
-        int top_index = 0;
-        uint8_t max_score = 0;
-        for (int i = 0; i < output_size; ++i) {
-            if (output[i] > max_score) {
-                max_score = output[i];
-                top_index = i;
+        ProcessedPacket processed_packet;
+        processed_packet.high_res_frame = packet.high_res_frame;
+        processed_packet.high_res_width = packet.high_res_width;
+        processed_packet.high_res_height = packet.high_res_height;
+
+        for (int i = 0; i < num_detections; ++i) {
+            if (detection_scores[i] > score_threshold) {
+                DetectionResult result;
+                result.class_id = static_cast<int>(detection_classes[i]);
+                result.score = detection_scores[i];
+                result.ymin = detection_boxes[i * 4 + 0];
+                result.xmin = detection_boxes[i * 4 + 1];
+                result.ymax = detection_boxes[i * 4 + 2];
+                result.xmax = detection_boxes[i * 4 + 3];
+                processed_packet.detections.push_back(result);
             }
         }
         
-        std::string current_top1_result = "N/A";
-        int current_top1_score = 0;
-
-        if (top_index < labels.size()) {
-            current_top1_result = labels[top_index];
-            current_top1_score = static_cast<int>(max_score);
-            std::cout << "[" << get_timestamp() << "] [TPU Thread] Top-1 result: " << current_top1_result << " (score: " << current_top1_score << ")" << std::endl;
-        } else {
-            std::cout << "[" << get_timestamp() << "] [TPU Thread] Top-1 index out of bounds for labels. Index: " << top_index << ", Labels size: " << labels.size() << std::endl;
-        }
-
-        // Write individual frame latency to CSV
-        if (frame_latency_csv_file.is_open()) {
-            frame_latency_csv_file << get_timestamp() << ","
-                                   << frames_processed << ","
-                                   << std::fixed << std::setprecision(3) << current_latency_ms << ","
-                                   << current_top1_result << ","
-                                   << current_top1_score << "\n";
-            // frame_latency_csv_file.flush(); // Ensure data is written immediately
-        }
+        processed_frame_queue.push(std::move(processed_packet));
 
         frames_processed++;
         if (frames_processed >= NUM_BENCHMARK_FRAMES) {
@@ -593,7 +746,7 @@ void phone_sender_thread() {
     std::cout << "[" << get_timestamp() << "] [Phone Thread] Started. Waiting for phone connection..." << std::endl;
     
     while(running) { // Outer loop for reconnection
-        int sock = -1;
+        int sock = -1; // Declared outside try block for wider scope
         try {
             sock = socket(AF_INET, SOCK_STREAM, 0);
             if (sock < 0) throw std::runtime_error("Failed to create TCP socket");
@@ -674,6 +827,103 @@ void phone_sender_thread() {
     std::cout << "[" << get_timestamp() << "] [Phone Thread] Stopped." << std::endl;
 }
 
+// --- MJPEG Streaming Thread ---
+void mjpeg_stream_thread(int port) {
+    std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Started. Listening on port " << port << std::endl;
+
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("MJPEG server socket failed");
+        return;
+    }
+
+    // Forcefully attaching socket to the port
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("MJPEG server setsockopt failed");
+        return;
+    }
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(port);
+
+    // Forcefully attaching socket to the port
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("MJPEG server bind failed");
+        return;
+    }
+    if (listen(server_fd, 3) < 0) {
+        perror("MJPEG server listen failed");
+        return;
+    }
+
+    std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Server listening on port " << port << std::endl;
+
+    while (running) {
+        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+            if (errno == EINTR) continue; // Interrupted by signal, retry
+            perror("MJPEG server accept failed");
+            continue;
+        }
+
+        std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Client connected." << std::endl;
+
+        // Send MJPEG header
+        std::string header = "HTTP/1.0 200 OK\r\n"
+                             "Cache-Control: no-cache, private\r\n"
+                             "Pragma: no-cache\r\n"
+                             "Content-Type: multipart/x-mixed-replace; boundary=BOUNDARY\r\n\r\n";
+        if (!send_all(new_socket, header.c_str(), header.length())) {
+            close(new_socket);
+            continue;
+        }
+
+        ProcessedPacket packet;
+        while (running && processed_frame_queue.pop(packet)) {
+            // Make a mutable copy of the frame to draw on
+            RawFrame frame_to_draw = *packet.high_res_frame;
+
+            // Draw detections on the high-resolution frame
+            for (const auto& det : packet.detections) {
+                // De-normalize coordinates
+                int box_y = static_cast<int>(det.ymin * packet.high_res_height);
+                int box_x = static_cast<int>(det.xmin * packet.high_res_width);
+                int box_h = static_cast<int>((det.ymax - det.ymin) * packet.high_res_height);
+                int box_w = static_cast<int>((det.xmax - det.xmin) * packet.high_res_width);
+
+                std::string label = "N/A";
+                if (det.class_id >= 0 && det.class_id < labels.size()) {
+                    label = labels[det.class_id];
+                }
+                
+                draw_rectangle(frame_to_draw, packet.high_res_width, packet.high_res_height, box_x, box_y, box_w, box_h, 255, 0, 0, 2);
+                draw_text(frame_to_draw, packet.high_res_width, packet.high_res_height, box_x, box_y - 10, label, 255, 255, 255);
+            }
+
+            // Encode to JPEG
+            std::vector<uint8_t> jpeg_data = encode_rgb_to_jpeg(frame_to_draw, packet.high_res_width, packet.high_res_height, 90);
+
+            std::string part_header = "--BOUNDARY\r\n";
+            part_header += "Content-Type: image/jpeg\r\n";
+            part_header += "Content-Length: " + std::to_string(jpeg_data.size()) + "\r\n\r\n";
+            
+            if (!send_all(new_socket, part_header.c_str(), part_header.length())) {
+                break;
+            }
+            if (!send_all(new_socket, (const char*)jpeg_data.data(), jpeg_data.size())) {
+                break;
+            }
+        }
+        std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Client disconnected." << std::endl;
+        close(new_socket);
+    }
+    close(server_fd);
+    std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Stopped." << std::endl;
+}
 
 // Callback function for completed requests
 void requestComplete(Request *request) {
@@ -689,11 +939,18 @@ void requestComplete(Request *request) {
                 if (data == MAP_FAILED) {
                     std::cerr << "[" << get_timestamp() << "] mmap failed" << std::endl;
                 } else {
-                    RawFrame raw_frame(plane.length);
-                    // Add logging here
-                    std::cout << "[" << get_timestamp() << "] [Camera Callback] Captured frame size: " << plane.length << " bytes." << std::endl;
-                    inference_queue.push(std::move(raw_frame));
+                    auto high_res_frame = std::make_shared<RawFrame>(plane.length);
+                    memcpy(high_res_frame->data(), data, plane.length);
                     munmap(data, plane.length);
+                    
+                    FramePacket packet;
+                    packet.high_res_frame = high_res_frame;
+                    packet.high_res_width = STREAM_WIDTH;
+                    packet.high_res_height = STREAM_HEIGHT;
+                    
+                    inference_queue.push(std::move(packet));
+                    
+                    std::cout << "[" << get_timestamp() << "] [Camera Callback] Captured frame size: " << plane.length << " bytes." << std::endl;
                 }
             }
         }
@@ -775,8 +1032,8 @@ int main() {
     // Modify the stream configuration for raw capture
     StreamConfiguration &rawStreamConfig = config->at(0);
     rawStreamConfig.pixelFormat = libcamera::formats::RGB888; // Match what libcamera configures
-    rawStreamConfig.size.width = RAW_FRAME_WIDTH;
-    rawStreamConfig.size.height = RAW_FRAME_HEIGHT;
+    rawStreamConfig.size.width = STREAM_WIDTH;
+    rawStreamConfig.size.height = STREAM_HEIGHT;
     rawStreamConfig.bufferCount = 6; // Explicitly set buffer count
 
     // Validate and apply the configuration
@@ -859,12 +1116,34 @@ int main() {
         camera_obj->queueRequest(request.get());
     }
 
+    // Initialize PCA9685
+    pca9685_controller = std::make_unique<PCA9685>(1, PCA9685_I2C_ADDRESS); // Bus 1, default address 0x40
+    if (!pca9685_controller->openDevice()) {
+        std::cerr << "[" << get_timestamp() << "] Failed to open PCA9685 device." << std::endl;
+        close(lock_fd);
+        cleanup_resources();
+        return 1;
+    }
+
+    // Test servo movement
+    std::cout << "[" << get_timestamp() << "] [Main] Testing servo on channel 0..." << std::endl;
+    for (int i = 0; i < 3; ++i) { // Move 3 times
+        pca9685_controller->setServoAngle(0, 0); // Angle 0 degrees
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        pca9685_controller->setServoAngle(0, 90); // Angle 90 degrees
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        pca9685_controller->setServoAngle(0, 180); // Angle 180 degrees
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+    std::cout << "[" << get_timestamp() << "] [Main] Servo test complete." << std::endl;
+
     std::cout << "[" << get_timestamp() << "] [Main] Starting threads..." << std::endl;
 
     const std::string model_path = "/home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite";
     const std::string labels_path = "/home/pi/CoralEdgeTpu/coco_labels.txt";
 
     std::thread t_inference(tpu_inference_thread, model_path, labels_path);
+    std::thread t_mjpeg_stream(mjpeg_stream_thread, MJPEG_STREAM_PORT);
     // std::thread t3(phone_sender_thread); // Disabled for debugging OOM
 
     // The main thread will now wait for a signal to stop
@@ -884,6 +1163,7 @@ int main() {
 
     std::cout << "[" << get_timestamp() << "] [Main] Joining threads..." << std::endl;
     t_inference.join(); // Changed from t2.join()
+    t_mjpeg_stream.join();
     // t3.join(); // Disabled for debugging OOM
 
     // Final cleanup
