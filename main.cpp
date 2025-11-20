@@ -178,6 +178,53 @@
 #include <libcamera/stream.h>
 #include <sys/mman.h>
 
+#include <setjmp.h>
+#include <memory>
+#include <opencv2/opencv.hpp>
+
+// Custom JPEG error management struct
+struct JpegErrorManager {
+    jpeg_error_mgr pub;
+    jmp_buf setjmp_buffer;
+
+    static void error_exit(j_common_ptr cinfo) {
+        JpegErrorManager* err = reinterpret_cast<JpegErrorManager*>(cinfo->err);
+        (*cinfo->err->output_message)(cinfo);
+        longjmp(err->setjmp_buffer, 1);
+    }
+
+    static void output_message(j_common_ptr cinfo) {
+        char buffer[JMSG_LENGTH_MAX];
+        (*cinfo->err->format_message)(cinfo, buffer);
+        std::cerr << "JPEG error: " << buffer << std::endl;
+    }
+};
+
+// RAII wrapper for jpeg_compress_struct
+class JpegCompressGuard {
+public:
+    explicit JpegCompressGuard(jpeg_compress_struct* p_cinfo) : cinfo_ptr(p_cinfo) {
+        cinfo_ptr->err = jpeg_std_error(&error_mgr.pub);
+        error_mgr.pub.error_exit = JpegErrorManager::error_exit;
+        error_mgr.pub.output_message = JpegErrorManager::output_message;
+        if (setjmp(error_mgr.setjmp_buffer)) {
+            // If we get here, a JPEG error occurred
+            return;
+        }
+        jpeg_create_compress(cinfo_ptr);
+    }
+
+    ~JpegCompressGuard() {
+        if (cinfo_ptr) {
+            jpeg_destroy_compress(cinfo_ptr);
+        }
+    }
+
+private:
+    jpeg_compress_struct* cinfo_ptr;
+    JpegErrorManager error_mgr;
+};
+
 using namespace libcamera;
 
 // Global libcamera objects
@@ -209,8 +256,7 @@ const int MJPEG_STREAM_PORT = 8080; // Port for MJPEG streaming server
 
 // --- Globals ---
 std::atomic<bool> running(true);
-std::atomic<uint32_t> tpu_frame_counter(0); // Frame ID counter for TPU thread
-std::atomic<uint32_t> phone_frame_counter(0); // Frame ID counter for Phone thread
+
 std::unique_ptr<PCA9685> pca9685_controller; // Global PCA9685 controller instance
 std::vector<std::string> labels; // Global labels
 
@@ -300,7 +346,7 @@ std::string get_timestamp() {
 
 // --- Resource Cleanup ---
 void cleanup_resources() {
-    std::cout << "[" << get_timestamp() << "] Cleaning up resources..." << std::endl;
+    std::cout << "[INFO] Cleaning up resources..." << std::endl;
     
     // Remove Unix socket file if it exists (Removed after UDS refactor)
     // if (access(UNIX_SOCK_PATH, F_OK) == 0) {
@@ -312,14 +358,14 @@ void cleanup_resources() {
     // Remove lock file if it exists
     if (access(LOCK_FILE, F_OK) == 0) {
         if (unlink(LOCK_FILE) == 0) {
-            std::cout << "[" << get_timestamp() << "] Removed lock file." << std::endl;
+            std::cout << "[INFO] Removed lock file." << std::endl;
         }
     }
 }
 
 // --- Signal Handler ---
 void signal_handler(int signum) {
-    std::cout << "\n[" << get_timestamp() << "] Caught signal " << signum << ", shutting down..." << std::endl;
+    std::cout << "\n[INFO] Caught signal " << signum << ", shutting down..." << std::endl;
     running = false;
     cleanup_resources(); // Ensure cleanup on signal
 }
@@ -512,24 +558,7 @@ void draw_text(RawFrame& frame, int width, int height, int x, int y, const std::
     }
 }
 
-// RAII wrapper for jpeg_compress_struct
-class JpegCompressGuard {
-public:
-    explicit JpegCompressGuard(jpeg_compress_struct* cinfo) : cinfo_ptr(cinfo) {
-        cinfo_ptr->err = jpeg_std_error(&jerr);
-        jpeg_create_compress(cinfo_ptr);
-    }
 
-    ~JpegCompressGuard() {
-        if (cinfo_ptr) {
-            jpeg_destroy_compress(cinfo_ptr);
-        }
-    }
-
-private:
-    jpeg_compress_struct* cinfo_ptr;
-    jpeg_error_mgr jerr;
-};
 
 extern "C" {
 TfLiteDelegate* tflite_plugin_create_delegate(const void* options);
@@ -541,68 +570,69 @@ void tflite_plugin_destroy_delegate(TfLiteDelegate* delegate);
 
 // --- Thread 2: TPU Inference Thread ---
 void tpu_inference_thread(const std::string& model_path, const std::string& labels_path) {
-    std::cout << "[" << get_timestamp() << "] [TPU Thread] Started. Initializing TensorFlow Lite interpreter..." << std::endl;
+    std::cout << "[STATUS] [TPU Thread] Started. Initializing TensorFlow Lite interpreter..." << std::endl;
 
     // Load the model
     std::unique_ptr<tflite::FlatBufferModel> model = tflite::FlatBufferModel::BuildFromFile(model_path.c_str());
     if (!model) {
-        std::cerr << "[" << get_timestamp() << "] [TPU Thread] Failed to load model: " << model_path << std::endl;
+        std::cerr << "[ERROR] [TPU Thread] Failed to load model: " << model_path << std::endl;
         running = false;
         return;
     }
+    std::cout << "[STATUS] [TPU Thread] TPU model loaded successfully: " << model_path << std::endl;
 
     // Build the interpreter with the Edge TPU delegate
     tflite::ops::builtin::BuiltinOpResolver resolver;
     std::unique_ptr<tflite::Interpreter> interpreter;
     tflite::InterpreterBuilder(*model, resolver)(&interpreter);
     if (!interpreter) {
-        std::cerr << "[" << get_timestamp() << "] [TPU Thread] Failed to construct interpreter." << std::endl;
+        std::cerr << "[ERROR] [TPU Thread] Failed to construct interpreter." << std::endl;
         running = false;
         return;
     }
+    std::cout << "[STATUS] [TPU Thread] TensorFlow Lite interpreter constructed." << std::endl;
 
     // Create the Edge TPU delegate using the C API
     TfLiteDelegate* delegate = tflite_plugin_create_delegate(nullptr); // No options for now
     if (!delegate) {
-        std::cerr << "[" << get_timestamp() << "] [TPU Thread] Failed to create Edge TPU delegate using tflite_plugin_create_delegate. Ensure Edge TPU is connected and drivers are installed." << std::endl;
+        std::cerr << "[ERROR] [TPU Thread] Failed to create Edge TPU delegate using tflite_plugin_create_delegate. Ensure Edge TPU is connected and drivers are installed." << std::endl;
         running = false;
         return;
     }
     if (interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
-        std::cerr << "[" << get_timestamp() << "] [TPU Thread] Failed to apply Edge TPU delegate." << std::endl;
+        std::cerr << "[ERROR] [TPU Thread] Failed to apply Edge TPU delegate." << std::endl;
         // The delegate is owned by the interpreter after ModifyGraphWithDelegate if successful.
         // If it fails, we should free it.
         tflite_plugin_destroy_delegate(delegate);
         running = false;
         return;
     }
+    std::cout << "[STATUS] [TPU Thread] Edge TPU delegate created and applied." << std::endl;
     // The delegate is owned by the interpreter after ModifyGraphWithDelegate if successful.
     // So, we don't need to explicitly free it here if it succeeds.
 
     if (interpreter->AllocateTensors() != kTfLiteOk) {
-        std::cerr << "[" << get_timestamp() << "] [TPU Thread] Failed to allocate tensors." << std::endl;
+        std::cerr << "[ERROR] [TPU Thread] Failed to allocate tensors." << std::endl;
         running = false;
         return;
     }
+    std::cout << "[STATUS] [TPU Thread] Tensors allocated." << std::endl;
 
     // Add logging here
     TfLiteIntArray* input_dims = interpreter->input_tensor(0)->dims;
     int input_height = input_dims->data[1];
     int input_width = input_dims->data[2];
     int input_channels = input_dims->data[3];
-    std::cout << "[" << get_timestamp() << "] [TPU Thread] Model expected input tensor: "
+    std::cout << "[INFO] [TPU Thread] Model expected input tensor: "
               << input_width << "x" << input_height << "x" << input_channels
               << " (" << interpreter->input_tensor(0)->bytes << " bytes)" << std::endl;
-
-    auto last_queue_log_time = std::chrono::steady_clock::now();
-    const std::chrono::seconds queue_log_interval(1); // Log every 1 second
 
     // Read labels
     auto ReadLabels = [](const std::string& filename) -> std::vector<std::string> {
         std::vector<std::string> labels;
         std::ifstream file(filename);
         if (!file.is_open()) {
-            std::cerr << "Error: Could not open labels file: " << filename << std::endl;
+            std::cerr << "[ERROR] Could not open labels file: " << filename << std::endl;
             return labels;
         }
         std::string line;
@@ -613,40 +643,12 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
     };
     labels = ReadLabels(labels_path); // Populate global labels vector
     if (labels.empty()) {
-        std::cerr << "[" << get_timestamp() << "] [TPU Thread] Failed to load labels or labels file is empty." << std::endl;
+        std::cerr << "[ERROR] [TPU Thread] Failed to load labels or labels file is empty." << std::endl;
         running = false;
         return;
     }
-
-    // --- Benchmarking variables ---
-    const int NUM_BENCHMARK_FRAMES = 1000;
-    std::vector<double> inference_latencies; // in milliseconds
-    inference_latencies.reserve(NUM_BENCHMARK_FRAMES);
-    auto benchmark_start_time = std::chrono::high_resolution_clock::now();
-    int frames_processed = 0;
-
-    // --- Individual Frame Latency CSV Output ---
-    const std::string frame_latency_csv_filename = "/home/pi/CoralEdgeTpu/DAILYLOGS/tpu_frame_latency.csv";
-    std::ofstream frame_latency_csv_file;
-    bool write_frame_header = false;
-
-    // Check if file exists and is empty to determine if header is needed
-    std::ifstream check_file(frame_latency_csv_filename, std::ios::ate); // Open at end to get size
-    if (check_file.is_open() && check_file.tellg() == 0) {
-        write_frame_header = true;
-    }
-    check_file.close();
-
-    frame_latency_csv_file.open(frame_latency_csv_filename, std::ios::app); // Open in append mode
-    
-    if (!frame_latency_csv_file.is_open()) {
-        std::cerr << "[" << get_timestamp() << "] [TPU Thread] ERROR: Could not open " << frame_latency_csv_filename << " for writing individual frame latencies." << std::endl;
-    } else {
-        if (write_frame_header) {
-            frame_latency_csv_file << "timestamp_utc,frame_id,inference_latency_ms,top1_result,top1_score\n";
-        }
-    }
-
+    std::cout << "[STATUS] [TPU Thread] Labels loaded: " << labels.size() << " entries." << std::endl;
+    std::cout << "[STATUS] [TPU Thread] Entering TPU inference loop." << std::endl;
 
     FramePacket packet;
     while (running && inference_queue.pop(packet)) {
@@ -666,9 +668,7 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
         }
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
-        double current_latency_ms = diff.count() * 1000;
-        inference_latencies.push_back(current_latency_ms);
-        std::cout << "[" << get_timestamp() << "] [TPU Thread] Inference took " << current_latency_ms << " ms" << std::endl;
+
 
         // --- NEW OBJECT DETECTION LOGIC ---
         const float* detection_boxes = interpreter->typed_output_tensor<float>(0);
@@ -699,92 +699,9 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
         
         processed_frame_queue.push(std::move(processed_packet));
 
-        auto now = std::chrono::steady_clock::now();
-        if (now - last_queue_log_time >= queue_log_interval) {
-            std::cout << "[" << get_timestamp() << "] [TPU Thread] Queue Sizes: inference_queue="
-                      << inference_queue.size() << ", processed_frame_queue="
-                      << processed_frame_queue.size() << std::endl;
-            last_queue_log_time = now;
-        }
 
-        frames_processed++;
-        if (frames_processed >= NUM_BENCHMARK_FRAMES) {
-            std::cout << "[" << get_timestamp() << "] [TPU Thread] Reached " << NUM_BENCHMARK_FRAMES << " frames. Stopping for benchmark report." << std::endl;
-            running = false; // Stop the main loop
-            break;
-        }
-    }
 
-    // Close individual frame latency CSV
-    if (frame_latency_csv_file.is_open()) {
-        frame_latency_csv_file.close();
-    }
 
-    // --- Benchmark Report ---
-    if (!inference_latencies.empty()) {
-        auto benchmark_end_time = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> total_time_s = benchmark_end_time - benchmark_start_time;
-        double total_time_ms = total_time_s.count() * 1000;
-
-        std::sort(inference_latencies.begin(), inference_latencies.end());
-
-        double min_latency = inference_latencies.front();
-        double max_latency = inference_latencies.back();
-        double avg_latency = std::accumulate(inference_latencies.begin(), inference_latencies.end(), 0.0) / inference_latencies.size();
-
-        // Calculate percentiles
-        auto get_percentile = [](const std::vector<double>& sorted_data, double percentile) {
-            if (sorted_data.empty()) return 0.0;
-            size_t index = static_cast<size_t>(std::ceil(percentile / 100.0 * sorted_data.size())) - 1;
-            if (index >= sorted_data.size()) index = sorted_data.size() - 1; // Cap to max index
-            return sorted_data[index];
-        };
-
-        double p50_latency = get_percentile(inference_latencies, 50);
-        double p95_latency = get_percentile(inference_latencies, 95);
-        double p99_latency = get_percentile(inference_latencies, 99);
-        
-        double fps = frames_processed / total_time_s.count();
-
-        // --- Console Output (existing) ---
-        std::cout << "\n[" << get_timestamp() << "] --- TPU Inference Benchmark Report ---" << std::endl;
-        std::cout << "  Frames Processed: " << frames_processed << std::endl;
-        std::cout << "  Total Benchmark Time: " << total_time_ms << " ms" << std::endl;
-        std::cout << "  Average FPS: " << std::fixed << std::setprecision(2) << fps << std::endl;
-        std::cout << "  Latency Statistics (ms):" << std::endl;
-        std::cout << "    Min: " << std::fixed << std::setprecision(3) << min_latency << std::endl;
-        std::cout << "    Max: " << std::fixed << std::setprecision(3) << max_latency << std::endl;
-        std::cout << "    Avg: " << std::fixed << std::setprecision(3) << avg_latency << std::endl;
-        std::cout << "    P50: " << std::fixed << std::setprecision(3) << p50_latency << std::endl;
-        std::cout << "    P95: " << std::fixed << std::setprecision(3) << p95_latency << std::endl;
-        std::cout << "    P99: " << std::fixed << std::setprecision(3) << p99_latency << std::endl;
-        std::cout << "[" << get_timestamp() << "] --- End Benchmark Report ---" << std::endl;
-
-        // --- CSV File Output ---
-        const std::string csv_filename = "/home/pi/CoralEdgeTpu/DAILYLOGS/tpu_benchmark.csv";
-        std::ofstream csv_file(csv_filename, std::ios::app); // Open in append mode
-
-        // Write header if file is new/empty
-        if (csv_file.tellp() == 0) {
-            csv_file << "timestamp_utc,module,stage,p50_latency_ms,p95_latency_ms,p99_latency_ms,avg_fps,min_latency_ms,max_latency_ms,avg_latency_ms,frames_processed,total_time_ms\n";
-        }
-
-        // Write data row
-        csv_file << get_timestamp() << "," // absolute timestamp
-                 << "TPU_Inference," // module
-                 << "Stage0," // stage
-                 << std::fixed << std::setprecision(3) << p50_latency << ","
-                 << std::fixed << std::setprecision(3) << p95_latency << ","
-                 << std::fixed << std::setprecision(3) << p99_latency << ","
-                 << std::fixed << std::setprecision(2) << fps << ","
-                 << std::fixed << std::setprecision(3) << min_latency << ","
-                 << std::fixed << std::setprecision(3) << max_latency << ","
-                 << std::fixed << std::setprecision(3) << avg_latency << ","
-                 << frames_processed << ","
-                 << total_time_ms << "\n";
-        csv_file.close();
-
-        std::cout << "[" << get_timestamp() << "] Benchmark results saved to " << csv_filename << std::endl;
     }
 
 
@@ -793,7 +710,7 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
 
 // --- Thread 3: Phone Frame Sender ---
 void phone_sender_thread() {
-    std::cout << "[" << get_timestamp() << "] [Phone Thread] Started. Waiting for phone connection..." << std::endl;
+    std::cout << "[STATUS] [Phone Thread] Started. Waiting for phone connection..." << std::endl;
     
     while(running) { // Outer loop for reconnection
         int sock = -1; // Declared outside try block for wider scope
@@ -812,7 +729,7 @@ void phone_sender_thread() {
             if (flags == -1) throw std::runtime_error("fcntl F_GETFL failed");
             fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-            std::cout << "[" << get_timestamp() << "] [Phone Thread] Attempting to connect to phone..." << std::endl;
+            std::cout << "[INFO] [Phone Thread] Attempting to connect to phone..." << std::endl;
             
             int ret = connect(sock, (struct sockaddr*)&addr, sizeof(addr));
             if (ret < 0 && errno != EINPROGRESS) {
@@ -832,7 +749,7 @@ void phone_sender_thread() {
                 socklen_t len = sizeof(so_error);
                 getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_error, &len);
                 if (so_error == 0) {
-                    std::cout << "[" << get_timestamp() << "] [Phone Thread] Connected to phone." << std::endl;
+                    std::cout << "[STATUS] [Phone Thread] Connected to phone." << std::endl;
                 } else {
                     // Connection failed
                     if (sock != -1) close(sock);
@@ -852,34 +769,25 @@ void phone_sender_thread() {
             // Main sending loop
             JpegFrame frame;
             while (running && phone_queue.pop(frame)) {
-                uint32_t current_frame_id = phone_frame_counter.fetch_add(1);
-                uint32_t frame_id_net = htonl(current_frame_id);
-                uint32_t frame_size_net = htonl(frame.size());
-                
-                // if (!send_all(sock, &frame_id_net, sizeof(frame_id_net)) ||
-                //     !send_all(sock, &frame_size_net, sizeof(frame_size_net)) ||
-                //     !send_all(sock, frame.data(), frame.size())) {
-                //     perror("[Phone Thread] send_all failed");
-                //     break; // Break inner loop to trigger reconnection
-                // }
+                // Removed phone_frame_counter related code.
             }
         } catch (const std::exception& e) {
-            std::cerr << "[" << get_timestamp() << "] [Phone Thread] Error: " << e.what() << std::endl;
+            std::cerr << "[ERROR] [Phone Thread] Error: " << e.what() << std::endl;
         }
 
         if (sock != -1) close(sock);
 
         if (running) {
-            std::cout << "[" << get_timestamp() << "] [Phone Thread] Connection lost or client disconnected. Reconnecting in 2 seconds..." << std::endl;
+            std::cout << "[INFO] [Phone Thread] Connection lost or client disconnected. Reconnecting in 2 seconds..." << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2));
         }
     }
-    std::cout << "[" << get_timestamp() << "] [Phone Thread] Stopped." << std::endl;
+    std::cout << "[STATUS] [Phone Thread] Stopped." << std::endl;
 }
 
 // --- MJPEG Streaming Thread ---
 void mjpeg_stream_thread(int port) {
-    std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Started. Listening on port " << port << std::endl;
+    std::cout << "[STATUS] [MJPEG Thread] Started. Listening on port " << port << std::endl;
 
     int server_fd, new_socket;
     struct sockaddr_in address;
@@ -911,7 +819,7 @@ void mjpeg_stream_thread(int port) {
         return;
     }
 
-    std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Server listening on port " << port << std::endl;
+    std::cout << "[STATUS] [MJPEG Thread] Server listening on port " << port << std::endl;
 
     const std::chrono::milliseconds target_frame_time(1000 / 45); // Target 45 FPS
 
@@ -922,7 +830,7 @@ void mjpeg_stream_thread(int port) {
             continue;
         }
 
-        std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Client connected." << std::endl;
+        std::cout << "[STATUS] [MJPEG Thread] Client connected to " << inet_ntoa(address.sin_addr) << ":" << ntohs(address.sin_port) << std::endl;
 
         // Send MJPEG header
         std::string header = "HTTP/1.0 200 OK\r\n"
@@ -977,18 +885,18 @@ void mjpeg_stream_thread(int port) {
                 std::this_thread::sleep_for(target_frame_time - elapsed_time);
             }
         }
-        std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Client disconnected." << std::endl;
+        std::cout << "[STATUS] [MJPEG Thread] Client disconnected." << std::endl;
         close(new_socket);
     }
     close(server_fd);
-    std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Stopped." << std::endl;
+    std::cout << "[STATUS] [MJPEG Thread] Stopped." << std::endl;
 }
 
 // Callback function for completed requests
 void requestComplete(Request *request) {
     if (request->status() == Request::RequestComplete) {
         if (request->buffers().count(raw_stream) == 0) {
-            std::cerr << "[" << get_timestamp() << "] Error: Completed request has no buffer for the raw stream." << std::endl;
+            std::cerr << "[ERROR] Error: Completed request has no buffer for the raw stream." << std::endl;
         } else {
             FrameBuffer *buffer = request->buffers().at(raw_stream);
 
@@ -996,7 +904,7 @@ void requestComplete(Request *request) {
                 const FrameBuffer::Plane &plane = buffer->planes()[0];
                 void *data = mmap(NULL, plane.length, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
                 if (data == MAP_FAILED) {
-                    std::cerr << "[" << get_timestamp() << "] mmap failed" << std::endl;
+                    std::cerr << "[ERROR] mmap failed" << std::endl;
                 } else {
                     auto high_res_frame = std::make_shared<RawFrame>(plane.length);
                     memcpy(high_res_frame->data(), data, plane.length);
@@ -1009,12 +917,12 @@ void requestComplete(Request *request) {
                     
                     inference_queue.push(std::move(packet));
                     
-                    std::cout << "[" << get_timestamp() << "] [Camera Callback] Captured frame size: " << plane.length << " bytes." << std::endl;
+                    std::cout << "[INFO] [Camera Callback] Captured frame size: " << plane.length << " bytes." << std::endl;
                 }
             }
         }
     } else {
-        std::cerr << "[" << get_timestamp() << "] Request failed with status: " << request->status() << std::endl;
+        std::cerr << "[ERROR] Request failed with status: " << request->status() << std::endl;
     }
 
     // Re-queue the request for continuous capture
@@ -1024,7 +932,7 @@ void requestComplete(Request *request) {
             FrameBuffer *buffer = request->buffers().at(raw_stream);
             request->reuse();
             if (request->addBuffer(raw_stream, buffer) < 0) {
-                std::cerr << "[" << get_timestamp() << "] Error: Failed to re-add buffer to request" << std::endl;
+                std::cerr << "[ERROR] Error: Failed to re-add buffer to request" << std::endl;
                 // Don't queue if we failed to add buffer
                 return;
             }
@@ -1036,39 +944,15 @@ void requestComplete(Request *request) {
 int main() {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
-
-    // Ensure DAILYLOGS directory exists for benchmark outputs
-    if (mkdir("/home/pi/CoralEdgeTpu/DAILYLOGS/", 0755) == -1 && errno != EEXIST) {
-        perror("mkdir /home/pi/CoralEdgeTpu/DAILYLOGS/");
-        return 1;
-    }
-
-    // Create directory for Unix socket (Removed after UDS refactor)
-    // if (mkdir(UNIX_SOCK_DIR, 0755) == -1 && errno != EEXIST) {
-    //     perror("mkdir /tmp/coral_ipc");
-    //     return 1;
-    // }
-
-    // Check if another instance is running
-    int lock_fd = open(LOCK_FILE, O_CREAT | O_RDWR, 0644);
-    if (lock_fd < 0) {
-        perror("Failed to create lock file");
-        return 1;
-    }
-    if (flock(lock_fd, LOCK_EX | LOCK_NB) < 0) {
-        std::cerr << "[" << get_timestamp() << "] Another instance is already running!" << std::endl;
-        close(lock_fd);
-        cleanup_resources();
-        return 1;
-    }
+    std::cout << "[STATUS] Signal handlers registered." << std::endl;
 
     // 1. Initialize Camera Manager
     camera_manager = std::make_unique<CameraManager>();
     camera_manager->start();
+    std::cout << "[STATUS] CameraManager initialized and started." << std::endl;
 
     if (camera_manager->cameras().empty()) {
-        std::cerr << "[" << get_timestamp() << "] No cameras found." << std::endl;
-        close(lock_fd);
+        std::cerr << "[ERROR] No cameras found." << std::endl;
         cleanup_resources();
         return 1;
     }
@@ -1076,14 +960,14 @@ int main() {
     // 2. Select a Camera (e.g., the first available camera)
     camera_obj = camera_manager->cameras()[0];
     camera_obj->acquire(); // Acquire the camera for exclusive use
+    std::cout << "[STATUS] Camera acquired: " << camera_obj->id() << std::endl;
 
     // 3. Configure Streams for Raw Capture
     std::unique_ptr<CameraConfiguration> config = camera_obj->generateConfiguration({StreamRole::Raw});
     if (!config) {
-        std::cerr << "[" << get_timestamp() << "] Failed to generate default configuration." << std::endl;
+        std::cerr << "[ERROR] Failed to generate default configuration." << std::endl;
         camera_obj->release();
         camera_manager->stop();
-        close(lock_fd);
         cleanup_resources();
         return 1;
     }
@@ -1098,14 +982,16 @@ int main() {
     // Validate and apply the configuration
     int ret = config->validate();
     if (ret == -EINVAL) {
-        std::cerr << "[" << get_timestamp() << "] Failed to validate camera configuration." << std::endl;
+        std::cerr << "[ERROR] Failed to validate camera configuration." << std::endl;
         camera_obj->release();
         camera_manager->stop();
-        close(lock_fd);
         cleanup_resources();
         return 1;
     }
+    std::cout << "[STATUS] Camera configuration validated." << std::endl;
     camera_obj->configure(config.get());
+    std::cout << "[STATUS] Camera configured with " << STREAM_WIDTH << "x" << STREAM_HEIGHT << " RGB888." << std::endl;
+
 
     // Get the raw stream
     raw_stream = rawStreamConfig.stream();
@@ -1115,77 +1001,71 @@ int main() {
     for (StreamConfiguration &cfg : *config) {
         int ret = allocator->allocate(cfg.stream());
         if (ret < 0) {
-            std::cerr << "[" << get_timestamp() << "] Can't allocate buffers for stream. Error: " << ret << std::endl;
+            std::cerr << "[ERROR] Can't allocate buffers for stream. Error: " << ret << std::endl;
             camera_obj->release();
             camera_manager->stop();
-            close(lock_fd);
             cleanup_resources();
             return 1;
         }
-        std::cout << "[" << get_timestamp() << "] Allocated " << allocator->buffers(cfg.stream()).size()
+        std::cout << "[STATUS] Allocated " << allocator->buffers(cfg.stream()).size()
                   << " buffers for stream." << std::endl;
     }
 
     // 5. Create and Queue Requests
+    std::cout << "[STATUS] Creating and queuing camera requests..." << std::endl;
     for (StreamConfiguration &cfg : *config) {
         Stream *stream = cfg.stream();
         const std::vector<std::unique_ptr<FrameBuffer>> &buffers = allocator->buffers(stream);
 
-        std::cout << "[" << get_timestamp() << "] Creating requests for stream " << stream << " with " << buffers.size() << " buffers." << std::endl;
-
         for (const auto &buffer : buffers) {
-            std::cout << "[" << get_timestamp() << "] Processing buffer at address: " << buffer.get() << std::endl;
             std::unique_ptr<Request> request = camera_obj->createRequest();
             if (!request) {
-                std::cerr << "[" << get_timestamp() << "] Failed to create request." << std::endl;
+                std::cerr << "[ERROR] Failed to create request." << std::endl;
                 camera_obj->release();
                 camera_manager->stop();
-                close(lock_fd);
                 cleanup_resources();
                 return 1;
             }
-            std::cout << "[" << get_timestamp() << "] Created request " << request.get() << std::endl;
 
             int add_buffer_ret = request->addBuffer(stream, buffer.get());
             if (add_buffer_ret < 0) {
-                std::cerr << "[" << get_timestamp() << "] Failed to add buffer to request: " << add_buffer_ret << std::endl;
+                std::cerr << "[ERROR] Failed to add buffer to request: " << add_buffer_ret << std::endl;
                 camera_obj->release();
                 camera_manager->stop();
-                close(lock_fd);
                 cleanup_resources();
                 return 1; // Or handle error appropriately
             }
-            std::cout << "[" << get_timestamp() << "] Added buffer " << buffer.get() << " to request " << request.get() << std::endl;
-
             libcamera_requests.push_back(std::move(request));
-            std::cout << "[" << get_timestamp() << "] Pushed request to vector. Vector size: " << libcamera_requests.size() << std::endl;
         }
     }
+    std::cout << "[STATUS] All camera requests created." << std::endl;
 
     // Set the request completion callback
     camera_obj->requestCompleted.connect(requestComplete);
+    std::cout << "[STATUS] Camera request completion callback connected." << std::endl;
 
     // 6. Start Camera
     camera_obj->start();
-    std::cout << "[" << get_timestamp() << "] [Main] Camera started." << std::endl;
+    std::cout << "[STATUS] Camera capturing started." << std::endl;
 
     // Queue all initial requests
     for (auto &request : libcamera_requests) {
-        std::cout << "[" << get_timestamp() << "] Queuing request " << request.get() << std::endl;
         camera_obj->queueRequest(request.get());
     }
+    std::cout << "[STATUS] Initial camera requests queued." << std::endl;
+
 
     // Initialize PCA9685
     pca9685_controller = std::make_unique<PCA9685>(1, PCA9685_I2C_ADDRESS); // Bus 1, default address 0x40
     if (!pca9685_controller->openDevice()) {
-        std::cerr << "[" << get_timestamp() << "] Failed to open PCA9685 device." << std::endl;
-        close(lock_fd);
+        std::cerr << "[ERROR] Failed to open PCA9685 device." << std::endl;
         cleanup_resources();
         return 1;
     }
+    std::cout << "[STATUS] PCA9685 controller initialized." << std::endl;
 
     // Test servo movement
-    std::cout << "[" << get_timestamp() << "] [Main] Testing servo on channel 0..." << std::endl;
+    std::cout << "[STATUS] Testing servo on channel 0..." << std::endl;
     for (int i = 0; i < 3; ++i) { // Move 3 times
         pca9685_controller->setServoAngle(0, 0); // Angle 0 degrees
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -1194,16 +1074,16 @@ int main() {
         pca9685_controller->setServoAngle(0, 180); // Angle 180 degrees
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
-    std::cout << "[" << get_timestamp() << "] [Main] Servo test complete." << std::endl;
+    std::cout << "[STATUS] Servo test completed." << std::endl;
 
-    std::cout << "[" << get_timestamp() << "] [Main] Starting threads..." << std::endl;
+    std::cout << "[STATUS] Starting threads..." << std::endl;
 
     const std::string model_path = "/home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite";
     const std::string labels_path = "/home/pi/CoralEdgeTpu/coco_labels.txt";
 
     std::thread t_inference(tpu_inference_thread, model_path, labels_path);
     std::thread t_mjpeg_stream(mjpeg_stream_thread, MJPEG_STREAM_PORT);
-    // std::thread t3(phone_sender_thread); // Disabled for debugging OOM
+    std::cout << "[STATUS] TPU inference and MJPEG streaming threads started." << std::endl;
 
     // The main thread will now wait for a signal to stop
     // The camera_capture_thread is no longer needed as a separate thread for frame generation.
@@ -1213,22 +1093,22 @@ int main() {
     }
 
     // 7. Stop Camera and Cleanup
-    std::cout << "[" << get_timestamp() << "] [Main] Stopping camera..." << std::endl;
+    std::cout << "[STATUS] Shutting down: Stopping camera and joining threads..." << std::endl;
     camera_obj->stop();
     inference_queue.stop(); // Renamed from tpu_queue
     phone_queue.stop();
     camera_obj->release();
     camera_manager->stop();
 
-    std::cout << "[" << get_timestamp() << "] [Main] Joining threads..." << std::endl;
+    std::cout << "[STATUS] Joining threads..." << std::endl;
     t_inference.join(); // Changed from t2.join()
     t_mjpeg_stream.join();
     // t3.join(); // Disabled for debugging OOM
 
     // Final cleanup
-    close(lock_fd);
     cleanup_resources();
 
-    std::cout << "[" << get_timestamp() << "] [Main] All threads have stopped. Application terminated." << std::endl;
+    std::cout << "[STATUS] Application successfully terminated." << std::endl;
     return 0;
+
 }
