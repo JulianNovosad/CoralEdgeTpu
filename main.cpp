@@ -97,7 +97,7 @@
 //
 // 7.  **Compile the `detector` Application:**
 //     ```bash
-//     g++ -O3 -std=c++17 /home/pi/CoralEdgeTpu/main.cpp \
+//     g++ -O3 -std=c++17 /home/pi/CoralEdgeTpu/main.cpp /home/pi/CoralEdgeTpu/src/pca9685.cpp $(pkg-config --cflags --libs opencv4) \
 //         -I/home/pi/CoralEdgeTpu/include \
 //         -I/usr/include/libcamera \
 //         /home/pi/CoralEdgeTpu/lib/libtensorflow-lite.so \
@@ -106,7 +106,7 @@
 //         -lcamera \
 //         -lcamera-base \
 //         -o /home/pi/CoralEdgeTpu/detector \
-//         -lpthread -lm -lz -ldl -lusb-1.0
+//         -lpthread -lm -lz -ldl -lusb-1.0 -ljpeg
 //     ```
 //
 // 8.  **Run the `detector` Application:**
