@@ -12,8 +12,8 @@
 //     *   Raspberry Pi 5 with Debian Bookworm (ARM64 architecture).
 //     *   Raspberry Pi Camera Module connected and enabled.
 //     *   Google Coral Edge TPU (PCIe) connected.
-//     *   Kernel 6.6.51+rpt-rpi-v8 (or compatible) with custom Device Tree Blob (DTB)
-//         modifications for MSI-X (Enable+ Count=128) for optimal TPU performance.
+//     *   Kernel 6.6.51+rpt-rpi-v8
+//         Assurance of MSI-X (Enable+ Count=128) for the TPU.
 //         (Refer to project documentation for DTB modification details if not already applied).
 //
 // 2.  **Dependencies Installation:**
