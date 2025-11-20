@@ -97,7 +97,7 @@
 //
 // 7.  **Compile the `detector` Application:**
 //     ```bash
-//     g++ -O3 -std=c++17 /home/pi/CoralEdgeTpu/main.cpp /home/pi/CoralEdgeTpu/src/pca9685.cpp $(pkg-config --cflags --libs opencv4) \
+//     g++ -O3 -march=native -mtune=native -flto -std=c++17 /home/pi/CoralEdgeTpu/main.cpp /home/pi/CoralEdgeTpu/src/pca9685.cpp $(pkg-config --cflags --libs opencv4) \
 //         -I/home/pi/CoralEdgeTpu/include \
 //         -I/usr/include/libcamera \
 //         /home/pi/CoralEdgeTpu/lib/libtensorflow-lite.so \
@@ -204,7 +204,7 @@ const int RAW_FRAME_SIZE = STREAM_WIDTH * STREAM_HEIGHT * 3; // For BGR888
 
 // Placeholder for JPEG frame size (actual size will vary)
 const size_t JPEG_FRAME_MAX_SIZE = 300 * 1024; // 300 KB
-const int MAX_QUEUE_SIZE = 10; // Max number of frames to buffer in memory
+const int MAX_QUEUE_SIZE = 120; // Max number of frames to buffer in memory (increased from 10 to 120 as per code review)
 const int MJPEG_STREAM_PORT = 8080; // Port for MJPEG streaming server
 
 // --- Globals ---
@@ -379,18 +379,26 @@ RawFrame resize_image_rgb(const RawFrame& input_frame, int input_width, int inpu
 }
 
 // Utility function to encode RGB RawFrame to JPEG
+// Custom deleter for unsigned char* allocated by jpeg_mem_dest
+struct JpegMemDestFree {
+    void operator()(unsigned char* p) const {
+        if (p) {
+            free(p);
+        }
+    }
+};
+
 std::vector<uint8_t> encode_rgb_to_jpeg(const RawFrame& rgb_frame, int width, int height, int quality) {
     std::vector<uint8_t> jpeg_buffer;
-    struct jpeg_compress_struct cinfo;
-    struct jpeg_error_mgr jerr;
-
-    cinfo.err = jpeg_std_error(&jerr);
-    jpeg_create_compress(&cinfo);
+    struct jpeg_compress_struct cinfo_raw;
+    JpegCompressGuard cinfo_guard(&cinfo_raw); // RAII for cinfo
+    jpeg_compress_struct& cinfo = cinfo_raw; // Use reference for convenience
 
     // Set up destination manager to write to memory
-    unsigned char* outbuffer = nullptr;
+    unsigned char* outbuffer_raw = nullptr;
     unsigned long outsize = 0;
-    jpeg_mem_dest(&cinfo, &outbuffer, &outsize);
+    jpeg_mem_dest(&cinfo, &outbuffer_raw, &outsize);
+    std::unique_ptr<unsigned char, JpegMemDestFree> outbuffer(outbuffer_raw); // RAII for outbuffer
 
     cinfo.image_width = width;
     cinfo.image_height = height;
@@ -410,14 +418,12 @@ std::vector<uint8_t> encode_rgb_to_jpeg(const RawFrame& rgb_frame, int width, in
     jpeg_finish_compress(&cinfo);
     
     // Copy data from outbuffer to jpeg_buffer
-    if (outsize > 0 && outbuffer != nullptr) {
-        jpeg_buffer.assign(outbuffer, outbuffer + outsize);
+    if (outsize > 0 && outbuffer.get() != nullptr) {
+        jpeg_buffer.assign(outbuffer.get(), outbuffer.get() + outsize);
     }
     
-    jpeg_destroy_compress(&cinfo);
-    if (outbuffer != nullptr) {
-        free(outbuffer); // Free memory allocated by jpeg_mem_dest
-    }
+    jpeg_destroy_compress(&cinfo); // This cleans up cinfo, not outbuffer
+    // outbuffer is now managed by unique_ptr and will be freed automatically
 
     return jpeg_buffer;
 }
@@ -430,38 +436,53 @@ void draw_rectangle(RawFrame& frame, int width, int height, int x, int y, int w,
     int x2 = std::min(width - 1, x + w - 1);
     int y2 = std::min(height - 1, y + h - 1);
 
+    // Ensure thickness is positive and valid
+    if (thickness <= 0 || x1 > x2 || y1 > y2) return;
+
+    // Draw top and bottom horizontal bands
     for (int i = 0; i < thickness; ++i) {
-        // Top line
-        for (int cur_x = x1; cur_x <= x2; ++cur_x) {
-            if (y1 + i < height && y1 + i >=0 && cur_x >=0 && cur_x < width) {
-                size_t index = ((y1 + i) * width + cur_x) * 3;
+        int current_y_top = y1 + i;
+        int current_y_bottom = y2 - i;
+
+        if (current_y_top < height && current_y_top >= 0) { // Top line
+            for (int cur_x = x1; cur_x <= x2; ++cur_x) {
+                size_t index = (current_y_top * width + cur_x) * 3;
                 frame[index] = r;
                 frame[index + 1] = g;
                 frame[index + 2] = b;
             }
         }
-        // Bottom line
-        for (int cur_x = x1; cur_x <= x2; ++cur_x) {
-            if (y2 - i >= 0 && y2 - i < height && cur_x >=0 && cur_x < width) {
-                size_t index = ((y2 - i) * width + cur_x) * 3;
+        if (current_y_bottom >= 0 && current_y_bottom < height && current_y_bottom > current_y_top) { // Bottom line, avoid overwriting if rectangle is too thin
+            for (int cur_x = x1; cur_x <= x2; ++cur_x) {
+                size_t index = (current_y_bottom * width + cur_x) * 3;
                 frame[index] = r;
                 frame[index + 1] = g;
                 frame[index + 2] = b;
             }
         }
-        // Left line
-        for (int cur_y = y1; cur_y <= y2; ++cur_y) {
-            if (x1 + i < width && x1 + i >=0 && cur_y >=0 && cur_y < height) {
-                size_t index = (cur_y * width + (x1 + i)) * 3;
+    }
+
+    // Draw left and right vertical bands
+    // Adjusted y-coordinates to avoid overwriting corners already drawn by horizontal bands
+    int inner_y1 = y1 + thickness;
+    int inner_y2 = y2 - thickness;
+    if (inner_y1 > inner_y2) return; // If inner region is invalid, no need to draw vertical lines
+
+    for (int i = 0; i < thickness; ++i) {
+        int current_x_left = x1 + i;
+        int current_x_right = x2 - i;
+
+        if (current_x_left < width && current_x_left >= 0) { // Left line
+            for (int cur_y = inner_y1; cur_y <= inner_y2; ++cur_y) {
+                size_t index = (cur_y * width + current_x_left) * 3;
                 frame[index] = r;
                 frame[index + 1] = g;
                 frame[index + 2] = b;
             }
         }
-        // Right line
-        for (int cur_y = y1; cur_y <= y2; ++cur_y) {
-            if (x2 - i >= 0 && x2 - i < width && cur_y >=0 && cur_y < height) {
-                size_t index = (cur_y * width + (x2 - i)) * 3;
+        if (current_x_right >= 0 && current_x_right < width && current_x_right > current_x_left) { // Right line, avoid overwriting
+            for (int cur_y = inner_y1; cur_y <= inner_y2; ++cur_y) {
+                size_t index = (cur_y * width + current_x_right) * 3;
                 frame[index] = r;
                 frame[index + 1] = g;
                 frame[index + 2] = b;
@@ -469,7 +490,6 @@ void draw_rectangle(RawFrame& frame, int width, int height, int x, int y, int w,
         }
     }
 }
-
 // Simple function to draw text (very basic, for debugging)
 // This is extremely basic and will just draw a few pixels for character representation.
 // For robust text rendering, a font library like FreeType would be needed, which is out of scope for now.
@@ -491,6 +511,25 @@ void draw_text(RawFrame& frame, int width, int height, int x, int y, const std::
         }
     }
 }
+
+// RAII wrapper for jpeg_compress_struct
+class JpegCompressGuard {
+public:
+    explicit JpegCompressGuard(jpeg_compress_struct* cinfo) : cinfo_ptr(cinfo) {
+        cinfo_ptr->err = jpeg_std_error(&jerr);
+        jpeg_create_compress(cinfo_ptr);
+    }
+
+    ~JpegCompressGuard() {
+        if (cinfo_ptr) {
+            jpeg_destroy_compress(cinfo_ptr);
+        }
+    }
+
+private:
+    jpeg_compress_struct* cinfo_ptr;
+    jpeg_error_mgr jerr;
+};
 
 extern "C" {
 TfLiteDelegate* tflite_plugin_create_delegate(const void* options);
@@ -554,6 +593,9 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
     std::cout << "[" << get_timestamp() << "] [TPU Thread] Model expected input tensor: "
               << input_width << "x" << input_height << "x" << input_channels
               << " (" << interpreter->input_tensor(0)->bytes << " bytes)" << std::endl;
+
+    auto last_queue_log_time = std::chrono::steady_clock::now();
+    const std::chrono::seconds queue_log_interval(1); // Log every 1 second
 
     // Read labels
     auto ReadLabels = [](const std::string& filename) -> std::vector<std::string> {
@@ -656,6 +698,14 @@ void tpu_inference_thread(const std::string& model_path, const std::string& labe
         }
         
         processed_frame_queue.push(std::move(processed_packet));
+
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_queue_log_time >= queue_log_interval) {
+            std::cout << "[" << get_timestamp() << "] [TPU Thread] Queue Sizes: inference_queue="
+                      << inference_queue.size() << ", processed_frame_queue="
+                      << processed_frame_queue.size() << std::endl;
+            last_queue_log_time = now;
+        }
 
         frames_processed++;
         if (frames_processed >= NUM_BENCHMARK_FRAMES) {
@@ -863,6 +913,8 @@ void mjpeg_stream_thread(int port) {
 
     std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Server listening on port " << port << std::endl;
 
+    const std::chrono::milliseconds target_frame_time(1000 / 45); // Target 45 FPS
+
     while (running) {
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
             if (errno == EINTR) continue; // Interrupted by signal, retry
@@ -884,8 +936,9 @@ void mjpeg_stream_thread(int port) {
 
         ProcessedPacket packet;
         while (running && processed_frame_queue.pop(packet)) {
-            // Make a mutable copy of the frame to draw on
-            RawFrame frame_to_draw = *packet.high_res_frame;
+            auto frame_start_time = std::chrono::steady_clock::now(); // Start timer for current frame
+            // Directly create a cv::Mat from the RawFrame data (assume RGB for now, will fix if colors are still off)
+            cv::Mat frame_mat(packet.high_res_height, packet.high_res_width, CV_8UC3, packet.high_res_frame->data());
 
             // Draw detections on the high-resolution frame
             for (const auto& det : packet.detections) {
@@ -900,13 +953,12 @@ void mjpeg_stream_thread(int port) {
                     label = labels[det.class_id];
                 }
                 
-                draw_rectangle(frame_to_draw, packet.high_res_width, packet.high_res_height, box_x, box_y, box_w, box_h, 255, 0, 0, 2);
-                draw_text(frame_to_draw, packet.high_res_width, packet.high_res_height, box_x, box_y - 10, label, 255, 255, 255);
+                draw_rectangle(*packet.high_res_frame, packet.high_res_width, packet.high_res_height, box_x, box_y, box_w, box_h, 255, 0, 0, 2);
+                draw_text(*packet.high_res_frame, packet.high_res_width, packet.high_res_height, box_x, box_y - 10, label, 255, 255, 255);
             }
 
             // Encode to JPEG
-            std::vector<uint8_t> jpeg_data = encode_rgb_to_jpeg(frame_to_draw, packet.high_res_width, packet.high_res_height, 90);
-
+            std::vector<uint8_t> jpeg_data = encode_rgb_to_jpeg(*packet.high_res_frame, packet.high_res_width, packet.high_res_height, 75); // JPEG quality to 75 as per code review
             std::string part_header = "--BOUNDARY\r\n";
             part_header += "Content-Type: image/jpeg\r\n";
             part_header += "Content-Length: " + std::to_string(jpeg_data.size()) + "\r\n\r\n";
@@ -916,6 +968,13 @@ void mjpeg_stream_thread(int port) {
             }
             if (!send_all(new_socket, (const char*)jpeg_data.data(), jpeg_data.size())) {
                 break;
+            }
+
+            auto frame_end_time = std::chrono::steady_clock::now(); // End timer for current frame
+            auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(frame_end_time - frame_start_time);
+
+            if (elapsed_time < target_frame_time) {
+                std::this_thread::sleep_for(target_frame_time - elapsed_time);
             }
         }
         std::cout << "[" << get_timestamp() << "] [MJPEG Thread] Client disconnected." << std::endl;
@@ -959,7 +1018,7 @@ void requestComplete(Request *request) {
     }
 
     // Re-queue the request for continuous capture
-    if (running) {
+    if (running.load(std::memory_order_acquire)) {
         // We must get the buffer *before* calling reuse(), as reuse() clears the buffer map.
         if (request->buffers().count(raw_stream) > 0) {
             FrameBuffer *buffer = request->buffers().at(raw_stream);
