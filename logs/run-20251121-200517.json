@@ -1,0 +1,20 @@
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"CoralEdgeTpu Detector Starting..."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Configuration:"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"  Model Path: /home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"  Labels Path: /home/pi/CoralEdgeTpu/coco_labels.txt"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"  Camera Mode: 1280x720"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"  HTTP Port: 8080"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"  UDP Target: 127.0.0.1:9000"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Starting camera capture..."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Camera manager started."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Found 1 cameras."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Using camera: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Camera acquired."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Camera configuration generated."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Set camera resolution to 1280x720"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Camera configuration was adjusted."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Camera configuration validated."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Camera configured."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"ERROR", "message":"Failed to allocate buffers: 6"}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"ERROR", "message":"Failed to start camera capture."}
+{"timestamp":"2025-11-21T20:05:17Z", "level":"INFO", "message":"Shutting down application..."}

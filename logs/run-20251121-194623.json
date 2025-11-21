@@ -1,0 +1,9 @@
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"CoralEdgeTpu Detector Starting..."}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"Configuration:"}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"  Model Path: /home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite"}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"  Labels Path: /home/pi/CoralEdgeTpu/coco_labels.txt"}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"  Camera Mode: 1536x864"}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"  HTTP Port: 8080"}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"  UDP Target: 127.0.0.1:9000"}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"ERROR", "message":"Failed to start camera capture."}
+{"timestamp":"2025-11-21T19:46:23Z", "level":"INFO", "message":"Shutting down application..."}
