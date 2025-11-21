@@ -1,0 +1,21 @@
+f course. Here is a summary of our session:                                                                         
+                                                                                                                       
+  We began by verifying the state of a C++ object detection project for a Raspberry Pi with an Edge TPU. We found that 
+  while dependencies like FlatBuffers and TensorFlow Lite were partially built, the main application was a             
+  placeholder, and the build system was not functional.                                                                
+                                                                                                                       
+  The development process involved:                                                                                    
+   1. Fixing the Build System: We created and debugged a build.sh script and CMakeLists.txt, resolving numerous issues 
+      related to incorrect paths, missing build tools (pkg-config), and persistent CMake caching errors.               
+   2. Implementing the Application: We created a multi-threaded application architecture, implementing separate C++    
+      modules for camera capture (libcamera), inference (TensorFlow Lite with Edge TPU delegate), an MJPEG server, a   
+      UDP sender, JPEG encoding, and logging.                                                                          
+   3. Resolving Compilation Errors: We worked through and fixed a long series of C++ compilation errors, including     
+      missing headers, API mismatches with the installed libcamera version, incorrect TFLite API usage, and various    
+      logic errors in the newly written code.                                                                          
+   4. Addressing Runtime Errors: After a successful compilation, the application failed to start the camera, giving a  
+      "Failed to allocate buffers" error. We also identified a deadlock that caused the application to hang on         
+      shutdown. We were in the process of debugging these two final issues, starting with an investigation of the      
+      system's libcamera header files to ensure correct API usage.                                                     
+   5. User Requests: User requested to hardcode the model and label paths, which we did, and this led to the final set  
+      of runtime errors we are currently debugging.           
