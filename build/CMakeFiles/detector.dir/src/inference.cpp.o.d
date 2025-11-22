@@ -62,9 +62,7 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/atomic_wide_counter.h \
  /usr/include/aarch64-linux-gnu/bits/struct_mutex.h \
  /usr/include/aarch64-linux-gnu/bits/struct_rwlock.h \
- /usr/include/alloca.h \
- /usr/include/aarch64-linux-gnu/bits/stdlib-bsearch.h \
- /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
+ /usr/include/alloca.h /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
  /usr/include/c++/12/bits/specfun.h \
  /usr/include/c++/12/bits/stl_algobase.h \
  /usr/include/c++/12/bits/functexcept.h \
@@ -152,10 +150,10 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/types/struct_FILE.h \
  /usr/include/aarch64-linux-gnu/bits/types/cookie_io_functions_t.h \
  /usr/include/aarch64-linux-gnu/bits/stdio_lim.h \
- /usr/include/aarch64-linux-gnu/bits/stdio.h /usr/include/c++/12/cerrno \
- /usr/include/errno.h /usr/include/aarch64-linux-gnu/bits/errno.h \
- /usr/include/linux/errno.h /usr/lib/linux/uapi/arm64/asm/errno.h \
- /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
+ /usr/include/c++/12/cerrno /usr/include/errno.h \
+ /usr/include/aarch64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
+ /usr/lib/linux/uapi/arm64/asm/errno.h /usr/include/asm-generic/errno.h \
+ /usr/include/asm-generic/errno-base.h \
  /usr/include/aarch64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/12/bits/charconv.h \
  /usr/include/c++/12/bits/basic_string.tcc \
@@ -244,43 +242,26 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/verifier.h \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/mutable_op_resolver.h \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/kernels/register.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/c/builtin_op_data.h \
  /usr/include/c++/12/thread /usr/include/c++/12/bits/std_thread.h \
  /usr/include/c++/12/bits/this_thread_sleep.h \
  /usr/include/c++/12/bits/chrono.h /usr/include/c++/12/ratio \
  /usr/include/c++/12/ctime /usr/include/c++/12/bits/parse_numbers.h \
- /usr/include/c++/12/mutex /usr/include/c++/12/bits/std_mutex.h \
- /usr/include/c++/12/bits/unique_lock.h \
- /usr/include/c++/12/condition_variable /usr/include/c++/12/queue \
+ /usr/include/c++/12/atomic /home/pi/CoralEdgeTpu/src/pipeline_structs.h \
+ /usr/include/c++/12/chrono /usr/include/c++/12/queue \
  /usr/include/c++/12/deque /usr/include/c++/12/bits/stl_deque.h \
  /usr/include/c++/12/bits/deque.tcc /usr/include/c++/12/bits/stl_queue.h \
- /usr/include/c++/12/atomic /usr/include/c++/12/chrono \
- /home/pi/CoralEdgeTpu/src/camera_capture.h \
- /usr/include/libcamera/libcamera/libcamera.h \
- /usr/include/libcamera/libcamera/camera.h /usr/include/c++/12/optional \
- /usr/include/libcamera/libcamera/base/class.h \
- /usr/include/libcamera/libcamera/base/flags.h \
- /usr/include/libcamera/libcamera/base/object.h /usr/include/c++/12/list \
- /usr/include/c++/12/bits/stl_list.h /usr/include/c++/12/bits/list.tcc \
- /usr/include/libcamera/libcamera/base/bound_method.h \
- /usr/include/libcamera/libcamera/base/signal.h \
- /usr/include/libcamera/libcamera/controls.h \
- /usr/include/libcamera/libcamera/base/span.h \
- /usr/include/libcamera/libcamera/geometry.h \
- /usr/include/libcamera/libcamera/orientation.h \
- /usr/include/c++/12/iostream /usr/include/libcamera/libcamera/request.h \
- /usr/include/libcamera/libcamera/fence.h \
- /usr/include/libcamera/libcamera/base/unique_fd.h \
- /usr/include/libcamera/libcamera/stream.h \
- /usr/include/libcamera/libcamera/color_space.h \
- /usr/include/libcamera/libcamera/framebuffer.h \
- /usr/include/libcamera/libcamera/base/shared_fd.h \
- /usr/include/libcamera/libcamera/pixel_format.h \
- /usr/include/libcamera/libcamera/camera_manager.h \
- /usr/include/libcamera/libcamera/control_ids.h \
- /usr/include/libcamera/libcamera/formats.h \
- /usr/include/libcamera/libcamera/framebuffer_allocator.h \
- /usr/include/libcamera/libcamera/logging.h \
- /usr/include/libcamera/libcamera/property_ids.h \
- /usr/include/libcamera/libcamera/transform.h \
- /usr/include/libcamera/libcamera/version.h
+ /usr/include/c++/12/mutex /usr/include/c++/12/bits/std_mutex.h \
+ /usr/include/c++/12/bits/unique_lock.h \
+ /usr/include/c++/12/condition_variable \
+ /home/pi/CoralEdgeTpu/src/util_logging.h /usr/include/c++/12/fstream \
+ /usr/include/c++/12/bits/codecvt.h \
+ /usr/include/aarch64-linux-gnu/c++/12/bits/basic_file.h \
+ /usr/include/aarch64-linux-gnu/c++/12/bits/c++io.h \
+ /usr/include/c++/12/bits/fstream.tcc /usr/include/c++/12/iomanip \
+ /usr/include/c++/12/locale \
+ /usr/include/c++/12/bits/locale_facets_nonio.h \
+ /usr/include/aarch64-linux-gnu/c++/12/bits/time_members.h \
+ /usr/include/aarch64-linux-gnu/c++/12/bits/messages_members.h \
+ /usr/include/libintl.h /usr/include/c++/12/bits/locale_facets_nonio.tcc \
+ /usr/include/c++/12/bits/locale_conv.h \
+ /usr/include/c++/12/bits/quoted_string.h /usr/include/c++/12/iostream

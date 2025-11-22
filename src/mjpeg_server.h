@@ -1,3 +1,13 @@
+/**
+ * @file mjpeg_server.h
+ * @brief Defines the MjpegServer class for streaming MJPEG video over HTTP.
+ *
+ * This class implements a simple HTTP server that serves MJPEG video frames
+ * to connected clients. It retrieves MJPEG frames from a thread-safe queue
+ * populated by a camera capture module and streams them to web browsers or
+ * other compatible clients.
+ */
+
 #ifndef MJPEG_SERVER_H
 #define MJPEG_SERVER_H
 
@@ -5,87 +15,87 @@
 #include <vector>
 #include <thread>
 #include <atomic>
-#include <mutex>
-#include <condition_variable>
-#include <queue>
+#include <sys/socket.h> // For socket programming types
 
-// Forward declare for ImageFrame (if needed, otherwise define directly)
-struct ImageFrame {
-    std::vector<uint8_t> jpeg_data;
-    size_t width;
-    size_t height;
-    // Add timestamp or other metadata if necessary
-};
+#include "pipeline_structs.h" // Use the new central header
 
-// Thread-safe queue for MJPEG frames
-class MjpegQueue {
-public:
-    void push(ImageFrame new_frame) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        // Keep only the latest frame for MJPEG streaming
-        if (!queue_.empty()) {
-            queue_.pop();
-        }
-        queue_.push(std::move(new_frame));
-        cond_var_.notify_one();
-    }
-
-    bool pop(ImageFrame& frame) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        // Wait for a new frame, but don't block indefinitely if stopping
-        cond_var_.wait(lock, [this]{ return !queue_.empty() || !running_; });
-        if (queue_.empty()) {
-            return false;
-        }
-        frame = std::move(queue_.front());
-        queue_.pop();
-        return true;
-    }
-
-    // Peeks at the latest frame without removing it
-    bool peek_latest(ImageFrame& frame) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        cond_var_.wait(lock, [this]{ return !queue_.empty() || !running_; });
-        if (queue_.empty()) {
-            return false;
-        }
-        frame = queue_.back(); // Get the latest frame
-        return true;
-    }
-
-    void set_running(bool val) {
-        running_ = val;
-        if (!val) {
-            cond_var_.notify_all(); // Unblock any waiting threads
-        }
-    }
-
-
-private:
-    mutable std::mutex mutex_;
-    std::queue<ImageFrame> queue_;
-    std::condition_variable cond_var_;
-    std::atomic<bool> running_ = true;
-};
-
+/**
+ * @brief A simple HTTP server for streaming MJPEG video.
+ *
+ * The MjpegServer class creates a TCP/IP server that listens for incoming
+ * HTTP connections. Upon a client connection, it continuously reads MJPEG
+ * frames from an input queue and streams them as a multipart/x-mixed-replace
+ * HTTP response, suitable for displaying live video in web browsers.
+ */
 class MjpegServer {
 public:
+    /**
+     * @brief Constructor for MjpegServer.
+     *
+     * Initializes the MJPEG server with the specified port and a reference
+     * to the input queue from which MJPEG frames will be retrieved.
+     *
+     * @param port The TCP port number on which the server will listen.
+     * @param input_queue Reference to the thread-safe MjpegQueue providing MJPEG frames.
+     */
     MjpegServer(int port, MjpegQueue& input_queue);
+
+    /**
+     * @brief Destructor for MjpegServer.
+     *
+     * Ensures that the server thread is gracefully stopped and resources are released.
+     */
     ~MjpegServer();
 
+    /**
+     * @brief Starts the MJPEG server.
+     *
+     * Creates and launches the main server thread that listens for client connections.
+     *
+     * @return True if the server started successfully, false otherwise.
+     */
     bool start();
+
+    /**
+     * @brief Stops the MJPEG server.
+     *
+     * Signals the server thread to terminate, closes the server socket, and joins
+     * the server thread for a clean shutdown.
+     */
     void stop();
+
+    /**
+     * @brief Checks if the MJPEG server is currently running.
+     *
+     * @return True if the server is running, false otherwise.
+     */
     bool is_running() const { return running_; }
 
 private:
+    /**
+     * @brief The main loop for the MJPEG server thread.
+     *
+     * This function binds to the specified port, listens for incoming connections,
+     * accepts clients, and then detaches a new thread to handle each client.
+     */
     void server_thread_func();
+
+    /**
+     * @brief Handles an individual client connection for MJPEG streaming.
+     *
+     * This function sends the HTTP multipart header to the client and then
+     * continuously reads MJPEG frames from the input queue, sending each frame
+     * with its boundary delimiter to the connected client.
+     *
+     * @param client_sock The socket file descriptor for the connected client.
+     */
     void handle_client(int client_sock);
 
-    int port_;
-    MjpegQueue& input_queue_;
-    std::atomic<bool> running_ = false;
-    std::thread server_thread_;
-    int server_sock_ = -1;
+    int port_; ///< The TCP port number the server listens on.
+    MjpegQueue& input_queue_; ///< Reference to the queue from which MJPEG frames are retrieved.
+    std::atomic<bool> running_ = false; ///< Atomic flag to control the server's running state.
+    std::thread server_thread_; ///< The main thread running the server_thread_func.
+    int server_sock_ = -1; ///< The socket file descriptor for the listening server socket.
 };
 
 #endif // MJPEG_SERVER_H

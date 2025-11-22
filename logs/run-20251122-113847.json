@@ -1,0 +1,32 @@
+{"timestamp":"2025-11-22T11:38:47Z", "level":"INFO", "message":"CoralEdgeTpu Detector Starting..."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Model Input Dimensions: 300x300x3"}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"--- Configuration ---"}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"  Inference Input: 300x300"}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"  MJPEG Stream: 640x480@15fps"}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"  HTTP Port: 8080"}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"  UDP Target: 127.0.0.1:9000"}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"---------------------"}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Inference rpicam-vid manager starting..."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"MJPEG rpicam-vid manager starting..."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Inference rpicam-vid watchdog started."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Inference rpicam-vid child process (PID: 3071) launched successfully."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"InferenceEngine started with 2 worker threads."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Inference rpicam-vid pipe reader started."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"MJPEG rpicam-vid watchdog started."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Application started successfully. Waiting for shutdown signal (Ctrl+C)."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"MJPEG rpicam-vid child process (PID: 3077) launched successfully."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"MJPEG rpicam-vid pipe reader started."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"WARNING", "message":"Inference rpicam-vid pipe reader reached EOF. Child process likely exited."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Inference rpicam-vid pipe reader stopped."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"ERROR", "message":"Inference rpicam-vid child process (PID: 3071) exited with code: 255."}
+{"timestamp":"2025-11-22T11:38:48Z", "level":"INFO", "message":"Inference rpicam-vid manager thread exited."}
+{"timestamp":"2025-11-22T11:38:50Z", "level":"INFO", "message":"Inference rpicam-vid watchdog stopped."}
+{"timestamp":"2025-11-22T11:38:57Z", "level":"INFO", "message":"Shutdown requested, initiating cleanup..."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"WARNING", "message":"MJPEG rpicam-vid pipe reader reached EOF. Child process likely exited."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"INFO", "message":"MJPEG rpicam-vid pipe reader stopped."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"ERROR", "message":"MJPEG rpicam-vid child process (PID: 3077) terminated by signal: 15 (Terminated)."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"INFO", "message":"MJPEG rpicam-vid manager thread exited."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"INFO", "message":"Shutting down application modules..."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"INFO", "message":"Stopping InferenceEngine..."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"INFO", "message":"InferenceEngine stopped."}
+{"timestamp":"2025-11-22T11:38:58Z", "level":"INFO", "message":"CoralEdgeTpu Detector Exiting."}

@@ -1,0 +1,195 @@
+[INFO] CoralEdgeTpu Detector Starting...
+UDP sender started for target: 127.0.0.1:9000
+MJPEG server started on port 8080
+[1:16:20.315003822] [3391] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:330 [0mlibcamera v0.5.2+99-bfd68f78
+[1:16:20.321328122] [3397] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:330 [0mlibcamera v0.5.2+99-bfd68f78
+[1:16:20.324140095] [3414] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:720 [0mlibpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[1:16:20.329705059] [3417] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:720 [0mlibpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[INFO] Model Input Dimensions: 300x300x3
+[INFO] --- Configuration ---
+[INFO]   Inference Input: 300x300
+[INFO]   MJPEG Stream: 640x480@15fps
+[INFO]   HTTP Port: 8080
+[INFO]   UDP Target: 127.0.0.1:9000
+[INFO] ---------------------
+[INFO] Inference rpicam-vid manager starting...
+[INFO] MJPEG rpicam-vid manager starting...
+[INFO] Inference rpicam-vid watchdog started.
+[INFO] Inference rpicam-vid child process (PID: 3391) launched successfully.
+[INFO] InferenceEngine started with 2 worker threads.
+[INFO] Application started successfully. Waiting for shutdown signal (Ctrl+C).
+[INFO] Inference rpicam-vid pipe reader started.
+[INFO] MJPEG rpicam-vid watchdog started.
+[INFO] MJPEG rpicam-vid child process (PID: 3397) launched successfully.
+[INFO] MJPEG rpicam-vid pipe reader started.
+[1:16:20.414081725] [3414] [1;32m INFO [1;37mIPAProxy [1;34mipa_proxy.cpp:180 [0mUsing tuning file /usr/share/libcamera/ipa/rpi/pisp/imx708.json
+[1:16:20.414083910] [3417] [1;32m INFO [1;37mIPAProxy [1;34mipa_proxy.cpp:180 [0mUsing tuning file /usr/share/libcamera/ipa/rpi/pisp/imx708.json
+[1:16:20.422979089] [3417] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:220 [0mAdding camera '/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a' for pipeline handler rpi/pisp
+[1:16:20.422979145] [3414] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:220 [0mAdding camera '/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a' for pipeline handler rpi/pisp
+[1:16:20.423019904] [3417] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1179 [0mRegistered camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a to CFE device /dev/media3 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+[1:16:20.423022182] [3414] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1179 [0mRegistered camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a to CFE device /dev/media3 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+ERROR: *** unrecognised codec bgr888 ***
+Made X/EGL preview window
+Made DRM preview window
+Preview window unavailable
+Mode selection for 640:480:12:P(15)
+    SRGGB10_CSI2P,1536x864/120.135 - Score: 1486.67
+    SRGGB10_CSI2P,2304x1296/56.0255 - Score: 1786.67
+    SRGGB10_CSI2P,4608x2592/14.3536 - Score: 3979.49
+Stream configuration adjusted
+[1:16:20.441154931] [3397] [1;32m INFO [1;37mCamera [1;34mcamera.cpp:1215 [0mconfiguring streams: (0) 640x480-YUV420/sYCC (1) 1536x864-BGGR_PISP_COMP1/RAW
+[1:16:20.441204468] [3417] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1483 [0mSensor: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a - Selected sensor format: 1536x864-SBGGR10_1X10/RAW - Selected CFE format: 1536x864-PC1B/RAW
+[ERROR] Inference rpicam-vid child process (PID: 3391) exited with code: 255.
+[WARNING] Inference rpicam-vid pipe reader reached EOF. Child process likely exited.
+[INFO] Inference rpicam-vid pipe reader stopped.
+[INFO] Inference rpicam-vid manager thread exited.
+#7 (0.00 fps) exp 49986.00 ag 2.21 dg 1.00
+#8 (15.00 fps) exp 49986.00 ag 2.20 dg 1.00
+#9 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#10 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#11 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#12 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#13 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#14 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#15 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#16 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#17 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#18 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#19 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#20 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#21 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#22 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#23 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#24 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+[INFO] Inference rpicam-vid watchdog stopped.
+#25 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#26 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#27 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#28 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#29 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#30 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#31 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#32 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#33 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#34 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#35 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#36 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#37 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#38 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#39 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#40 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#41 (15.00 fps) exp 49986.00 ag 2.78 dg 1.00
+#42 (15.00 fps) exp 49986.00 ag 2.82 dg 1.00
+#43 (15.00 fps) exp 49986.00 ag 2.82 dg 1.00
+#44 (15.00 fps) exp 49986.00 ag 2.82 dg 1.00
+#45 (15.00 fps) exp 49986.00 ag 2.82 dg 1.00
+#46 (15.00 fps) exp 49986.00 ag 2.84 dg 1.00
+#47 (15.00 fps) exp 49986.00 ag 2.84 dg 1.00
+#48 (15.00 fps) exp 49986.00 ag 2.88 dg 1.00
+#49 (15.00 fps) exp 49986.00 ag 2.88 dg 1.00
+#50 (15.00 fps) exp 49986.00 ag 2.88 dg 1.00
+#51 (15.00 fps) exp 49986.00 ag 2.88 dg 1.00
+#52 (15.00 fps) exp 49986.00 ag 2.88 dg 1.00
+#53 (15.00 fps) exp 49986.00 ag 2.88 dg 1.00
+#54 (15.00 fps) exp 49986.00 ag 2.93 dg 1.00
+#55 (15.00 fps) exp 49986.00 ag 2.93 dg 1.00
+#56 (15.00 fps) exp 49986.00 ag 2.93 dg 1.00
+#57 (15.00 fps) exp 49986.00 ag 2.93 dg 1.00
+#58 (15.00 fps) exp 49986.00 ag 2.93 dg 1.00
+#59 (15.00 fps) exp 49986.00 ag 2.93 dg 1.00
+#60 (15.00 fps) exp 49986.00 ag 2.98 dg 1.00
+#61 (15.00 fps) exp 49986.00 ag 3.00 dg 1.00
+#62 (15.00 fps) exp 49986.00 ag 3.00 dg 1.00
+#63 (15.00 fps) exp 49986.00 ag 3.00 dg 1.00
+#64 (15.00 fps) exp 49986.00 ag 3.00 dg 1.00
+#65 (15.00 fps) exp 49986.00 ag 3.00 dg 1.00
+#66 (15.00 fps) exp 49986.00 ag 3.04 dg 1.00
+#67 (15.00 fps) exp 49986.00 ag 3.04 dg 1.00
+#68 (15.00 fps) exp 49986.00 ag 3.04 dg 1.00
+#69 (15.00 fps) exp 49986.00 ag 3.04 dg 1.00
+#70 (15.00 fps) exp 49986.00 ag 3.04 dg 1.00
+#71 (15.00 fps) exp 49986.00 ag 3.04 dg 1.00
+#72 (15.00 fps) exp 49986.00 ag 3.08 dg 1.00
+#73 (15.00 fps) exp 49986.00 ag 3.08 dg 1.00
+#74 (15.00 fps) exp 49986.00 ag 3.08 dg 1.00
+#75 (15.00 fps) exp 49986.00 ag 3.08 dg 1.00
+#76 (15.00 fps) exp 49986.00 ag 3.08 dg 1.00
+#77 (15.00 fps) exp 49986.00 ag 3.08 dg 1.00
+#78 (15.00 fps) exp 49986.00 ag 3.14 dg 1.00
+#79 (15.00 fps) exp 49986.00 ag 3.17 dg 1.00
+#80 (15.00 fps) exp 49986.00 ag 3.17 dg 1.00
+#81 (15.00 fps) exp 49986.00 ag 3.17 dg 1.00
+#82 (15.00 fps) exp 49986.00 ag 3.17 dg 1.00
+#83 (15.00 fps) exp 49986.00 ag 3.17 dg 1.00
+#84 (15.00 fps) exp 49986.00 ag 3.21 dg 1.00
+#85 (15.00 fps) exp 49986.00 ag 3.21 dg 1.00
+#86 (15.00 fps) exp 49986.00 ag 3.21 dg 1.00
+#87 (15.00 fps) exp 49986.00 ag 3.21 dg 1.00
+#88 (15.00 fps) exp 49986.00 ag 3.21 dg 1.00
+#89 (15.00 fps) exp 49986.00 ag 3.21 dg 1.00
+#90 (15.00 fps) exp 49986.00 ag 3.25 dg 1.00
+#91 (15.00 fps) exp 49986.00 ag 3.25 dg 1.00
+#92 (15.00 fps) exp 49986.00 ag 3.25 dg 1.00
+#93 (15.00 fps) exp 49986.00 ag 3.25 dg 1.00
+#94 (15.00 fps) exp 49986.00 ag 3.25 dg 1.00
+#95 (15.00 fps) exp 49986.00 ag 3.25 dg 1.00
+#96 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#97 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#98 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#99 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#100 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#101 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#102 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#103 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#104 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#105 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#106 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#107 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#108 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#109 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#110 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#111 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#112 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#113 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#114 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#115 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#116 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#117 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#118 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#119 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#120 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#121 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#122 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#123 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#124 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#125 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#126 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#127 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#128 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#129 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#130 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#131 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#132 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#133 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#134 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#135 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#136 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#137 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#138 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#139 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#140 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#141 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+#142 (15.00 fps) exp 49986.00 ag 3.30 dg 1.00
+[INFO] Shutdown requested, initiating cleanup...
+MJPEG server stopped.
+UDP sender stopped.
+[WARNING] MJPEG rpicam-vid pipe reader reached EOF. Child process likely exited.
+[INFO] MJPEG rpicam-vid pipe reader stopped.
+[ERROR] MJPEG rpicam-vid child process (PID: 3397) terminated by signal: 15 (Terminated).
+[INFO] MJPEG rpicam-vid manager thread exited.
+[INFO] MJPEG rpicam-vid watchdog stopped.
+[INFO] Shutting down application modules...
+[INFO] Stopping InferenceEngine...
+[INFO] InferenceEngine stopped.
+[INFO] CoralEdgeTpu Detector Exiting.
+terminate called without an active exception

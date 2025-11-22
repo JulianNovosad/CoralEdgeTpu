@@ -1,6 +1,6 @@
-CMakeFiles/detector.dir/src/camera_capture.cpp.o: \
- /home/pi/CoralEdgeTpu/src/camera_capture.cpp /usr/include/stdc-predef.h \
- /home/pi/CoralEdgeTpu/src/camera_capture.h /usr/include/c++/12/thread \
+CMakeFiles/detector.dir/src/mjpeg_capture.cpp.o: \
+ /home/pi/CoralEdgeTpu/src/mjpeg_capture.cpp /usr/include/stdc-predef.h \
+ /home/pi/CoralEdgeTpu/src/mjpeg_capture.h /usr/include/c++/12/thread \
  /usr/include/c++/12/bits/std_thread.h \
  /usr/include/aarch64-linux-gnu/c++/12/bits/c++config.h \
  /usr/include/aarch64-linux-gnu/c++/12/bits/os_defines.h \

@@ -1,0 +1,38 @@
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"CoralEdgeTpu Detector Starting..."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"Model Input Dimensions: 300x300x3"}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"--- Configuration ---"}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"  Inference Input: 300x300"}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"  MJPEG Stream: 640x480@15fps"}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"  HTTP Port: 8080"}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"  UDP Target: 127.0.0.1:9000"}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"---------------------"}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"Starting CameraCapture manager..."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"Starting MjpegCapture manager..."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"Launching rpicam-vid process for inference stream..."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"InferenceEngine started with 2 worker threads."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"Application started successfully. Waiting for shutdown signal (Ctrl+C)."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"INFO", "message":"Launching rpicam-vid process for MJPEG stream..."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"WARNING", "message":"Pipe reader reached EOF. rpicam-vid process has likely exited."}
+{"timestamp":"2025-11-22T11:07:00Z", "level":"WARNING", "message":"rpicam-vid process (PID: 2503) exited unexpectedly. Restarting..."}
+{"timestamp":"2025-11-22T11:07:01Z", "level":"INFO", "message":"Launching rpicam-vid process for inference stream..."}
+{"timestamp":"2025-11-22T11:07:02Z", "level":"WARNING", "message":"Pipe reader reached EOF. rpicam-vid process has likely exited."}
+{"timestamp":"2025-11-22T11:07:02Z", "level":"WARNING", "message":"rpicam-vid process (PID: 2545) exited unexpectedly. Restarting..."}
+{"timestamp":"2025-11-22T11:07:03Z", "level":"INFO", "message":"Launching rpicam-vid process for inference stream..."}
+{"timestamp":"2025-11-22T11:07:03Z", "level":"WARNING", "message":"Pipe reader reached EOF. rpicam-vid process has likely exited."}
+{"timestamp":"2025-11-22T11:07:03Z", "level":"WARNING", "message":"rpicam-vid process (PID: 2552) exited unexpectedly. Restarting..."}
+{"timestamp":"2025-11-22T11:07:04Z", "level":"INFO", "message":"Launching rpicam-vid process for inference stream..."}
+{"timestamp":"2025-11-22T11:07:04Z", "level":"WARNING", "message":"Pipe reader reached EOF. rpicam-vid process has likely exited."}
+{"timestamp":"2025-11-22T11:07:04Z", "level":"WARNING", "message":"rpicam-vid process (PID: 2559) exited unexpectedly. Restarting..."}
+{"timestamp":"2025-11-22T11:07:05Z", "level":"INFO", "message":"Launching rpicam-vid process for inference stream..."}
+{"timestamp":"2025-11-22T11:07:05Z", "level":"WARNING", "message":"Pipe reader reached EOF. rpicam-vid process has likely exited."}
+{"timestamp":"2025-11-22T11:07:05Z", "level":"WARNING", "message":"rpicam-vid process (PID: 2566) exited unexpectedly. Restarting..."}
+{"timestamp":"2025-11-22T11:07:06Z", "level":"ERROR", "message":"rpicam-vid has crashed too many times. Halting capture."}
+{"timestamp":"2025-11-22T11:07:10Z", "level":"INFO", "message":"Shutdown requested, initiating cleanup..."}
+{"timestamp":"2025-11-22T11:07:10Z", "level":"WARNING", "message":"MJPEG pipe reader reached EOF."}
+{"timestamp":"2025-11-22T11:07:10Z", "level":"WARNING", "message":"MJPEG rpicam-vid process (PID: 2508) exited unexpectedly. Restarting..."}
+{"timestamp":"2025-11-22T11:07:10Z", "level":"INFO", "message":"Shutting down application modules..."}
+{"timestamp":"2025-11-22T11:07:10Z", "level":"INFO", "message":"Stopping InferenceEngine..."}
+{"timestamp":"2025-11-22T11:07:10Z", "level":"INFO", "message":"InferenceEngine stopped."}
+{"timestamp":"2025-11-22T11:07:10Z", "level":"INFO", "message":"Stopping MjpegCapture manager..."}
+{"timestamp":"2025-11-22T11:07:11Z", "level":"INFO", "message":"MjpegCapture manager stopped."}
+{"timestamp":"2025-11-22T11:07:11Z", "level":"INFO", "message":"CoralEdgeTpu Detector Exiting."}

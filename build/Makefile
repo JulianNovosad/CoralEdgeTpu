@@ -225,6 +225,30 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/mjpeg_capture.o: src/mjpeg_capture.cpp.o
+.PHONY : src/mjpeg_capture.o
+
+# target to build an object file
+src/mjpeg_capture.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/mjpeg_capture.cpp.o
+.PHONY : src/mjpeg_capture.cpp.o
+
+src/mjpeg_capture.i: src/mjpeg_capture.cpp.i
+.PHONY : src/mjpeg_capture.i
+
+# target to preprocess a source file
+src/mjpeg_capture.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/mjpeg_capture.cpp.i
+.PHONY : src/mjpeg_capture.cpp.i
+
+src/mjpeg_capture.s: src/mjpeg_capture.cpp.s
+.PHONY : src/mjpeg_capture.s
+
+# target to generate assembly for a file
+src/mjpeg_capture.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/mjpeg_capture.cpp.s
+.PHONY : src/mjpeg_capture.cpp.s
+
 src/mjpeg_server.o: src/mjpeg_server.cpp.o
 .PHONY : src/mjpeg_server.o
 
@@ -248,30 +272,6 @@ src/mjpeg_server.s: src/mjpeg_server.cpp.s
 src/mjpeg_server.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/mjpeg_server.cpp.s
 .PHONY : src/mjpeg_server.cpp.s
-
-src/output_processor.o: src/output_processor.cpp.o
-.PHONY : src/output_processor.o
-
-# target to build an object file
-src/output_processor.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/output_processor.cpp.o
-.PHONY : src/output_processor.cpp.o
-
-src/output_processor.i: src/output_processor.cpp.i
-.PHONY : src/output_processor.i
-
-# target to preprocess a source file
-src/output_processor.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/output_processor.cpp.i
-.PHONY : src/output_processor.cpp.i
-
-src/output_processor.s: src/output_processor.cpp.s
-.PHONY : src/output_processor.s
-
-# target to generate assembly for a file
-src/output_processor.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/output_processor.cpp.s
-.PHONY : src/output_processor.cpp.s
 
 src/udp_sender.o: src/udp_sender.cpp.o
 .PHONY : src/udp_sender.o
@@ -342,12 +342,12 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/mjpeg_capture.o"
+	@echo "... src/mjpeg_capture.i"
+	@echo "... src/mjpeg_capture.s"
 	@echo "... src/mjpeg_server.o"
 	@echo "... src/mjpeg_server.i"
 	@echo "... src/mjpeg_server.s"
-	@echo "... src/output_processor.o"
-	@echo "... src/output_processor.i"
-	@echo "... src/output_processor.s"
 	@echo "... src/udp_sender.o"
 	@echo "... src/udp_sender.i"
 	@echo "... src/udp_sender.s"
