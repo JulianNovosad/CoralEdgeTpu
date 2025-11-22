@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/usr/include/libcamera -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/include/tensorflow/lite -I/home/pi/CoralEdgeTpu/include/tensorflow/lite/c -I/home/pi/CoralEdgeTpu/include/tensorflow/lite/core
+CXX_INCLUDES = -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include
 
-CXX_FLAGS = -O3 -std=c++17 -std=c++17
+CXX_FLAGS = -std=gnu++17
 

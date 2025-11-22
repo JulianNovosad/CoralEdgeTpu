@@ -100,9 +100,7 @@ CMakeFiles/detector.dir/src/udp_sender.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/atomic_wide_counter.h \
  /usr/include/aarch64-linux-gnu/bits/struct_mutex.h \
  /usr/include/aarch64-linux-gnu/bits/struct_rwlock.h \
- /usr/include/alloca.h \
- /usr/include/aarch64-linux-gnu/bits/stdlib-bsearch.h \
- /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
+ /usr/include/alloca.h /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
  /usr/include/c++/12/bits/std_abs.h /usr/include/c++/12/cstdio \
  /usr/include/stdio.h \
  /usr/include/aarch64-linux-gnu/bits/types/__fpos_t.h \
@@ -110,10 +108,10 @@ CMakeFiles/detector.dir/src/udp_sender.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/types/struct_FILE.h \
  /usr/include/aarch64-linux-gnu/bits/types/cookie_io_functions_t.h \
  /usr/include/aarch64-linux-gnu/bits/stdio_lim.h \
- /usr/include/aarch64-linux-gnu/bits/stdio.h /usr/include/c++/12/cerrno \
- /usr/include/errno.h /usr/include/aarch64-linux-gnu/bits/errno.h \
- /usr/include/linux/errno.h /usr/lib/linux/uapi/arm64/asm/errno.h \
- /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
+ /usr/include/c++/12/cerrno /usr/include/errno.h \
+ /usr/include/aarch64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
+ /usr/lib/linux/uapi/arm64/asm/errno.h /usr/include/asm-generic/errno.h \
+ /usr/include/asm-generic/errno-base.h \
  /usr/include/aarch64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/12/bits/charconv.h \
  /usr/include/c++/12/bits/basic_string.tcc /usr/include/c++/12/vector \
@@ -143,6 +141,25 @@ CMakeFiles/detector.dir/src/udp_sender.cpp.o: \
  /usr/include/c++/12/bits/parse_numbers.h /usr/include/c++/12/atomic \
  /usr/include/c++/12/bits/atomic_base.h \
  /usr/include/c++/12/bits/atomic_lockfree_defines.h \
+ /usr/include/netinet/in.h /usr/include/aarch64-linux-gnu/sys/socket.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_iovec.h \
+ /usr/include/aarch64-linux-gnu/bits/socket.h \
+ /usr/include/aarch64-linux-gnu/bits/socket_type.h \
+ /usr/include/aarch64-linux-gnu/bits/sockaddr.h \
+ /usr/lib/linux/uapi/arm64/asm/socket.h /usr/include/asm-generic/socket.h \
+ /usr/include/linux/posix_types.h /usr/include/linux/stddef.h \
+ /usr/lib/linux/uapi/arm64/asm/posix_types.h \
+ /usr/include/asm-generic/posix_types.h \
+ /usr/lib/linux/uapi/arm64/asm/bitsperlong.h \
+ /usr/include/asm-generic/bitsperlong.h \
+ /usr/lib/linux/uapi/arm64/asm/sockios.h \
+ /usr/include/asm-generic/sockios.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_osockaddr.h \
+ /usr/include/aarch64-linux-gnu/bits/in.h \
+ /home/pi/CoralEdgeTpu/src/pipeline_structs.h /usr/include/c++/12/chrono \
+ /usr/include/c++/12/queue /usr/include/c++/12/deque \
+ /usr/include/c++/12/bits/stl_deque.h /usr/include/c++/12/bits/deque.tcc \
+ /usr/include/c++/12/bits/stl_heap.h /usr/include/c++/12/bits/stl_queue.h \
  /usr/include/c++/12/mutex /usr/include/c++/12/exception \
  /usr/include/c++/12/bits/exception_ptr.h \
  /usr/include/c++/12/bits/cxxabi_init_exception.h \
@@ -159,50 +176,8 @@ CMakeFiles/detector.dir/src/udp_sender.cpp.o: \
  /usr/include/c++/12/bits/shared_ptr_base.h \
  /usr/include/c++/12/bits/allocated_ptr.h \
  /usr/include/c++/12/ext/aligned_buffer.h \
- /usr/include/c++/12/ext/concurrence.h /usr/include/c++/12/queue \
- /usr/include/c++/12/deque /usr/include/c++/12/bits/stl_deque.h \
- /usr/include/c++/12/bits/deque.tcc /usr/include/c++/12/bits/stl_heap.h \
- /usr/include/c++/12/bits/stl_queue.h /usr/include/netinet/in.h \
- /usr/include/aarch64-linux-gnu/sys/socket.h \
- /usr/include/aarch64-linux-gnu/bits/types/struct_iovec.h \
- /usr/include/aarch64-linux-gnu/bits/socket.h \
- /usr/include/aarch64-linux-gnu/bits/socket_type.h \
- /usr/include/aarch64-linux-gnu/bits/sockaddr.h \
- /usr/lib/linux/uapi/arm64/asm/socket.h /usr/include/asm-generic/socket.h \
- /usr/include/linux/posix_types.h /usr/include/linux/stddef.h \
- /usr/lib/linux/uapi/arm64/asm/posix_types.h \
- /usr/include/asm-generic/posix_types.h \
- /usr/lib/linux/uapi/arm64/asm/bitsperlong.h \
- /usr/include/asm-generic/bitsperlong.h \
- /usr/lib/linux/uapi/arm64/asm/sockios.h \
- /usr/include/asm-generic/sockios.h \
- /usr/include/aarch64-linux-gnu/bits/types/struct_osockaddr.h \
- /usr/include/aarch64-linux-gnu/bits/in.h \
- /home/pi/CoralEdgeTpu/src/inference.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h \
- /usr/include/c++/12/complex /usr/include/c++/12/cmath \
- /usr/include/math.h /usr/include/aarch64-linux-gnu/bits/math-vector.h \
- /usr/include/aarch64-linux-gnu/bits/libm-simd-decl-stubs.h \
- /usr/include/aarch64-linux-gnu/bits/flt-eval-method.h \
- /usr/include/aarch64-linux-gnu/bits/fp-logb.h \
- /usr/include/aarch64-linux-gnu/bits/fp-fast.h \
- /usr/include/aarch64-linux-gnu/bits/mathcalls-helper-functions.h \
- /usr/include/aarch64-linux-gnu/bits/mathcalls.h \
- /usr/include/aarch64-linux-gnu/bits/mathcalls-narrow.h \
- /usr/include/aarch64-linux-gnu/bits/iscanonical.h \
- /usr/include/c++/12/bits/specfun.h /usr/include/c++/12/tr1/gamma.tcc \
- /usr/include/c++/12/tr1/special_function_util.h \
- /usr/include/c++/12/tr1/bessel_function.tcc \
- /usr/include/c++/12/tr1/beta_function.tcc \
- /usr/include/c++/12/tr1/ell_integral.tcc \
- /usr/include/c++/12/tr1/exp_integral.tcc \
- /usr/include/c++/12/tr1/hypergeometric.tcc \
- /usr/include/c++/12/tr1/legendre_function.tcc \
- /usr/include/c++/12/tr1/modified_bessel_func.tcc \
- /usr/include/c++/12/tr1/poly_hermite.tcc \
- /usr/include/c++/12/tr1/poly_laguerre.tcc \
- /usr/include/c++/12/tr1/riemann_zeta.tcc /usr/include/c++/12/sstream \
- /usr/include/c++/12/istream /usr/include/c++/12/ios \
+ /usr/include/c++/12/ext/concurrence.h /usr/include/c++/12/iostream \
+ /usr/include/c++/12/ostream /usr/include/c++/12/ios \
  /usr/include/c++/12/bits/ios_base.h \
  /usr/include/c++/12/bits/locale_classes.h \
  /usr/include/c++/12/bits/locale_classes.tcc \
@@ -214,98 +189,14 @@ CMakeFiles/detector.dir/src/udp_sender.cpp.o: \
  /usr/include/c++/12/bits/streambuf_iterator.h \
  /usr/include/aarch64-linux-gnu/c++/12/bits/ctype_inline.h \
  /usr/include/c++/12/bits/locale_facets.tcc \
- /usr/include/c++/12/bits/basic_ios.tcc /usr/include/c++/12/ostream \
- /usr/include/c++/12/bits/ostream.tcc \
- /usr/include/c++/12/bits/istream.tcc \
- /usr/include/c++/12/bits/sstream.tcc /usr/include/c++/12/functional \
- /usr/include/c++/12/bits/std_function.h \
- /usr/include/c++/12/unordered_map /usr/include/c++/12/bits/hashtable.h \
- /usr/include/c++/12/bits/hashtable_policy.h \
- /usr/include/c++/12/bits/enable_special_members.h \
- /usr/include/c++/12/bits/node_handle.h \
- /usr/include/c++/12/bits/unordered_map.h \
- /usr/include/c++/12/bits/erase_if.h /usr/include/c++/12/array \
- /usr/include/c++/12/compare /usr/include/c++/12/bits/stl_algo.h \
- /usr/include/c++/12/bits/algorithmfwd.h \
- /usr/include/c++/12/bits/stl_tempbuf.h \
- /usr/include/c++/12/bits/uniform_int_dist.h /usr/include/c++/12/map \
- /usr/include/c++/12/bits/stl_tree.h /usr/include/c++/12/bits/stl_map.h \
- /usr/include/c++/12/bits/stl_multimap.h /usr/include/c++/12/memory \
- /usr/include/c++/12/bits/stl_raw_storage_iter.h \
- /usr/include/c++/12/bits/align.h /usr/include/c++/12/bit \
- /usr/include/c++/12/bits/shared_ptr_atomic.h \
- /usr/include/c++/12/backward/auto_ptr.h \
- /usr/include/c++/12/pstl/glue_memory_defs.h \
- /usr/include/c++/12/pstl/execution_defs.h /usr/include/c++/12/utility \
- /usr/include/c++/12/bits/stl_relops.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/allocation.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/error_reporter.h \
- /usr/include/c++/12/cstdarg \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/c/common.h \
- /usr/lib/gcc/aarch64-linux-gnu/12/include/stdbool.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/c/c_api_types.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/macros.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/experimental/resource/resource_base.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/memory_planner.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/util.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/external_cpu_backend_context.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/portable_type_to_tflitetype.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/stderr_reporter.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/string_type.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/type_to_tflitetype.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/model.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter_builder.h \
- /home/pi/CoralEdgeTpu/flatbuffers/include/flatbuffers/flatbuffers.h \
- /home/pi/CoralEdgeTpu/flatbuffers/include/flatbuffers/base.h \
- /usr/include/assert.h /usr/include/c++/12/cstddef \
- /usr/include/c++/12/cstring /usr/include/string.h /usr/include/strings.h \
- /usr/include/c++/12/set /usr/include/c++/12/bits/stl_set.h \
- /usr/include/c++/12/bits/stl_multiset.h /usr/include/c++/12/algorithm \
- /usr/include/c++/12/pstl/glue_algorithm_defs.h \
- /usr/include/c++/12/iterator /usr/include/c++/12/bits/stream_iterator.h \
- /home/pi/CoralEdgeTpu/flatbuffers/include/flatbuffers/stl_emulation.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/schema/schema_generated.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/model_builder.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/verifier.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/mutable_op_resolver.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/kernels/register.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/c/builtin_op_data.h \
- /usr/include/c++/12/chrono /home/pi/CoralEdgeTpu/src/camera_capture.h \
- /usr/include/libcamera/libcamera/libcamera.h \
- /usr/include/libcamera/libcamera/camera.h /usr/include/c++/12/optional \
- /usr/include/libcamera/libcamera/base/class.h \
- /usr/include/libcamera/libcamera/base/flags.h \
- /usr/include/libcamera/libcamera/base/object.h /usr/include/c++/12/list \
- /usr/include/c++/12/bits/stl_list.h /usr/include/c++/12/bits/list.tcc \
- /usr/include/libcamera/libcamera/base/bound_method.h \
- /usr/include/libcamera/libcamera/base/signal.h \
- /usr/include/libcamera/libcamera/controls.h \
- /usr/include/libcamera/libcamera/base/span.h \
- /usr/include/libcamera/libcamera/geometry.h \
- /usr/include/libcamera/libcamera/orientation.h \
- /usr/include/c++/12/iostream /usr/include/libcamera/libcamera/request.h \
- /usr/include/libcamera/libcamera/fence.h \
- /usr/include/libcamera/libcamera/base/unique_fd.h \
- /usr/include/libcamera/libcamera/stream.h \
- /usr/include/libcamera/libcamera/color_space.h \
- /usr/include/libcamera/libcamera/framebuffer.h \
- /usr/include/libcamera/libcamera/base/shared_fd.h \
- /usr/include/libcamera/libcamera/pixel_format.h \
- /usr/include/libcamera/libcamera/camera_manager.h \
- /usr/include/libcamera/libcamera/control_ids.h \
- /usr/include/libcamera/libcamera/formats.h \
- /usr/include/libcamera/libcamera/framebuffer_allocator.h \
- /usr/include/libcamera/libcamera/logging.h \
- /usr/include/libcamera/libcamera/property_ids.h \
- /usr/include/libcamera/libcamera/transform.h \
- /usr/include/libcamera/libcamera/version.h /usr/include/arpa/inet.h \
+ /usr/include/c++/12/bits/basic_ios.tcc \
+ /usr/include/c++/12/bits/ostream.tcc /usr/include/c++/12/istream \
+ /usr/include/c++/12/bits/istream.tcc /usr/include/arpa/inet.h \
  /usr/include/unistd.h /usr/include/aarch64-linux-gnu/bits/posix_opt.h \
  /usr/include/aarch64-linux-gnu/bits/environments.h \
  /usr/include/aarch64-linux-gnu/bits/confname.h \
  /usr/include/aarch64-linux-gnu/bits/getopt_posix.h \
  /usr/include/aarch64-linux-gnu/bits/getopt_core.h \
  /usr/include/aarch64-linux-gnu/bits/unistd_ext.h \
- /usr/include/linux/close_range.h
+ /usr/include/linux/close_range.h /usr/include/c++/12/sstream \
+ /usr/include/c++/12/bits/sstream.tcc

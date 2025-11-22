@@ -1,0 +1,10 @@
+[ 33%] Building CXX object CMakeFiles/detector.dir/src/camera_capture.cpp.o
+[ 33%] Building CXX object CMakeFiles/detector.dir/src/main.cpp.o
+[ 33%] Building CXX object CMakeFiles/detector.dir/src/mjpeg_capture.cpp.o
+[ 44%] Building CXX object CMakeFiles/detector.dir/src/inference.cpp.o
+[ 55%] Building CXX object CMakeFiles/detector.dir/src/mjpeg_server.cpp.o
+[ 66%] Building CXX object CMakeFiles/detector.dir/src/udp_sender.cpp.o
+[ 77%] Building CXX object CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o
+[ 88%] Building CXX object CMakeFiles/detector.dir/src/util_logging.cpp.o
+[100%] Linking CXX executable detector
+[100%] Built target detector

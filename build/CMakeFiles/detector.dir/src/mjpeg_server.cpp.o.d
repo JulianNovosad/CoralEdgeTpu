@@ -100,9 +100,7 @@ CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/atomic_wide_counter.h \
  /usr/include/aarch64-linux-gnu/bits/struct_mutex.h \
  /usr/include/aarch64-linux-gnu/bits/struct_rwlock.h \
- /usr/include/alloca.h \
- /usr/include/aarch64-linux-gnu/bits/stdlib-bsearch.h \
- /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
+ /usr/include/alloca.h /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
  /usr/include/c++/12/bits/std_abs.h /usr/include/c++/12/cstdio \
  /usr/include/stdio.h \
  /usr/include/aarch64-linux-gnu/bits/types/__fpos_t.h \
@@ -110,10 +108,10 @@ CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/types/struct_FILE.h \
  /usr/include/aarch64-linux-gnu/bits/types/cookie_io_functions_t.h \
  /usr/include/aarch64-linux-gnu/bits/stdio_lim.h \
- /usr/include/aarch64-linux-gnu/bits/stdio.h /usr/include/c++/12/cerrno \
- /usr/include/errno.h /usr/include/aarch64-linux-gnu/bits/errno.h \
- /usr/include/linux/errno.h /usr/lib/linux/uapi/arm64/asm/errno.h \
- /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
+ /usr/include/c++/12/cerrno /usr/include/errno.h \
+ /usr/include/aarch64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
+ /usr/lib/linux/uapi/arm64/asm/errno.h /usr/include/asm-generic/errno.h \
+ /usr/include/asm-generic/errno-base.h \
  /usr/include/aarch64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/12/bits/charconv.h \
  /usr/include/c++/12/bits/basic_string.tcc /usr/include/c++/12/vector \
@@ -143,6 +141,24 @@ CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: \
  /usr/include/c++/12/bits/parse_numbers.h /usr/include/c++/12/atomic \
  /usr/include/c++/12/bits/atomic_base.h \
  /usr/include/c++/12/bits/atomic_lockfree_defines.h \
+ /usr/include/aarch64-linux-gnu/sys/socket.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_iovec.h \
+ /usr/include/aarch64-linux-gnu/bits/socket.h \
+ /usr/include/aarch64-linux-gnu/bits/socket_type.h \
+ /usr/include/aarch64-linux-gnu/bits/sockaddr.h \
+ /usr/lib/linux/uapi/arm64/asm/socket.h /usr/include/asm-generic/socket.h \
+ /usr/include/linux/posix_types.h /usr/include/linux/stddef.h \
+ /usr/lib/linux/uapi/arm64/asm/posix_types.h \
+ /usr/include/asm-generic/posix_types.h \
+ /usr/lib/linux/uapi/arm64/asm/bitsperlong.h \
+ /usr/include/asm-generic/bitsperlong.h \
+ /usr/lib/linux/uapi/arm64/asm/sockios.h \
+ /usr/include/asm-generic/sockios.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_osockaddr.h \
+ /home/pi/CoralEdgeTpu/src/pipeline_structs.h /usr/include/c++/12/chrono \
+ /usr/include/c++/12/queue /usr/include/c++/12/deque \
+ /usr/include/c++/12/bits/stl_deque.h /usr/include/c++/12/bits/deque.tcc \
+ /usr/include/c++/12/bits/stl_heap.h /usr/include/c++/12/bits/stl_queue.h \
  /usr/include/c++/12/mutex /usr/include/c++/12/exception \
  /usr/include/c++/12/bits/exception_ptr.h \
  /usr/include/c++/12/bits/cxxabi_init_exception.h \
@@ -159,10 +175,7 @@ CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: \
  /usr/include/c++/12/bits/shared_ptr_base.h \
  /usr/include/c++/12/bits/allocated_ptr.h \
  /usr/include/c++/12/ext/aligned_buffer.h \
- /usr/include/c++/12/ext/concurrence.h /usr/include/c++/12/queue \
- /usr/include/c++/12/deque /usr/include/c++/12/bits/stl_deque.h \
- /usr/include/c++/12/bits/deque.tcc /usr/include/c++/12/bits/stl_heap.h \
- /usr/include/c++/12/bits/stl_queue.h /usr/include/c++/12/iostream \
+ /usr/include/c++/12/ext/concurrence.h /usr/include/c++/12/iostream \
  /usr/include/c++/12/ostream /usr/include/c++/12/ios \
  /usr/include/c++/12/bits/ios_base.h \
  /usr/include/c++/12/bits/locale_classes.h \
@@ -177,23 +190,9 @@ CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: \
  /usr/include/c++/12/bits/locale_facets.tcc \
  /usr/include/c++/12/bits/basic_ios.tcc \
  /usr/include/c++/12/bits/ostream.tcc /usr/include/c++/12/istream \
- /usr/include/c++/12/bits/istream.tcc \
- /usr/include/aarch64-linux-gnu/sys/socket.h \
- /usr/include/aarch64-linux-gnu/bits/types/struct_iovec.h \
- /usr/include/aarch64-linux-gnu/bits/socket.h \
- /usr/include/aarch64-linux-gnu/bits/socket_type.h \
- /usr/include/aarch64-linux-gnu/bits/sockaddr.h \
- /usr/lib/linux/uapi/arm64/asm/socket.h /usr/include/asm-generic/socket.h \
- /usr/include/linux/posix_types.h /usr/include/linux/stddef.h \
- /usr/lib/linux/uapi/arm64/asm/posix_types.h \
- /usr/include/asm-generic/posix_types.h \
- /usr/lib/linux/uapi/arm64/asm/bitsperlong.h \
- /usr/include/asm-generic/bitsperlong.h \
- /usr/lib/linux/uapi/arm64/asm/sockios.h \
- /usr/include/asm-generic/sockios.h \
- /usr/include/aarch64-linux-gnu/bits/types/struct_osockaddr.h \
- /usr/include/netinet/in.h /usr/include/aarch64-linux-gnu/bits/in.h \
- /usr/include/unistd.h /usr/include/aarch64-linux-gnu/bits/posix_opt.h \
+ /usr/include/c++/12/bits/istream.tcc /usr/include/netinet/in.h \
+ /usr/include/aarch64-linux-gnu/bits/in.h /usr/include/unistd.h \
+ /usr/include/aarch64-linux-gnu/bits/posix_opt.h \
  /usr/include/aarch64-linux-gnu/bits/environments.h \
  /usr/include/aarch64-linux-gnu/bits/confname.h \
  /usr/include/aarch64-linux-gnu/bits/getopt_posix.h \
