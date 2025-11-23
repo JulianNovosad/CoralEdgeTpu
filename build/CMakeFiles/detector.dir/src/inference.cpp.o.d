@@ -246,12 +246,12 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /usr/include/c++/12/bits/this_thread_sleep.h \
  /usr/include/c++/12/bits/chrono.h /usr/include/c++/12/ratio \
  /usr/include/c++/12/ctime /usr/include/c++/12/bits/parse_numbers.h \
- /usr/include/c++/12/atomic /home/pi/CoralEdgeTpu/src/pipeline_structs.h \
- /usr/include/c++/12/chrono /usr/include/c++/12/queue \
+ /usr/include/c++/12/atomic /usr/include/c++/12/mutex \
+ /usr/include/c++/12/bits/std_mutex.h \
+ /usr/include/c++/12/bits/unique_lock.h /usr/include/c++/12/queue \
  /usr/include/c++/12/deque /usr/include/c++/12/bits/stl_deque.h \
  /usr/include/c++/12/bits/deque.tcc /usr/include/c++/12/bits/stl_queue.h \
- /usr/include/c++/12/mutex /usr/include/c++/12/bits/std_mutex.h \
- /usr/include/c++/12/bits/unique_lock.h \
+ /home/pi/CoralEdgeTpu/src/pipeline_structs.h /usr/include/c++/12/chrono \
  /usr/include/c++/12/condition_variable \
  /home/pi/CoralEdgeTpu/src/util_logging.h /usr/include/c++/12/fstream \
  /usr/include/c++/12/bits/codecvt.h \

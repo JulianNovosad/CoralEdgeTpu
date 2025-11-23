@@ -156,7 +156,8 @@ CMakeFiles/detector.dir/src/camera_capture.cpp.o: \
  /usr/include/c++/12/bits/shared_ptr_atomic.h \
  /usr/include/c++/12/backward/auto_ptr.h \
  /usr/include/c++/12/pstl/glue_memory_defs.h \
- /usr/include/c++/12/pstl/execution_defs.h \
+ /usr/include/c++/12/pstl/execution_defs.h /usr/include/c++/12/list \
+ /usr/include/c++/12/bits/stl_list.h /usr/include/c++/12/bits/list.tcc \
  /home/pi/CoralEdgeTpu/src/pipeline_structs.h /usr/include/c++/12/queue \
  /usr/include/c++/12/deque /usr/include/c++/12/bits/stl_deque.h \
  /usr/include/c++/12/bits/deque.tcc /usr/include/c++/12/bits/stl_heap.h \

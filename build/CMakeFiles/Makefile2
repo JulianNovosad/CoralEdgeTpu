@@ -81,12 +81,12 @@ clean: CMakeFiles/detector.dir/clean
 CMakeFiles/detector.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/pi/CoralEdgeTpu/build/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9 "Built target detector"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/pi/CoralEdgeTpu/build/CMakeFiles --progress-num=1,2,3,4,5,6,7,8,9,10,11 "Built target detector"
 .PHONY : CMakeFiles/detector.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/detector.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/pi/CoralEdgeTpu/build/CMakeFiles 9
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/pi/CoralEdgeTpu/build/CMakeFiles 11
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/detector.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/pi/CoralEdgeTpu/build/CMakeFiles 0
 .PHONY : CMakeFiles/detector.dir/rule

@@ -1,6 +1,7 @@
-CMakeFiles/detector.dir/src/udp_sender.cpp.o: \
- /home/pi/CoralEdgeTpu/src/udp_sender.cpp /usr/include/stdc-predef.h \
- /home/pi/CoralEdgeTpu/src/udp_sender.h /usr/include/c++/12/string \
+CMakeFiles/detector.dir/src/udp_video_sender.cpp.o: \
+ /home/pi/CoralEdgeTpu/src/udp_video_sender.cpp \
+ /usr/include/stdc-predef.h /home/pi/CoralEdgeTpu/src/udp_video_sender.h \
+ /usr/include/c++/12/string \
  /usr/include/aarch64-linux-gnu/c++/12/bits/c++config.h \
  /usr/include/aarch64-linux-gnu/c++/12/bits/os_defines.h \
  /usr/include/features.h /usr/include/features-time64.h \
