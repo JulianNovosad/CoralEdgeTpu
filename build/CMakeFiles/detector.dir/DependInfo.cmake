@@ -15,7 +15,9 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/pi/CoralEdgeTpu/src/mjpeg_capture.cpp" "CMakeFiles/detector.dir/src/mjpeg_capture.cpp.o" "gcc" "CMakeFiles/detector.dir/src/mjpeg_capture.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/mjpeg_server.cpp" "CMakeFiles/detector.dir/src/mjpeg_server.cpp.o" "gcc" "CMakeFiles/detector.dir/src/mjpeg_server.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/udp_sender.cpp" "CMakeFiles/detector.dir/src/udp_sender.cpp.o" "gcc" "CMakeFiles/detector.dir/src/udp_sender.cpp.o.d"
+  "/home/pi/CoralEdgeTpu/src/udp_video_sender.cpp" "CMakeFiles/detector.dir/src/udp_video_sender.cpp.o" "gcc" "CMakeFiles/detector.dir/src/udp_video_sender.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/util_logging.cpp" "CMakeFiles/detector.dir/src/util_logging.cpp.o" "gcc" "CMakeFiles/detector.dir/src/util_logging.cpp.o.d"
+  "/home/pi/CoralEdgeTpu/src/video_overlay_processor.cpp" "CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o" "gcc" "CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o.d"
   )
 
 # Targets to which this target links.

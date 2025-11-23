@@ -297,6 +297,30 @@ src/udp_sender.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/udp_sender.cpp.s
 .PHONY : src/udp_sender.cpp.s
 
+src/udp_video_sender.o: src/udp_video_sender.cpp.o
+.PHONY : src/udp_video_sender.o
+
+# target to build an object file
+src/udp_video_sender.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/udp_video_sender.cpp.o
+.PHONY : src/udp_video_sender.cpp.o
+
+src/udp_video_sender.i: src/udp_video_sender.cpp.i
+.PHONY : src/udp_video_sender.i
+
+# target to preprocess a source file
+src/udp_video_sender.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/udp_video_sender.cpp.i
+.PHONY : src/udp_video_sender.cpp.i
+
+src/udp_video_sender.s: src/udp_video_sender.cpp.s
+.PHONY : src/udp_video_sender.s
+
+# target to generate assembly for a file
+src/udp_video_sender.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/udp_video_sender.cpp.s
+.PHONY : src/udp_video_sender.cpp.s
+
 src/util_logging.o: src/util_logging.cpp.o
 .PHONY : src/util_logging.o
 
@@ -320,6 +344,30 @@ src/util_logging.s: src/util_logging.cpp.s
 src/util_logging.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.s
 .PHONY : src/util_logging.cpp.s
+
+src/video_overlay_processor.o: src/video_overlay_processor.cpp.o
+.PHONY : src/video_overlay_processor.o
+
+# target to build an object file
+src/video_overlay_processor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o
+.PHONY : src/video_overlay_processor.cpp.o
+
+src/video_overlay_processor.i: src/video_overlay_processor.cpp.i
+.PHONY : src/video_overlay_processor.i
+
+# target to preprocess a source file
+src/video_overlay_processor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.i
+.PHONY : src/video_overlay_processor.cpp.i
+
+src/video_overlay_processor.s: src/video_overlay_processor.cpp.s
+.PHONY : src/video_overlay_processor.s
+
+# target to generate assembly for a file
+src/video_overlay_processor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.s
+.PHONY : src/video_overlay_processor.cpp.s
 
 # Help Target
 help:
@@ -351,9 +399,15 @@ help:
 	@echo "... src/udp_sender.o"
 	@echo "... src/udp_sender.i"
 	@echo "... src/udp_sender.s"
+	@echo "... src/udp_video_sender.o"
+	@echo "... src/udp_video_sender.i"
+	@echo "... src/udp_video_sender.s"
 	@echo "... src/util_logging.o"
 	@echo "... src/util_logging.i"
 	@echo "... src/util_logging.s"
+	@echo "... src/video_overlay_processor.o"
+	@echo "... src/video_overlay_processor.i"
+	@echo "... src/video_overlay_processor.s"
 .PHONY : help
 
 

@@ -27,10 +27,12 @@ endif()
 add_executable(detector
     src/main.cpp
     src/camera_capture.cpp
-    src/mjpeg_capture.cpp # Added new module
+    src/mjpeg_capture.cpp
     src/inference.cpp
     src/mjpeg_server.cpp
     src/udp_sender.cpp
+    src/udp_video_sender.cpp # New module
+    src/video_overlay_processor.cpp # New module
     src/jpeg_wrapper.cpp
     src/util_logging.cpp
 )

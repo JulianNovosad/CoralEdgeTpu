@@ -230,11 +230,13 @@ CMakeFiles/detector.dir/src/main.cpp.o: \
  /usr/include/c++/12/bits/quoted_string.h /usr/include/c++/12/sstream \
  /usr/include/c++/12/bits/sstream.tcc /usr/include/c++/12/codecvt \
  /usr/include/c++/12/bits/fs_dir.h /usr/include/c++/12/bits/fs_ops.h \
- /usr/include/c++/12/chrono /home/pi/CoralEdgeTpu/src/pipeline_structs.h \
- /usr/include/c++/12/queue /usr/include/c++/12/deque \
- /usr/include/c++/12/bits/stl_deque.h /usr/include/c++/12/bits/deque.tcc \
- /usr/include/c++/12/bits/stl_heap.h /usr/include/c++/12/bits/stl_queue.h \
- /usr/include/c++/12/mutex /usr/include/c++/12/bits/std_mutex.h \
+ /usr/include/c++/12/chrono /usr/include/c++/12/list \
+ /usr/include/c++/12/bits/stl_list.h /usr/include/c++/12/bits/list.tcc \
+ /home/pi/CoralEdgeTpu/src/pipeline_structs.h /usr/include/c++/12/queue \
+ /usr/include/c++/12/deque /usr/include/c++/12/bits/stl_deque.h \
+ /usr/include/c++/12/bits/deque.tcc /usr/include/c++/12/bits/stl_heap.h \
+ /usr/include/c++/12/bits/stl_queue.h /usr/include/c++/12/mutex \
+ /usr/include/c++/12/bits/std_mutex.h \
  /usr/include/c++/12/bits/unique_lock.h \
  /usr/include/c++/12/condition_variable \
  /home/pi/CoralEdgeTpu/src/camera_capture.h /usr/include/c++/12/thread \
@@ -334,4 +336,9 @@ CMakeFiles/detector.dir/src/main.cpp.o: \
  /usr/include/asm-generic/sockios.h \
  /usr/include/aarch64-linux-gnu/bits/types/struct_osockaddr.h \
  /home/pi/CoralEdgeTpu/src/udp_sender.h /usr/include/netinet/in.h \
- /usr/include/aarch64-linux-gnu/bits/in.h
+ /usr/include/aarch64-linux-gnu/bits/in.h \
+ /home/pi/CoralEdgeTpu/src/udp_video_sender.h \
+ /home/pi/CoralEdgeTpu/src/video_overlay_processor.h \
+ /home/pi/CoralEdgeTpu/src/jpeg_wrapper.h /usr/include/setjmp.h \
+ /usr/include/jpeglib.h /usr/include/aarch64-linux-gnu/jconfig.h \
+ /usr/include/jmorecfg.h
