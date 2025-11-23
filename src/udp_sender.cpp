@@ -14,6 +14,7 @@
 #include <sys/socket.h>   // For socket, sendto
 #include <arpa/inet.h>    // For inet_pton
 #include <unistd.h>       // For close
+#include <cstring> // For strerror
 #include <sstream>        // For std::ostringstream
 
 /**

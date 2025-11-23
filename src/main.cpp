@@ -3,11 +3,11 @@
  * @brief Main entry point for the CoralEdgeTpu Detector application.
  *
  * This application initializes and manages various modules for a real-time object
- * detection pipeline on a Raspberry Pi with a Coral Edge TPU. It handles camera
- * capture for inference and MJPEG streaming, runs TensorFlow Lite inference,
- * sends detection results via UDP, and provides an MJPEG web server for preview.
- * It also includes robust process supervision for the rpicam-vid camera streams
- * and graceful shutdown handling.
+ * detection pipeline on the Raspberry Pi. It handles camera capture, runs
+ * TensorFlow Lite inference with Edge TPU acceleration, sends detection results
+ * and raw video via UDP to a mobile app, and provides an HTTP stream of overlaid
+ * video for PC viewing. It includes robust process supervision and graceful
+ * shutdown handling.
  */
 
 #include <iostream>
@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <chrono> // Required for std::chrono::seconds
+#include <list>   // Required for std::list of ImageQueue references
 
 #include "pipeline_structs.h"
 #include "camera_capture.h"
@@ -28,6 +29,8 @@
 #include "mjpeg_server.h"
 #include "udp_sender.h"
 #include "util_logging.h"
+#include "udp_video_sender.h"         // New: For raw MJPEG video over UDP
+#include "video_overlay_processor.h"  // New: For overlaying bounding boxes
 
 /// Global atomic flag to signal application shutdown.
 std::atomic<bool> shutdown_requested(false);
@@ -73,22 +76,23 @@ std::vector<std::string> load_labels(const std::string& path) {
 }
 
 /**
- * @brief Main function of the CoralEdgeTpu Detector application.
+ * @brief Main function of the CoralEdgeTpu Detector.
  *
- * Sets up signal handlers, initializes the logger, defines application
- * configurations (model path, camera streams, network settings),
- * initializes various pipeline modules (camera capture, inference engine,
- * UDP sender, MJPEG server), starts them, enters a main loop that waits
- * for a shutdown signal, and then gracefully shuts down all modules.
+ * Initializes and manages a multi-stream object detection pipeline:
+ * - Inference stream for Edge TPU.
+ * - Raw MJPEG video stream via UDP to a mobile app.
+ * - Bounding box JSON data stream via UDP to a mobile app.
+ * - Overlaid video stream (with bounding boxes) via HTTP for PC viewing.
+ * Handles robust subprocess supervision and graceful shutdown.
  *
  * @param argc The number of command-line arguments.
- * @param argv An array of command-line argument strings.
+ * @param argv The array of command-line argument strings.
  * @return 0 on successful execution, 1 on initialization or startup failure.
  */
 int main(int argc, char** argv) {
     // Register signal handlers for graceful shutdown on SIGINT or SIGTERM
     std::signal(SIGINT, signal_handler);
-    std::signal(SIGTERM, signal_handler);
+    std::signal(SIGTERM, signal_handler); // Ensure SIGTERM is handled
 
     // Initialize the logger singleton
     Logger& logger = Logger::getInstance();
@@ -98,26 +102,33 @@ int main(int argc, char** argv) {
     const std::string model_path = "/home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite";
     const std::string labels_path = "/home/pi/CoralEdgeTpu/coco_labels.txt";
     
-    // MJPEG Stream Configuration
-    const unsigned int mjpeg_width = 640;
-    const unsigned int mjpeg_height = 480;
-    const unsigned int mjpeg_fps = 15;
-    const int http_port = 8080;
+    // Camera Stream Configuration (shared for inference and overlay)
+    const unsigned int mjpeg_stream_width = 640;
+    const unsigned int mjpeg_stream_height = 480;
+    const unsigned int mjpeg_stream_fps = 15;
 
-    // UDP Sender Configuration
-    const std::string udp_target_ip = "127.0.0.1";
-    const int udp_target_port = 9000;
+    // UDP and HTTP Ports for various streams (Standardized)
+    const int UDP_RAW_VIDEO_PORT = 50000;
+    const int UDP_BOUNDING_BOX_PORT = 50010;
+    const int HTTP_OVERLAID_VIDEO_PORT = 8081;
+
+    // Mobile App IP address (PLACEHOLDER - **MUST BE UPDATED BY USER**)
+    // This IP address should be the actual IP of your mobile device on the network.
+    // If set to 127.0.1.1 or 127.0.0.1, the UDP streams will only be sent to the Pi itself.
+    const std::string MOBILE_APP_IP = "192.168.178.XXX"; // Example: "192.168.1.10"
 
     // Watchdog timeout for camera streams (5 seconds of inactivity triggers a restart)
     const std::chrono::seconds camera_watchdog_timeout = std::chrono::seconds(5);
 
     // --- Thread-Safe Queues for Inter-Module Communication ---
-    // Queue for raw image data from camera capture to inference engine
-    ImageQueue camera_to_inference_queue;
-    // Queue for detection results from inference engine to UDP sender
-    UdpQueue inference_to_udp_queue;
-    // Queue for MJPEG frames from capture to web server
-    MjpegQueue mjpeg_capture_to_server_queue;
+    // Queue for raw image data from camera capture (single instance)
+    ImageQueue camera_output_queue; 
+    // Queue for raw MJPEG frames from a dedicated MJPEG camera capture to the UDP video sender
+    MjpegQueue mjpeg_for_udp_queue;
+    // Queue for detection results from inference engine (feeds UDP sender and overlay processor)
+    UdpQueue inference_results_queue;
+    // Queue for overlaid MJPEG frames from the video overlay processor to the HTTP server
+    MjpegQueue overlaid_mjpeg_to_http_queue;
 
     // --- Module Initialization ---
     // Verify existence of model and labels files
@@ -134,43 +145,68 @@ int main(int argc, char** argv) {
     // Initialize the Inference Engine
     std::unique_ptr<InferenceEngine> inference_engine;
     try {
-        inference_engine = std::make_unique<InferenceEngine>(model_path, camera_to_inference_queue, inference_to_udp_queue, 2);
+        inference_engine = std::make_unique<InferenceEngine>(model_path, camera_output_queue, inference_results_queue, 2);
     } catch (const std::runtime_error& e) {
         LOG_ERROR("Failed to initialize Inference Engine: " + std::string(e.what()));
         return 1;
     }
     
-    // Get inference input dimensions from the loaded model
+    // Get inference input dimensions from the loaded model (used for the single camera capture)
     const unsigned int inference_width = inference_engine->get_input_width();
     const unsigned int inference_height = inference_engine->get_input_height();
 
     // Log the current application configuration
     LOG_INFO("--- Configuration ---");
-    LOG_INFO("  Inference Input: " + std::to_string(inference_width) + "x" + std::to_string(inference_height));
-    LOG_INFO("  MJPEG Stream: " + std::to_string(mjpeg_width) + "x" + std::to_string(mjpeg_height) + "@" + std::to_string(mjpeg_fps) + "fps");
-    LOG_INFO("  HTTP Port: " + std::to_string(http_port));
-    LOG_INFO("  UDP Target: " + udp_target_ip + ":" + std::to_string(udp_target_port));
+    LOG_INFO("  Inference Input: " + std::to_string(inference_width) + "x" + std.to_string(inference_height));
+    LOG_INFO("  Raw MJPEG for UDP: " + std::to_string(mjpeg_stream_width) + "x" + std::to_string(mjpeg_stream_height) + "@" + std::to_string(mjpeg_stream_fps) + "fps on UDP Port " + std::to_string(UDP_RAW_VIDEO_PORT));
+    LOG_INFO("  Bounding Box UDP: on UDP Port " + std::to_string(UDP_BOUNDING_BOX_PORT));
+    LOG_INFO("  Overlaid Video HTTP: on HTTP Port " + std::to_string(HTTP_OVERLAID_VIDEO_PORT));
+    LOG_INFO("  Mobile App Target IP: " + MOBILE_APP_IP);
     LOG_INFO("---------------------");
 
-    // Initialize CameraCapture modules
-    // Dedicated BGR stream for TensorFlow Lite inference
-    CameraCapture inference_camera(inference_width, inference_height, camera_to_inference_queue, camera_watchdog_timeout);
-    // Dedicated MJPEG stream for web preview
-    MjpegCapture mjpeg_camera(mjpeg_width, mjpeg_height, mjpeg_fps, mjpeg_capture_to_server_queue, camera_watchdog_timeout);
+    // --- Initialize Camera Capture Modules ---
+    // One CameraCapture instance feeds raw frames for both inference and overlay processing.
+    // The frames are also pushed to the raw MJPEG UDP sender.
+    std::list<std::reference_wrapper<ImageQueue>> primary_camera_output_queues;
+    primary_camera_output_queues.push_back(std::ref(camera_output_queue)); // For InferenceEngine
+    // primary_camera_output_queues.push_back(std::ref(camera_for_overlay_queue)); // For VideoOverlayProcessor, will add below
 
-    // Initialize UDP Sender and MJPEG Server modules
-    UdpSender udp_sender(udp_target_ip, udp_target_port, inference_to_udp_queue);
-    MjpegServer mjpeg_server(http_port, mjpeg_capture_to_server_queue);
+    // Single CameraCapture instance for raw image data
+    CameraCapture primary_camera(inference_width, inference_height, primary_camera_output_queues, camera_watchdog_timeout);
+
+    // Dedicated MJPEG stream for UDP raw video sender (outputs to mjpeg_for_udp_queue)
+    MjpegCapture raw_mjpeg_for_udp_capture(mjpeg_stream_width, mjpeg_stream_height, mjpeg_stream_fps, mjpeg_for_udp_queue, camera_watchdog_timeout);
+
+
+    // --- Initialize Processing & Sending Modules ---
+    // 1. UDP Raw Video Sender (Stream 1)
+    UdpVideoSender udp_raw_video_sender(MOBILE_APP_IP, UDP_RAW_VIDEO_PORT, mjpeg_for_udp_queue);
+    // 2. Video Overlay Processor (consumes raw images & detections, produces overlaid MJPEG)
+    VideoOverlayProcessor video_overlay_processor(camera_output_queue, inference_results_queue, overlaid_mjpeg_to_http_queue, labels);
+    // 3. UDP Bounding Box Sender (Stream 2)
+    UdpSender udp_bounding_box_sender(MOBILE_APP_IP, UDP_BOUNDING_BOX_PORT, inference_results_queue);
+    // 4. HTTP Server for Overlaid Video (Stream 3)
+    MjpegServer overlaid_mjpeg_server(HTTP_OVERLAID_VIDEO_PORT, overlaid_mjpeg_to_http_queue);
+
 
     // --- Start all modules ---
-    if (!inference_camera.start() || !mjpeg_camera.start() || !inference_engine->start() || !udp_sender.start() || !mjpeg_server.start()) {
+    if (!primary_camera.start() ||
+        !raw_mjpeg_for_udp_capture.start() ||
+        !inference_engine->start() ||
+        !udp_raw_video_sender.start() ||
+        !video_overlay_processor.start() ||
+        !udp_bounding_box_sender.start() ||
+        !overlaid_mjpeg_server.start()) {
+        
         LOG_ERROR("Failed to start one or more modules. Shutting down.");
         // Stop all modules in reverse order to ensure proper cleanup, even if some failed to start.
-        mjpeg_server.stop();
-        udp_sender.stop();
+        overlaid_mjpeg_server.stop();
+        udp_bounding_box_sender.stop();
+        video_overlay_processor.stop();
+        udp_raw_video_sender.stop();
         inference_engine->stop();
-        mjpeg_camera.stop();
-        inference_camera.stop();
+        raw_mjpeg_for_udp_capture.stop();
+        primary_camera.stop();
         logger.stop_writer_thread(); // Stop logging thread last
         return 1;
     }
@@ -183,15 +219,17 @@ int main(int argc, char** argv) {
 
     // --- Shutdown Modules ---
     LOG_INFO("Shutting down application modules...");
-    // Stop all modules gracefully in a defined order
-    mjpeg_server.stop();
-    udp_sender.stop();
+    // Stop all modules gracefully in the defined order (reverse of startup or logical shutdown order).
+    overlaid_mjpeg_server.stop();
+    udp_bounding_box_sender.stop();
+    video_overlay_processor.stop();
+    udp_raw_video_sender.stop();
     inference_engine->stop();
-    mjpeg_camera.stop();
-    inference_camera.stop();
+    raw_mjpeg_for_udp_capture.stop();
+    primary_camera.stop();
+    logger.stop_writer_thread(); // Stop logging thread last
     
     LOG_INFO("CoralEdgeTpu Detector Exiting.");
-    logger.stop_writer_thread(); // Stop logging thread last
-
+    
     return 0;
 }

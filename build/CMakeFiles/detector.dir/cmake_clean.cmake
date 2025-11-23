@@ -13,8 +13,12 @@ file(REMOVE_RECURSE
   "CMakeFiles/detector.dir/src/mjpeg_server.cpp.o.d"
   "CMakeFiles/detector.dir/src/udp_sender.cpp.o"
   "CMakeFiles/detector.dir/src/udp_sender.cpp.o.d"
+  "CMakeFiles/detector.dir/src/udp_video_sender.cpp.o"
+  "CMakeFiles/detector.dir/src/udp_video_sender.cpp.o.d"
   "CMakeFiles/detector.dir/src/util_logging.cpp.o"
   "CMakeFiles/detector.dir/src/util_logging.cpp.o.d"
+  "CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o"
+  "CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o.d"
   "detector"
   "detector.pdb"
 )

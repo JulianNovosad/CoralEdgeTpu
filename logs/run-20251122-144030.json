@@ -1,0 +1,46 @@
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"CoralEdgeTpu Detector Starting..."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Model Input Dimensions: 300x300x3"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"--- Configuration ---"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"  Inference Input: 300x300"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"  Raw MJPEG for UDP: 640x480@15fps on UDP Port 50000"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"  Bounding Box UDP: on UDP Port 50010"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"  Overlaid Video HTTP: on HTTP Port 8081"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"  Mobile App Target IP: 192.168.178.XXX"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"---------------------"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"ERROR", "message":"UdpVideoSender: Invalid address or address not supported: 192.168.178.XXX"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"ERROR", "message":"Invalid address or address not supported: 192.168.178.XXX"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid manager starting..."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid manager starting..."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid watchdog started."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid manager starting..."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid child process (PID: 4334) launched successfully."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid watchdog started."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid child process (PID: 4338) launched successfully."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"InferenceEngine started with 2 worker threads."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"ERROR", "message":"UdpVideoSender: UDP socket not initialized or invalid, cannot start sender."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"ERROR", "message":"Failed to start one or more modules. Shutting down."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Stopping InferenceEngine..."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid watchdog started."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid pipe reader started."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid child process (PID: 4344) launched successfully."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid pipe reader started."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid pipe reader started."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"InferenceEngine stopped."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid manager stopping..."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid attempting to terminate child process (PID: 4344)"}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid pipe reader stopped."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"ERROR", "message":"MJPEG rpicam-vid child process (PID: 4344) terminated by signal: 15 (Terminated)."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid manager thread exited."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"ERROR", "message":"Inference rpicam-vid child process (PID: 4338) exited with code: 255."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"WARNING", "message":"Inference rpicam-vid pipe reader reached EOF. Child process likely exited."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid pipe reader stopped."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid manager thread exited."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"ERROR", "message":"Inference rpicam-vid child process (PID: 4334) exited with code: 255."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"WARNING", "message":"Inference rpicam-vid pipe reader reached EOF. Child process likely exited."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid pipe reader stopped."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"Inference rpicam-vid manager thread exited."}
+{"timestamp":"2025-11-22T14:40:30Z", "level":"INFO", "message":"MJPEG rpicam-vid child process (PID: -1) terminated gracefully."}
+{"timestamp":"2025-11-22T14:40:32Z", "level":"INFO", "message":"Inference rpicam-vid watchdog stopped."}
+{"timestamp":"2025-11-22T14:40:32Z", "level":"INFO", "message":"Inference rpicam-vid watchdog stopped."}
+{"timestamp":"2025-11-22T14:40:32Z", "level":"INFO", "message":"MJPEG rpicam-vid watchdog stopped."}
+{"timestamp":"2025-11-22T14:40:32Z", "level":"INFO", "message":"MJPEG rpicam-vid manager stopped."}

@@ -1,0 +1,68 @@
+[INFO] CoralEdgeTpu Detector Starting...
+[4:28:23.432151843] [4742] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:330 [0mlibcamera v0.5.2+99-bfd68f78
+[4:28:23.432653249] [4738] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:330 [0mlibcamera v0.5.2+99-bfd68f78
+[4:28:23.441063699] [4767] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:720 [0mlibpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[4:28:23.441063958] [4766] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:720 [0mlibpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[INFO] Model Input Dimensions: 300x300x3
+[INFO] --- Configuration ---
+[INFO]   Inference Input: 300x300
+[INFO]   Raw MJPEG for UDP: 640x480@15fps on UDP Port 50000
+[INFO]   Bounding Box UDP: on UDP Port 50010
+[INFO]   Overlaid Video HTTP: on HTTP Port 8081
+[INFO]   Mobile App Target IP: 192.168.178.XXX
+[INFO] ---------------------
+[ERROR] UdpVideoSender: Invalid address or address not supported: 192.168.178.XXX
+[ERROR] Invalid address or address not supported: 192.168.178.XXX
+[INFO] Inference rpicam-vid manager starting...
+[INFO] Inference rpicam-vid manager starting...
+[INFO] Inference rpicam-vid watchdog started.
+[INFO] MJPEG rpicam-vid manager starting...
+[INFO] Inference rpicam-vid child process (PID: 4738) launched successfully.
+[INFO] Inference rpicam-vid watchdog started.
+[INFO] Inference rpicam-vid child process (PID: 4742) launched successfully.
+[INFO] InferenceEngine started with 2 worker threads.
+[ERROR] UdpVideoSender: UDP socket not initialized or invalid, cannot start sender.
+[ERROR] Failed to start one or more modules. Shutting down.
+[INFO] Stopping InferenceEngine...
+[INFO] MJPEG rpicam-vid watchdog started.
+[INFO] Inference rpicam-vid pipe reader started.
+[INFO] MJPEG rpicam-vid child process (PID: 4748) launched successfully.
+[INFO] MJPEG rpicam-vid pipe reader started.
+[INFO] Inference rpicam-vid pipe reader started.
+[INFO] InferenceEngine stopped.
+[INFO] MJPEG rpicam-vid manager stopping...
+[INFO] MJPEG rpicam-vid attempting to terminate child process (PID: 4748)
+[INFO] MJPEG rpicam-vid pipe reader stopped.
+[ERROR] MJPEG rpicam-vid child process (PID: 4748) terminated by signal: 15 (Terminated).
+[INFO] MJPEG rpicam-vid manager thread exited.
+[4:28:23.556889185] [4766] [1;32m INFO [1;37mIPAProxy [1;34mipa_proxy.cpp:180 [0mUsing tuning file /usr/share/libcamera/ipa/rpi/pisp/imx708.json
+[4:28:23.556889222] [4767] [1;32m INFO [1;37mIPAProxy [1;34mipa_proxy.cpp:180 [0mUsing tuning file /usr/share/libcamera/ipa/rpi/pisp/imx708.json
+[4:28:23.565135931] [4766] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:220 [0mAdding camera '/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a' for pipeline handler rpi/pisp
+[4:28:23.565136246] [4767] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:220 [0mAdding camera '/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a' for pipeline handler rpi/pisp
+[4:28:23.565174505] [4766] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1179 [0mRegistered camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a to CFE device /dev/media3 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+[4:28:23.565179912] [4767] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1179 [0mRegistered camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a to CFE device /dev/media3 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+[4:28:23.579515519] [4738] [1;32m INFO [1;37mCamera [1;34mcamera.cpp:1020 [0mPipeline handler in use by another process
+Mode selection for 300:300:12:P
+    SRGGB10_CSI2P,1536x864/0 - Score: 1741.67
+    SRGGB10_CSI2P,2304x1296/0 - Score: 2041.67
+    SRGGB10_CSI2P,4608x2592/0 - Score: 2941.67
+Stream configuration adjusted
+[4:28:23.579838852] [4742] [1;32m INFO [1;37mCamera [1;34mcamera.cpp:1215 [0mconfiguring streams: (0) 300x300-YUV420/sYCC (1) 1536x864-BGGR_PISP_COMP1/RAW
+[4:28:23.579932111] [4766] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1483 [0mSensor: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a - Selected sensor format: 1536x864-SBGGR10_1X10/RAW - Selected CFE format: 1536x864-PC1B/RAW
+ERROR: *** failed to acquire camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a ***
+[WARNING] Inference rpicam-vid pipe reader reached EOF. Child process likely exited.
+[INFO] Inference rpicam-vid pipe reader stopped.
+[ERROR] Inference rpicam-vid child process (PID: 4738) exited with code: 255.
+[INFO] Inference rpicam-vid manager thread exited.
+[INFO] Inference rpicam-vid watchdog stopped.
+[INFO] MJPEG rpicam-vid watchdog stopped.
+[INFO] MJPEG rpicam-vid manager stopped.
+[INFO] Inference rpicam-vid manager stopping...
+[INFO] Inference rpicam-vid attempting to terminate child process (PID: 4742)
+[INFO] Inference rpicam-vid pipe reader stopped.
+[ERROR] Inference rpicam-vid child process (PID: 4742) terminated by signal: 15 (Terminated).
+[INFO] Inference rpicam-vid manager thread exited.
+[INFO] Inference rpicam-vid child process (PID: -1) terminated gracefully.
+[INFO] Inference rpicam-vid watchdog stopped.
+[INFO] Inference rpicam-vid manager stopped.
+terminate called without an active exception
