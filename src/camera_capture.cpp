@@ -77,7 +77,7 @@ bool CameraCapture::start() {
     last_frame_time_ = std::chrono::high_resolution_clock::now();
     for (std::unique_ptr<libcamera::Request>& req_ptr : requests_) {
         LOG_INFO("CameraCapture: Attempting to queue request.");
-        if (camera_->queueRequest(req_ptr.release())) { // Release unique_ptr ownership
+        if (camera_->queueRequest(req_ptr.get())) { // Pass raw pointer, retain unique_ptr ownership
             LOG_ERROR("Failed to queue initial request.");
             running_ = false; // Signal failure
             stop(); // Attempt to clean up
@@ -109,6 +109,7 @@ void CameraCapture::stop() {
         camera_->stop();
         LOG_INFO("Libcamera camera stopped.");
         
+        requests_.clear(); // Explicitly clear requests_ vector to destroy Request objects
         camera_->release();
         camera_.reset(); // Release shared_ptr
         LOG_INFO("Libcamera camera released.");
