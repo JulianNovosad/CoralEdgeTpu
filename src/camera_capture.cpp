@@ -163,13 +163,13 @@ bool CameraCapture::setup_camera() {
 
     // Configure main stream (index 0)
     libcamera::StreamConfiguration& mainCfg = config->at(0);
-    mainCfg.pixelFormat = libcamera::formats::YUV420;
+    mainCfg.pixelFormat = libcamera::formats::BGR888;
     mainCfg.size.width = width_;
     mainCfg.size.height = height_;
 
     // Configure tpu stream (index 1)
     libcamera::StreamConfiguration& tpuCfg = config->at(1);
-    tpuCfg.pixelFormat = libcamera::formats::YUV420;
+    tpuCfg.pixelFormat = libcamera::formats::BGR888;
     tpuCfg.size.width = tpu_width_;
     tpuCfg.size.height = tpu_height_;
     
@@ -310,8 +310,23 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     if (video_mmap_ptr == MAP_FAILED) {
         LOG_ERROR("CameraCapture: Failed to mmap video stream frame buffer: " + std::string(strerror(errno)));
     } else {
+        // --- Correct, row-by-row copy to handle stride ---
         ImageData video_image_data;
-        convert_yuv420_to_rgb888(video_fb, video_stream_->configuration(), video_image_data);
+        video_image_data.width = video_cfg.size.width;
+        video_image_data.height = video_cfg.size.height;
+        const unsigned int video_line_bytes = video_cfg.size.width * 3; // BGR888 is 3 bytes per pixel
+        video_image_data.data.resize(video_line_bytes * video_cfg.size.height);
+
+        uint8_t* dest_ptr = video_image_data.data.data();
+        const uint8_t* src_ptr = static_cast<const uint8_t*>(video_mmap_ptr);
+
+        for (unsigned int i = 0; i < video_cfg.size.height; ++i) {
+            memcpy(dest_ptr, src_ptr, video_line_bytes);
+            src_ptr += video_cfg.stride;
+            dest_ptr += video_line_bytes;
+        }
+        // --- End of correct copy ---
+
         video_image_data.timestamp = std::chrono::high_resolution_clock::now();
 
         for (auto& queue_ref : main_output_queues_) {
@@ -322,15 +337,30 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
 
     // Process TPU Stream
     const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
-    // const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration(); // Not directly needed here anymore
+    const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
     const libcamera::FrameBuffer::Plane& tpu_plane = tpu_fb->planes()[0]; // Still need this for mmap
 
     void* tpu_mmap_ptr = mmap(NULL, tpu_plane.length, PROT_READ, MAP_SHARED, tpu_plane.fd.get(), 0);
     if (tpu_mmap_ptr == MAP_FAILED) {
         LOG_ERROR("CameraCapture: Failed to mmap TPU stream frame buffer: " + std::string(strerror(errno)));
     } else {
+        // --- Correct, row-by-row copy to handle stride ---
         ImageData tpu_image_data;
-        convert_yuv420_to_rgb888(tpu_fb, tpu_stream_->configuration(), tpu_image_data);
+        tpu_image_data.width = tpu_cfg.size.width;
+        tpu_image_data.height = tpu_cfg.size.height;
+        const unsigned int tpu_line_bytes = tpu_cfg.size.width * 3; // BGR888 is 3 bytes per pixel
+        tpu_image_data.data.resize(tpu_line_bytes * tpu_cfg.size.height);
+        
+        uint8_t* dest_ptr = tpu_image_data.data.data();
+        const uint8_t* src_ptr = static_cast<const uint8_t*>(tpu_mmap_ptr);
+
+        for (unsigned int i = 0; i < tpu_cfg.size.height; ++i) {
+            memcpy(dest_ptr, src_ptr, tpu_line_bytes);
+            src_ptr += tpu_cfg.stride;
+            dest_ptr += tpu_line_bytes;
+        }
+        // --- End of correct copy ---
+
         tpu_image_data.timestamp = std::chrono::high_resolution_clock::now();
         tpu_output_queue_.push_and_drop_if_full(tpu_image_data);
         munmap(tpu_mmap_ptr, tpu_plane.length);
@@ -361,84 +391,8 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
 }
 
 void CameraCapture::convert_yuv420_to_rgb888(const libcamera::FrameBuffer* buffer, const libcamera::StreamConfiguration& stream_config, ImageData& rgb_image) {
-    unsigned int width = stream_config.size.width;
-    unsigned int height = stream_config.size.height;
-    unsigned int y_stride = stream_config.stride; // Stride for Y plane
-
-    // Check if the buffer has enough planes for YUV420 (Y, U, V)
-    if (buffer->planes().size() < 3) {
-        LOG_ERROR("FrameBuffer does not have enough planes for YUV420 conversion.");
-        return;
-    }
-
-    // Store mmap'd pointers and lengths for cleanup
-    std::vector<void*> mmap_ptrs;
-    std::vector<size_t> mmap_lengths;
-
-    // RAII for munmap: ensure all mapped memory is unmapped on exit
-    auto munmap_guard = [&]() {
-        for (size_t i = 0; i < mmap_ptrs.size(); ++i) {
-            if (mmap_ptrs[i] != MAP_FAILED) {
-                munmap(mmap_ptrs[i], mmap_lengths[i]);
-            }
-        }
-    };
-
-    // Map all planes
-    for (const auto& plane : buffer->planes()) {
-        void* ptr = mmap(NULL, plane.length, PROT_READ, MAP_SHARED, plane.fd.get(), 0);
-        if (ptr == MAP_FAILED) {
-            LOG_ERROR("CameraCapture: Failed to mmap YUV plane: " + std::string(strerror(errno)));
-            munmap_guard(); // Clean up already mapped memory
-            return;
-        }
-        mmap_ptrs.push_back(ptr);
-        mmap_lengths.push_back(plane.length);
-    }
-
-    // Assuming YUV420 layout: Y plane (full size), U plane (quarter size), V plane (quarter size)
-    size_t y_size_bytes = width * height;
-    size_t uv_width = width / 2;
-    size_t uv_height = height / 2;
-    size_t uv_stride = y_stride / 2; // Assuming U/V stride is half of Y stride, typical for 420
-
-    // Create a temporary buffer to hold the combined YUV data in I420 format.
-    // I420 is a planar format: Y data, then U data, then V data.
-    std::vector<uint8_t> yuv_combined_data(y_size_bytes + uv_width * uv_height + uv_width * uv_height);
-
-    // Copy Y plane data, respecting its stride
-    const uint8_t* y_src_ptr = static_cast<const uint8_t*>(mmap_ptrs[0]);
-    for(unsigned int r = 0; r < height; ++r) {
-        std::memcpy(yuv_combined_data.data() + r * width, y_src_ptr + r * y_stride, width);
-    }
-
-    // Copy U plane data, respecting its stride
-    const uint8_t* u_src_ptr = static_cast<const uint8_t*>(mmap_ptrs[1]);
-    for(unsigned int r = 0; r < uv_height; ++r) {
-        std::memcpy(yuv_combined_data.data() + y_size_bytes + r * uv_width, u_src_ptr + r * uv_stride, uv_width);
-    }
-
-    // Copy V plane data, respecting its stride
-    const uint8_t* v_src_ptr = static_cast<const uint8_t*>(mmap_ptrs[2]);
-    for(unsigned int r = 0; r < uv_height; ++r) {
-        std::memcpy(yuv_combined_data.data() + y_size_bytes + uv_width * uv_height + r * uv_width, v_src_ptr + r * uv_stride, uv_width);
-    }
-    
-    // Create a cv::Mat header for the combined YUV data.
-    // The height for I420 in OpenCV is typically (height * 3 / 2) if it's a single Mat
-    cv::Mat yuv_mat(height * 3 / 2, width, CV_8UC1, yuv_combined_data.data());
-    
-    // Create the destination RGB mat.
-    cv::Mat rgb_mat;
-
-    // Perform the color conversion.
-
-    // Copy the data from the cv::Mat to the ImageData structure.
-    rgb_image.width = rgb_mat.cols;
-    rgb_image.height = rgb_mat.rows;
-    size_t data_size = rgb_mat.total() * rgb_mat.elemSize();
-    rgb_image.data.resize(data_size);
-    std::memcpy(rgb_image.data.data(), rgb_mat.data, data_size);
-
-    munmap_guard(); // Clean up all mapped memory
+    // This function is now deprecated and should not be used.
+    // The pipeline has been updated to request native BGR888 frames from the camera,
+    // eliminating the need for CPU-based color conversion.
+    LOG_ERROR("convert_yuv420_to_rgb888 is deprecated and should not be called.");
 }
