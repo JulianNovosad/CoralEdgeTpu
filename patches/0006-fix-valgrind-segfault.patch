@@ -1,0 +1,329 @@
+diff --git a/src/camera_capture.cpp b/src/camera_capture.cpp
+index c2a5573..d2113c1 100644
+--- a/src/camera_capture.cpp
++++ b/src/camera_capture.cpp
+@@ -75,13 +75,15 @@ bool CameraCapture::start() {
+     // Queue initial requests
+     frame_count_ = 0;
+     last_frame_time_ = std::chrono::high_resolution_clock::now();
+-    for (std::unique_ptr<libcamera::Request>& req_ptr : requests_) { 
++    for (std::unique_ptr<libcamera::Request>& req_ptr : requests_) {
++        LOG_INFO("CameraCapture: Attempting to queue request.");
+         if (camera_->queueRequest(req_ptr.release())) { // Release unique_ptr ownership
+             LOG_ERROR("Failed to queue initial request.");
+             running_ = false; // Signal failure
+             stop(); // Attempt to clean up
+             return false;
+         }
++        LOG_INFO("CameraCapture: Successfully queued request.");
+     }
+     requests_.clear(); // Unique_ptrs moved, so vector is logically empty
+ 
+@@ -107,6 +109,13 @@ void CameraCapture::stop() {
+         camera_->stop();
+         LOG_INFO("Libcamera camera stopped.");
+         
++        // Explicitly delete all requests returned during shutdown
++        for (libcamera::Request* req : returned_requests_) {
++            delete req;
++        }
++        returned_requests_.clear();
++        LOG_INFO("Libcamera returned requests destroyed.");
++
+         camera_->release();
+         camera_.reset(); // Release shared_ptr
+         LOG_INFO("Libcamera camera released.");
+@@ -163,13 +172,13 @@ bool CameraCapture::setup_camera() {
+ 
+     // Configure main stream (index 0)
+     libcamera::StreamConfiguration& mainCfg = config->at(0);
+-    mainCfg.pixelFormat = libcamera::formats::BGR888;
++    mainCfg.pixelFormat = libcamera::formats::RGB888;
+     mainCfg.size.width = width_;
+     mainCfg.size.height = height_;
+ 
+     // Configure tpu stream (index 1)
+     libcamera::StreamConfiguration& tpuCfg = config->at(1);
+-    tpuCfg.pixelFormat = libcamera::formats::BGR888;
++    tpuCfg.pixelFormat = libcamera::formats::RGB888;
+     tpuCfg.size.width = tpu_width_;
+     tpuCfg.size.height = tpu_height_;
+     
+@@ -280,18 +289,20 @@ bool CameraCapture::setup_camera() {
+ 
+ void CameraCapture::request_complete_callback(libcamera::Request* request) {
+     if (!running_) {
+-        // If not running, just re-queue the request so libcamera can clean it up.
+-        request->reuse();
+-        camera_->queueRequest(request);
++        // During shutdown, collect all returned requests for explicit destruction.
++        returned_requests_.push_back(request);
+         return;
+     }
+ 
+     if (request->status() != libcamera::Request::RequestComplete) {
+         if (request->status() == libcamera::Request::RequestCancelled) {
+             LOG_INFO("CameraCapture: Request cancelled, likely during shutdown.");
++            // If already stopping, it will be handled by the !running_ block,
++            // otherwise (e.g. spurious cancel), re-queue.
+         } else {
+             LOG_ERROR("CameraCapture: Request completion failed with status: " + std::to_string(request->status()));
+         }
++        // For non-shutdown errors or spurious cancels, re-queue.
+         request->reuse();
+         camera_->queueRequest(request);
+         return;
+@@ -310,23 +321,12 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
+     if (video_mmap_ptr == MAP_FAILED) {
+         LOG_ERROR("CameraCapture: Failed to mmap video stream frame buffer: " + std::string(strerror(errno)));
+     } else {
+-        // --- Correct, row-by-row copy to handle stride ---
+         ImageData video_image_data;
+         video_image_data.width = video_cfg.size.width;
+         video_image_data.height = video_cfg.size.height;
+-        const unsigned int video_line_bytes = video_cfg.size.width * 3; // BGR888 is 3 bytes per pixel
+-        video_image_data.data.resize(video_line_bytes * video_cfg.size.height);
+-
+-        uint8_t* dest_ptr = video_image_data.data.data();
+-        const uint8_t* src_ptr = static_cast<const uint8_t*>(video_mmap_ptr);
+-
+-        for (unsigned int i = 0; i < video_cfg.size.height; ++i) {
+-            memcpy(dest_ptr, src_ptr, video_line_bytes);
+-            src_ptr += video_cfg.stride;
+-            dest_ptr += video_line_bytes;
+-        }
+-        // --- End of correct copy ---
+-
++        // Assuming RGB888 is 3 bytes per pixel
++        video_image_data.data.resize(video_image_data.width * video_image_data.height * 3); 
++        std::memcpy(video_image_data.data.data(), video_mmap_ptr, video_image_data.data.size());
+         video_image_data.timestamp = std::chrono::high_resolution_clock::now();
+ 
+         for (auto& queue_ref : main_output_queues_) {
+@@ -338,30 +338,18 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
+     // Process TPU Stream
+     const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
+     const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
+-    const libcamera::FrameBuffer::Plane& tpu_plane = tpu_fb->planes()[0]; // Still need this for mmap
++    const libcamera::FrameBuffer::Plane& tpu_plane = tpu_fb->planes()[0];
+ 
+     void* tpu_mmap_ptr = mmap(NULL, tpu_plane.length, PROT_READ, MAP_SHARED, tpu_plane.fd.get(), 0);
+     if (tpu_mmap_ptr == MAP_FAILED) {
+         LOG_ERROR("CameraCapture: Failed to mmap TPU stream frame buffer: " + std::string(strerror(errno)));
+     } else {
+-        // --- Correct, row-by-row copy to handle stride ---
+         ImageData tpu_image_data;
+         tpu_image_data.width = tpu_cfg.size.width;
+         tpu_image_data.height = tpu_cfg.size.height;
+-        const unsigned int tpu_line_bytes = tpu_cfg.size.width * 3; // BGR888 is 3 bytes per pixel
+-        LOG_INFO("Resizing TPU image data to: " + std::to_string(tpu_line_bytes * tpu_cfg.size.height));
+-        tpu_image_data.data.resize(tpu_line_bytes * tpu_cfg.size.height);
+-        
+-        uint8_t* dest_ptr = tpu_image_data.data.data();
+-        const uint8_t* src_ptr = static_cast<const uint8_t*>(tpu_mmap_ptr);
+-
+-        for (unsigned int i = 0; i < tpu_cfg.size.height; ++i) {
+-            memcpy(dest_ptr, src_ptr, tpu_line_bytes);
+-            src_ptr += tpu_cfg.stride;
+-            dest_ptr += tpu_line_bytes;
+-        }
+-        // --- End of correct copy ---
+-
++        // Assuming RGB888 is 3 bytes per pixel
++        tpu_image_data.data.resize(tpu_image_data.width * tpu_image_data.height * 3);
++        std::memcpy(tpu_image_data.data.data(), tpu_mmap_ptr, tpu_image_data.data.size());
+         tpu_image_data.timestamp = std::chrono::high_resolution_clock::now();
+         tpu_output_queue_.push_and_drop_if_full(tpu_image_data);
+         munmap(tpu_mmap_ptr, tpu_plane.length);
+@@ -389,11 +377,4 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
+     }
+     
+     camera_->queueRequest(request);
+-}
+-
+-void CameraCapture::convert_yuv420_to_rgb888(const libcamera::FrameBuffer* buffer, const libcamera::StreamConfiguration& stream_config, ImageData& rgb_image) {
+-    // This function is now deprecated and should not be used.
+-    // The pipeline has been updated to request native BGR888 frames from the camera,
+-    // eliminating the need for CPU-based color conversion.
+-    LOG_ERROR("convert_yuv420_to_rgb888 is deprecated and should not be called.");
+ }
+\ No newline at end of file
+diff --git a/src/camera_capture.h b/src/camera_capture.h
+index 5e5a5f5..568a028 100644
+--- a/src/camera_capture.h
++++ b/src/camera_capture.h
+@@ -1,123 +1,74 @@
+-/**
+- * @file camera_capture.h
+- * @brief Defines the CameraCapture class for managing a dedicated raw image stream
+- *        using rpicam-vid subprocess and robust supervision.
+- *
+- * This class is responsible for launching and supervising an rpicam-vid subprocess
+- * that captures a raw image stream (e.g., BGR888). It reads raw image data from the
+- * subprocess's stdout pipe, converts it into ImageData objects, and pushes them
+- * into multiple thread-safe queues for consumption by different pipeline stages.
+- * It leverages the ProcessSupervisor for robust process management, including
+- * restart policies and watchdog functionality.
+- */
+-
+ #ifndef CAMERA_CAPTURE_H
+ #define CAMERA_CAPTURE_H
+ 
++#include <libcamera/libcamera.h>
++#include <libcamera/camera.h>
++#include <libcamera/camera_manager.h>
++#include <libcamera/framebuffer_allocator.h>
++#include <libcamera/stream.h>
++#include <libcamera/request.h>
++#include <libcamera/geometry.h>
++#include <libcamera/pixel_format.h> // For libcamera::PixelFormat and libcamera::formats
++
+ #include <thread>
+ #include <atomic>
+-#include <string>
+ #include <vector>
++#include <string>
+ #include <chrono>
++#include <list>
+ #include <memory> // For std::unique_ptr
+-#include <list>   // For std::list of output queues
+ 
+-#include "pipeline_structs.h"
+-#include "process_supervisor.hpp" // Include the new supervisor
++#include "pipeline_structs.h" // For ImageQueue
+ 
+ /**
+- * @brief Manages a dedicated raw image camera stream using an rpicam-vid subprocess.
++ * @brief Manages camera capture using the low-level libcamera C++ API.
+  *
+- * This class encapsulates the logic for capturing a raw video stream from the
+- * camera via an rpicam-vid subprocess. It utilizes the ProcessSupervisor to
+- * ensure the stability and reliability of the subprocess. Raw image data is
+- * read from the subprocess's pipe, converted, and then pushed into multiple
+- * shared queues, allowing different modules to consume the same raw frames.
++ * This class directly interacts with libcamera to open, configure, and stream
++ * frames from the camera. It converts YUV420 sensor data to RGB888 before
++ * pushing frames into shared ImageQueue instances.
+  */
+ class CameraCapture {
+ public:
+-    /**
+-     * @brief Constructor for CameraCapture.
+-     *
+-     * Initializes the camera capture module with specified dimensions and a list
+-     * of references to output queues where parsed image data will be pushed.
+-     * It also sets up the ProcessSupervisor for robust subprocess management.
+-     *
+-     * @param width The desired width of the raw image stream.
+-     * @param height The desired height of the raw image stream.
+-     * @param output_queues A list of references to thread-safe ImageQueue for output.
+-     * @param watchdog_timeout The duration after which a lack of activity in the
+-     *                         stream will trigger a subprocess restart (e.g., 5 seconds).
+-     */
+-    CameraCapture(unsigned int width, unsigned int height, std::list<std::reference_wrapper<ImageQueue>>& output_queues, std::chrono::seconds watchdog_timeout);
+-
+-    /**
+-     * @brief Destructor for CameraCapture.
+-     *
+-     * Ensures that the capture process and associated threads are gracefully stopped.
+-     */
++    CameraCapture(unsigned int main_width, unsigned int main_height, unsigned int tpu_width, unsigned int tpu_height, std::list<std::reference_wrapper<ImageQueue>>& main_output_queues, ImageQueue& tpu_output_queue, std::chrono::seconds watchdog_timeout);
+     ~CameraCapture();
+-
+-    /**
+-     * @brief Starts the camera capture process and its supervisor.
+-     *
+-     * Launches the rpicam-vid subprocess and initiates the monitoring and
+-     * pipe reading threads.
+-     *
+-     * @return True if the module started successfully, false otherwise.
+-     */
+     bool start();
+-
+-    /**
+-     * @brief Stops the camera capture process and its supervisor.
+-     *
+-     * Sends termination signals to the subprocess and joins all associated threads
+-     * for a clean shutdown.
+-     */
+     void stop();
+-
+-    /**
+-     * @brief Checks if the camera capture module is currently running.
+-     *
+-     * @return True if the module is running, false otherwise.
+-     */
+-    bool is_running() const; // Delegates to supervisor's is_running()
++    bool is_running() const { return running_; }
+ 
+ private:
+-    unsigned int width_;  ///< The width of the captured raw image stream.
+-    unsigned int height_; ///< The height of the captured raw image stream.
+-    std::list<std::reference_wrapper<ImageQueue>>& output_queues_; ///< A list of references to queues where processed ImageData objects are pushed.
+-    
+-    /**
+-     * @brief Generates the command-line arguments for the rpicam-vid subprocess.
+-     *
+-     * Constructs a vector of strings representing the arguments to be passed to
+-     * `/usr/bin/rpicam-vid` for raw image capture (e.g., YUV420). Includes
+-     * parameters for codec, dimensions, and output to stdout. Logs the configuration as JSON.
+-     *
+-     * @return A vector of strings containing the rpicam-vid command arguments.
+-     */
+-    std::vector<std::string> get_command_args();
++    void request_complete_callback(libcamera::Request* request);
++    bool setup_camera();
++
++
++
++    unsigned int width_;  ///< Desired output width (RGB888).
++    unsigned int height_; ///< Desired output height (RGB888).
++    unsigned int tpu_width_;
++    unsigned int tpu_height_;
++    std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_; ///< Queues for RGB888 ImageData.
++    ImageQueue& tpu_output_queue_; // New queue for TPU stream output
++    std::chrono::seconds watchdog_timeout_; ///< Not directly used by libcamera API, kept for compatibility.
++
++    std::unique_ptr<libcamera::CameraManager> camera_manager_;
++    std::shared_ptr<libcamera::Camera> camera_;
++    libcamera::Stream* video_stream_ = nullptr; ///< The YUV420 video stream.
++    libcamera::Stream* tpu_stream_ = nullptr;
++    std::unique_ptr<libcamera::FrameBufferAllocator> allocator_;
++    std::vector<std::unique_ptr<libcamera::Request>> requests_; ///< Store requests created.
++    std::vector<libcamera::Request*> returned_requests_; // Stores raw pointers to requests returned during shutdown for explicit destruction
++
++    libcamera::PixelFormat actual_pixel_format_; ///< Actual pixel format provided by the camera.
++    libcamera::Size actual_size_; ///< Actual size provided by the camera.
++    unsigned int actual_stride_; ///< Actual stride of the YUV420 frame data.
++
++    std::atomic<bool> running_ = false;
+ 
+-    /**
+-     * @brief Parses raw byte data from the pipe into complete ImageData objects.
+-     *
+-     * This function is passed as a callback to the ProcessSupervisor. It accumulates
+-     * bytes in the buffer and, once a full frame's worth of data is received, it
+-     * constructs an ImageData object and pushes it to all registered output queues.
+-     * Consumed bytes are removed from the buffer.
+-     *
+-     * @param buffer A reference to the buffer accumulating raw byte data.
+-     * @param bytes_read The number of new bytes read in the current read operation (not directly used for parsing,
+-     *                   the entire buffer content is processed).
+-     * @param dummy_queue A dummy ImageQueue argument to match the ProcessSupervisor's FrameParserFn signature.
+-     *                    The actual output queues are accessed via `output_queues_`.
+-     * @return True if at least one complete frame was parsed and pushed, false otherwise.
+-     */
+-    bool parse_frame_data(std::vector<uint8_t>& buffer, size_t bytes_read, ImageQueue& dummy_queue);
++    // For FPS calculation
++    std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_;
++    int frame_count_ = 0;
++    static const int kFpsReportInterval = 100; // Report FPS every 100 frames
+ 
+-    /// Unique pointer to the ProcessSupervisor instance managing the rpicam-vid subprocess.
+-    std::unique_ptr<ProcessSupervisor<ImageQueue, ImageData>> supervisor_;
++    // For YUV conversion context.
+ };
+ 
+-#endif // CAMERA_CAPTURE_H
+\ No newline at end of file
++#endif // CAMERA_CAPTURE_H

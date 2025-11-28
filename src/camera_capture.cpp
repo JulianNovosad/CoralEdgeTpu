@@ -77,7 +77,7 @@ bool CameraCapture::start() {
     last_frame_time_ = std::chrono::high_resolution_clock::now();
     for (std::unique_ptr<libcamera::Request>& req_ptr : requests_) {
         LOG_INFO("CameraCapture: Attempting to queue request.");
-        if (camera_->queueRequest(req_ptr.get())) { // Pass raw pointer, retain unique_ptr ownership
+        if (camera_->queueRequest(req_ptr.release())) { // Release unique_ptr ownership
             LOG_ERROR("Failed to queue initial request.");
             running_ = false; // Signal failure
             stop(); // Attempt to clean up
@@ -109,7 +109,13 @@ void CameraCapture::stop() {
         camera_->stop();
         LOG_INFO("Libcamera camera stopped.");
         
-        requests_.clear(); // Explicitly clear requests_ vector to destroy Request objects
+        // Explicitly delete all requests returned during shutdown
+        for (libcamera::Request* req : returned_requests_) {
+            delete req;
+        }
+        returned_requests_.clear();
+        LOG_INFO("Libcamera returned requests destroyed.");
+
         camera_->release();
         camera_.reset(); // Release shared_ptr
         LOG_INFO("Libcamera camera released.");
@@ -283,18 +289,20 @@ bool CameraCapture::setup_camera() {
 
 void CameraCapture::request_complete_callback(libcamera::Request* request) {
     if (!running_) {
-        // If not running, just re-queue the request so libcamera can clean it up.
-        request->reuse();
-        camera_->queueRequest(request);
+        // During shutdown, collect all returned requests for explicit destruction.
+        returned_requests_.push_back(request);
         return;
     }
 
     if (request->status() != libcamera::Request::RequestComplete) {
         if (request->status() == libcamera::Request::RequestCancelled) {
             LOG_INFO("CameraCapture: Request cancelled, likely during shutdown.");
+            // If already stopping, it will be handled by the !running_ block,
+            // otherwise (e.g. spurious cancel), re-queue.
         } else {
             LOG_ERROR("CameraCapture: Request completion failed with status: " + std::to_string(request->status()));
         }
+        // For non-shutdown errors or spurious cancels, re-queue.
         request->reuse();
         camera_->queueRequest(request);
         return;
