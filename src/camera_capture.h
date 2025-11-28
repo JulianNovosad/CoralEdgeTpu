@@ -1,123 +1,73 @@
-/**
- * @file camera_capture.h
- * @brief Defines the CameraCapture class for managing a dedicated raw image stream
- *        using rpicam-vid subprocess and robust supervision.
- *
- * This class is responsible for launching and supervising an rpicam-vid subprocess
- * that captures a raw image stream (e.g., BGR888). It reads raw image data from the
- * subprocess's stdout pipe, converts it into ImageData objects, and pushes them
- * into multiple thread-safe queues for consumption by different pipeline stages.
- * It leverages the ProcessSupervisor for robust process management, including
- * restart policies and watchdog functionality.
- */
-
 #ifndef CAMERA_CAPTURE_H
 #define CAMERA_CAPTURE_H
 
+#include <libcamera/libcamera.h>
+#include <libcamera/camera.h>
+#include <libcamera/camera_manager.h>
+#include <libcamera/framebuffer_allocator.h>
+#include <libcamera/stream.h>
+#include <libcamera/request.h>
+#include <libcamera/geometry.h>
+#include <libcamera/pixel_format.h> // For libcamera::PixelFormat and libcamera::formats
+
 #include <thread>
 #include <atomic>
-#include <string>
 #include <vector>
+#include <string>
 #include <chrono>
+#include <list>
 #include <memory> // For std::unique_ptr
-#include <list>   // For std::list of output queues
 
-#include "pipeline_structs.h"
-#include "process_supervisor.hpp" // Include the new supervisor
+#include "pipeline_structs.h" // For ImageQueue
 
 /**
- * @brief Manages a dedicated raw image camera stream using an rpicam-vid subprocess.
+ * @brief Manages camera capture using the low-level libcamera C++ API.
  *
- * This class encapsulates the logic for capturing a raw video stream from the
- * camera via an rpicam-vid subprocess. It utilizes the ProcessSupervisor to
- * ensure the stability and reliability of the subprocess. Raw image data is
- * read from the subprocess's pipe, converted, and then pushed into multiple
- * shared queues, allowing different modules to consume the same raw frames.
+ * This class directly interacts with libcamera to open, configure, and stream
+ * frames from the camera. It converts YUV420 sensor data to RGB888 before
+ * pushing frames into shared ImageQueue instances.
  */
 class CameraCapture {
 public:
-    /**
-     * @brief Constructor for CameraCapture.
-     *
-     * Initializes the camera capture module with specified dimensions and a list
-     * of references to output queues where parsed image data will be pushed.
-     * It also sets up the ProcessSupervisor for robust subprocess management.
-     *
-     * @param width The desired width of the raw image stream.
-     * @param height The desired height of the raw image stream.
-     * @param output_queues A list of references to thread-safe ImageQueue for output.
-     * @param watchdog_timeout The duration after which a lack of activity in the
-     *                         stream will trigger a subprocess restart (e.g., 5 seconds).
-     */
-    CameraCapture(unsigned int width, unsigned int height, std::list<std::reference_wrapper<ImageQueue>>& output_queues, std::chrono::seconds watchdog_timeout);
-
-    /**
-     * @brief Destructor for CameraCapture.
-     *
-     * Ensures that the capture process and associated threads are gracefully stopped.
-     */
+    CameraCapture(unsigned int main_width, unsigned int main_height, unsigned int tpu_width, unsigned int tpu_height, std::list<std::reference_wrapper<ImageQueue>>& main_output_queues, ImageQueue& tpu_output_queue, std::chrono::seconds watchdog_timeout);
     ~CameraCapture();
-
-    /**
-     * @brief Starts the camera capture process and its supervisor.
-     *
-     * Launches the rpicam-vid subprocess and initiates the monitoring and
-     * pipe reading threads.
-     *
-     * @return True if the module started successfully, false otherwise.
-     */
     bool start();
-
-    /**
-     * @brief Stops the camera capture process and its supervisor.
-     *
-     * Sends termination signals to the subprocess and joins all associated threads
-     * for a clean shutdown.
-     */
     void stop();
-
-    /**
-     * @brief Checks if the camera capture module is currently running.
-     *
-     * @return True if the module is running, false otherwise.
-     */
-    bool is_running() const; // Delegates to supervisor's is_running()
+    bool is_running() const { return running_; }
 
 private:
-    unsigned int width_;  ///< The width of the captured raw image stream.
-    unsigned int height_; ///< The height of the captured raw image stream.
-    std::list<std::reference_wrapper<ImageQueue>>& output_queues_; ///< A list of references to queues where processed ImageData objects are pushed.
-    
-    /**
-     * @brief Generates the command-line arguments for the rpicam-vid subprocess.
-     *
-     * Constructs a vector of strings representing the arguments to be passed to
-     * `/usr/bin/rpicam-vid` for raw image capture (e.g., YUV420). Includes
-     * parameters for codec, dimensions, and output to stdout. Logs the configuration as JSON.
-     *
-     * @return A vector of strings containing the rpicam-vid command arguments.
-     */
-    std::vector<std::string> get_command_args();
+    void request_complete_callback(libcamera::Request* request);
+    bool setup_camera();
 
-    /**
-     * @brief Parses raw byte data from the pipe into complete ImageData objects.
-     *
-     * This function is passed as a callback to the ProcessSupervisor. It accumulates
-     * bytes in the buffer and, once a full frame's worth of data is received, it
-     * constructs an ImageData object and pushes it to all registered output queues.
-     * Consumed bytes are removed from the buffer.
-     *
-     * @param buffer A reference to the buffer accumulating raw byte data.
-     * @param bytes_read The number of new bytes read in the current read operation (not directly used for parsing,
-     *                   the entire buffer content is processed).
-     * @param dummy_queue A dummy ImageQueue argument to match the ProcessSupervisor's FrameParserFn signature.
-     *                    The actual output queues are accessed via `output_queues_`.
-     * @return True if at least one complete frame was parsed and pushed, false otherwise.
-     */
-    bool parse_frame_data(std::vector<uint8_t>& buffer, size_t bytes_read, ImageQueue& dummy_queue);
 
-    /// Unique pointer to the ProcessSupervisor instance managing the rpicam-vid subprocess.
-    std::unique_ptr<ProcessSupervisor<ImageQueue, ImageData>> supervisor_;
+
+    unsigned int width_;  ///< Desired output width (RGB888).
+    unsigned int height_; ///< Desired output height (RGB888).
+    unsigned int tpu_width_;
+    unsigned int tpu_height_;
+    std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_; ///< Queues for RGB888 ImageData.
+    ImageQueue& tpu_output_queue_; // New queue for TPU stream output
+    std::chrono::seconds watchdog_timeout_; ///< Not directly used by libcamera API, kept for compatibility.
+
+    std::unique_ptr<libcamera::CameraManager> camera_manager_;
+    std::shared_ptr<libcamera::Camera> camera_;
+    libcamera::Stream* video_stream_ = nullptr; ///< The YUV420 video stream.
+    libcamera::Stream* tpu_stream_ = nullptr;
+    std::unique_ptr<libcamera::FrameBufferAllocator> allocator_;
+    std::vector<std::unique_ptr<libcamera::Request>> requests_; ///< Store requests created.
+
+    libcamera::PixelFormat actual_pixel_format_; ///< Actual pixel format provided by the camera.
+    libcamera::Size actual_size_; ///< Actual size provided by the camera.
+    unsigned int actual_stride_; ///< Actual stride of the YUV420 frame data.
+
+    std::atomic<bool> running_ = false;
+
+    // For FPS calculation
+    std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_;
+    int frame_count_ = 0;
+    static const int kFpsReportInterval = 100; // Report FPS every 100 frames
+
+    // For YUV conversion context.
 };
 
 #endif // CAMERA_CAPTURE_H
