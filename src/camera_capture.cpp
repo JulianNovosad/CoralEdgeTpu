@@ -25,9 +25,8 @@ static std::string pixelFormatToString(const libcamera::PixelFormat& format) {
 }
 
 CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height, unsigned int tpu_width, unsigned int tpu_height, std::list<std::reference_wrapper<ImageQueue>>& main_output_queues, ImageQueue& tpu_output_queue, std::chrono::seconds watchdog_timeout)
-    : width_(main_width), height_(main_height), tpu_width_(tpu_width), tpu_height_(tpu_height), main_output_queues_(main_output_queues), tpu_output_queue_(tpu_output_queue), watchdog_timeout_(watchdog_timeout), last_frame_time_(std::chrono::high_resolution_clock::now()) {
-    // Initialize CameraManager
-    camera_manager_ = std::make_unique<libcamera::CameraManager>();
+    : width_(main_width), height_(main_height), tpu_width_(tpu_width), tpu_height_(tpu_height), main_output_queues_(main_output_queues), tpu_output_queue_(tpu_output_queue), watchdog_timeout_(watchdog_timeout), last_frame_time_(std::chrono::high_resolution_clock::now()),
+      camera_manager_(std::make_unique<libcamera::CameraManager>()) { // Initialize CameraManager in initializer list
     int ret = camera_manager_->start();
     if (ret) {
         throw std::runtime_error("Failed to start CameraManager: " + std::to_string(ret));

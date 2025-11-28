@@ -18,6 +18,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include "util_logging.h" // Added for LOG_INFO
+
 
 // --- Generic Data Structures ---
 
@@ -86,6 +88,12 @@ struct InferenceFrame {
 template <typename T>
 class ThreadSafeQueue {
 public:
+    explicit ThreadSafeQueue(size_t max_size = 10) : max_size_(max_size) {}
+
+    // Delete copy constructor and copy assignment operator due to std::atomic member
+    ThreadSafeQueue(const ThreadSafeQueue&) = delete;
+    ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
+
     /**
      * @brief Pushes a new data item into the queue.
      *
@@ -93,9 +101,20 @@ public:
      *
      * @param new_data The data item to be pushed.
      */
-    void push(T new_data) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push(std::move(new_data));
+    void push(T data) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        queue_.push(std::move(data));
+        // lock.unlock(); // Removed unlock before notify
+        cond_var_.notify_one();
+    }
+
+    void push_and_drop_if_full(T data) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (queue_.size() >= max_size_) {
+            queue_.pop();
+        }
+        queue_.push(std::move(data));
+        // lock.unlock(); // Removed unlock before notify
         cond_var_.notify_one();
     }
 
@@ -155,11 +174,15 @@ public:
     bool peek_latest(T& frame) {
         std::unique_lock<std::mutex> lock(mutex_);
         // Wait until queue is not empty OR the `running_` flag is false (signaling shutdown)
+        LOG_INFO("ThreadSafeQueue: peek_latest waiting...");
         cond_var_.wait(lock, [this]{ return !queue_.empty() || !running_; });
+        LOG_INFO("ThreadSafeQueue: peek_latest woke up. Queue empty: " + std::to_string(queue_.empty()) + ", Running: " + std::to_string(running_));
         if (queue_.empty()) {
+            LOG_INFO("ThreadSafeQueue: peek_latest returning false (empty or stopped).");
             return false; // Queue is empty and stopped.
         }
         frame = queue_.back(); // Get the latest frame
+        LOG_INFO("ThreadSafeQueue: peek_latest returning true. Queue size: " + std::to_string(queue_.size()));
         return true;
     }
     
@@ -183,6 +206,7 @@ private:
     std::queue<T> queue_;      ///< The underlying standard queue.
     std::condition_variable cond_var_; ///< Condition variable for signaling between producers/consumers.
     std::atomic<bool> running_ = true; ///< Atomic flag to indicate if the queue is active.
+    size_t max_size_;
 };
 
 // --- Type aliases for all pipeline queues ---

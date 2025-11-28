@@ -35,7 +35,8 @@ public:
     VideoOverlayProcessor(ImageQueue& inference_image_queue,
                           UdpQueue& detection_results_queue,
                           MjpegQueue& overlaid_mjpeg_output_queue,
-                          const std::vector<std::string>& labels);
+                          const std::vector<std::string>& labels,
+                          int jpeg_quality); // Added jpeg_quality parameter
 
     /**
      * @brief Destructor for VideoOverlayProcessor.
@@ -84,17 +85,7 @@ private:
      */
     void draw_overlays(ImageData& image_data, const std::vector<DetectionResult>& detections);
 
-    /**
-     * @brief Converts RGB pixel data to YCbCr (YUV) as often expected by JPEG.
-     *
-     * @param r Red component (0-255).
-     * @param g Green component (0-255).
-     * @param b Blue component (0-255).
-     * @param y Output Y component.
-     * @param cb Output Cb component.
-     * @param cr Output Cr component.
-     */
-    void rgb_to_ycbcr(uint8_t r, uint8_t g, uint8_t b, uint8_t& y, uint8_t& cb, uint8_t& cr);
+
 
 
     ImageQueue& inference_image_queue_; ///< Input queue for raw image data.
@@ -107,6 +98,7 @@ private:
     
     // JpegCompressGuard for converting overlaid raw images to MJPEG
     JpegCompressGuard jpeg_compressor_;
+    int jpeg_quality_; // Added to store JPEG quality
 };
 
 #endif // VIDEO_OVERLAY_PROCESSOR_H

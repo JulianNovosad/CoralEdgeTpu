@@ -19,6 +19,7 @@
 #include "util_logging.h"
 #include "udp_video_sender.h"
 #include "video_overlay_processor.h"
+#include "config_loader.h" // Include for ConfigLoader
 // #include "image_resizer.h" // Obsolete: Image resizing is now handled by the ISP.
 // #include "frame_displayer.h" // Obsolete: Display is handled by MJPEG stream.
 
@@ -43,6 +44,12 @@ int main(int argc, char** argv) {
     Logger& logger = Logger::getInstance();
     LOG_INFO("CoralEdgeTpu Detector Starting...");
 
+    ConfigLoader config_loader;
+    if (!config_loader.load("config.json")) {
+        LOG_ERROR("Failed to load configuration. Exiting.");
+        return 1;
+    }
+
     signal(SIGPIPE, SIG_IGN);
 
     bool dump_state_requested = false;
@@ -54,17 +61,17 @@ int main(int argc, char** argv) {
     }
 
     // --- Application Configuration ---
-    const std::string model_path = "/home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite";
-    const std::string labels_path = "/home/pi/CoralEdgeTpu/coco_labels.txt";
+    const std::string model_path = config_loader.get_model_path();
+    const std::string labels_path = config_loader.get_labels_path();
     
-    const unsigned int high_res_width = 1536;
-    const unsigned int high_res_height = 864;
+    const unsigned int high_res_width = config_loader.get_high_res_width();
+    const unsigned int high_res_height = config_loader.get_high_res_height();
 
-    const int UDP_RAW_VIDEO_PORT = 50000;
-    const int UDP_BOUNDING_BOX_PORT = 50010;
-    const int HTTP_OVERLAID_VIDEO_PORT = 8081;
-    const std::string MOBILE_APP_IP = "10.49.12.162";
-    const std::chrono::seconds camera_watchdog_timeout = std::chrono::seconds(5);
+    const int UDP_RAW_VIDEO_PORT = config_loader.get_udp_raw_video_port();
+    const int UDP_BOUNDING_BOX_PORT = config_loader.get_udp_bounding_box_port();
+    const int HTTP_OVERLAID_VIDEO_PORT = config_loader.get_http_overlaid_video_port();
+    const std::string MOBILE_APP_IP = config_loader.get_mobile_app_ip();
+    const std::chrono::seconds camera_watchdog_timeout = config_loader.get_camera_watchdog_timeout();
 
     // --- Thread-Safe Queues ---
     ImageQueue full_res_for_resize_queue;
@@ -97,7 +104,7 @@ int main(int argc, char** argv) {
         }
 
         try {
-            inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, inference_results_queue, 2); // Assign
+            inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, inference_results_queue, config_loader.get_inference_worker_threads()); // Assign
         } catch (const std::runtime_error& e) {
             LOG_ERROR("Failed to initialize Inference Engine for state dump: " + std::string(e.what()));
             logger.stop_writer_thread();
@@ -119,8 +126,8 @@ int main(int argc, char** argv) {
             logger.stop_writer_thread();
             return 1;
         }
-        UdpVideoSender udp_raw_video_sender(MOBILE_APP_IP, UDP_RAW_VIDEO_PORT, full_res_for_udp_queue);
-        VideoOverlayProcessor video_overlay_processor(full_res_for_overlay_queue, inference_results_queue, overlaid_mjpeg_to_http_queue, labels);
+        UdpVideoSender udp_raw_video_sender(MOBILE_APP_IP, UDP_RAW_VIDEO_PORT, full_res_for_udp_queue, config_loader.get_jpeg_quality());
+        VideoOverlayProcessor video_overlay_processor(full_res_for_overlay_queue, inference_results_queue, overlaid_mjpeg_to_http_queue, labels, config_loader.get_jpeg_quality());
         UdpSender udp_bounding_box_sender(MOBILE_APP_IP, UDP_BOUNDING_BOX_PORT, inference_results_queue);
         MjpegServer overlaid_mjpeg_server(HTTP_OVERLAID_VIDEO_PORT, overlaid_mjpeg_to_http_queue);
 
@@ -150,7 +157,7 @@ int main(int argc, char** argv) {
 
     try {
         // The inference engine now reads directly from the camera's TPU queue.
-        inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, inference_results_queue, 2); // Assign
+        inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, inference_results_queue, config_loader.get_inference_worker_threads()); // Assign
     } catch (const std::runtime_error& e) {
         LOG_ERROR("Failed to initialize Inference Engine: " + std::string(e.what()));
         return 1;
@@ -184,8 +191,8 @@ int main(int argc, char** argv) {
     // The ImageResizer is no longer needed as the ISP provides the correct size.
     // ImageResizer image_resizer(tpu_inference_queue, inference_queue, inference_width, inference_height);
 
-    UdpVideoSender udp_raw_video_sender(MOBILE_APP_IP, UDP_RAW_VIDEO_PORT, full_res_for_udp_queue);
-    VideoOverlayProcessor video_overlay_processor(full_res_for_overlay_queue, inference_results_queue, overlaid_mjpeg_to_http_queue, labels);
+    UdpVideoSender udp_raw_video_sender(MOBILE_APP_IP, UDP_RAW_VIDEO_PORT, full_res_for_udp_queue, config_loader.get_jpeg_quality());
+    VideoOverlayProcessor video_overlay_processor(full_res_for_overlay_queue, inference_results_queue, overlaid_mjpeg_to_http_queue, labels, config_loader.get_jpeg_quality());
     UdpSender udp_bounding_box_sender(MOBILE_APP_IP, UDP_BOUNDING_BOX_PORT, inference_results_queue);
     MjpegServer overlaid_mjpeg_server(HTTP_OVERLAID_VIDEO_PORT, overlaid_mjpeg_to_http_queue);
     // FrameDisplayer frame_displayer(overlaid_mjpeg_to_http_queue, "Live Feed");
