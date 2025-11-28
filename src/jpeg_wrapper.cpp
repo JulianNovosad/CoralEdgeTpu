@@ -27,6 +27,7 @@
  *
  * @param cinfo Pointer to the common JPEG object, which contains error manager info.
  */
+// cppcheck-suppress unknownMacro
 METHODDEF(void)
 my_error_exit(j_common_ptr cinfo) {
     // cinfo->err really points to a CustomErrorMgr struct, so coerce pointer
@@ -49,6 +50,7 @@ my_error_exit(j_common_ptr cinfo) {
  *
  * @param cinfo Pointer to the JPEG compression object.
  */
+// cppcheck-suppress unknownMacro
 METHODDEF(void)
 init_destination(j_compress_ptr cinfo) {
     JpegMemoryDestination* dest = (JpegMemoryDestination*)cinfo->dest;
@@ -85,6 +87,7 @@ empty_output_buffer(j_compress_ptr cinfo) {
  *
  * @param cinfo Pointer to the JPEG compression object.
  */
+// cppcheck-suppress unknownMacro
 METHODDEF(void)
 term_destination(j_compress_ptr cinfo) {
     JpegMemoryDestination* dest = (JpegMemoryDestination*)cinfo->dest;

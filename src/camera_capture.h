@@ -58,7 +58,7 @@ public:
 
     libcamera::PixelFormat actual_pixel_format_; ///< Actual pixel format provided by the camera.
     libcamera::Size actual_size_; ///< Actual size provided by the camera.
-    unsigned int actual_stride_; ///< Actual stride of the YUV420 frame data.
+    unsigned int actual_stride_ = 0; ///< Actual stride of the YUV420 frame data.
 
     std::atomic<bool> running_ = false;
 

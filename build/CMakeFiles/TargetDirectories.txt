@@ -1,3 +1,0 @@
-/home/pi/CoralEdgeTpu/build/CMakeFiles/detector.dir
-/home/pi/CoralEdgeTpu/build/CMakeFiles/edit_cache.dir
-/home/pi/CoralEdgeTpu/build/CMakeFiles/rebuild_cache.dir

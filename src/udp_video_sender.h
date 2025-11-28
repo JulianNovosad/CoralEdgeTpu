@@ -12,7 +12,7 @@
 
 class UdpVideoSender {
 public:
-    UdpVideoSender(const std::string& dest_ip, int dest_port, ImageQueue& input_queue);
+    UdpVideoSender(const std::string& dest_ip, int dest_port, ImageQueue& input_queue, int jpeg_quality); // Added jpeg_quality parameter
     ~UdpVideoSender();
     bool start();
     void stop();
@@ -31,6 +31,7 @@ private:
     std::thread sender_thread_;
     std::atomic<bool> running_{false};
     JpegCompressGuard jpeg_compressor_;
+    int jpeg_quality_; // Added to store JPEG quality
 
     static const size_t MAX_UDP_PAYLOAD_SIZE = 65507;
 };

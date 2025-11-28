@@ -9,45 +9,10 @@
 #include <algorithm> // For std::max, std::min
 #include <cmath>     // For std::round
 
-namespace {
-    // In-place YUV to BGR conversion
-    void convert_yuv_to_bgr(const ImageData& yuv_image, std::vector<uint8_t>& bgr_data) {
-        int width = yuv_image.width;
-        int height = yuv_image.height;
-        int num_pixels = width * height;
-        bgr_data.resize(num_pixels * 3);
 
-        const uint8_t* y_plane = yuv_image.data.data();
-        const uint8_t* u_plane = y_plane + num_pixels;
-        const uint8_t* v_plane = u_plane + (num_pixels / 4);
 
-        for (int i = 0; i < height; ++i) {
-            for (int j = 0; j < width; ++j) {
-                int y = y_plane[i * width + j];
-                int u = u_plane[(i / 2) * (width / 2) + (j / 2)];
-                int v = v_plane[(i / 2) * (width / 2) + (j / 2)];
-
-                // YUV to RGB conversion
-                int r = y + 1.402 * (v - 128);
-                int g = y - 0.344136 * (u - 128) - 0.714136 * (v - 128);
-                int b = y + 1.772 * (u - 128);
-
-                // Clamp values to [0, 255]
-                r = std::max(0, std::min(255, r));
-                g = std::max(0, std::min(255, g));
-                b = std::max(0, std::min(255, b));
-
-                int bgr_index = (i * width + j) * 3;
-                bgr_data[bgr_index + 0] = static_cast<uint8_t>(b);
-                bgr_data[bgr_index + 1] = static_cast<uint8_t>(g);
-                bgr_data[bgr_index + 2] = static_cast<uint8_t>(r);
-            }
-        }
-    }
-}
-
-UdpVideoSender::UdpVideoSender(const std::string& target_ip, int target_port, ImageQueue& input_queue)
-    : target_ip_(target_ip), target_port_(target_port), input_queue_(input_queue) {
+UdpVideoSender::UdpVideoSender(const std::string& target_ip, int target_port, ImageQueue& input_queue, int jpeg_quality)
+    : target_ip_(target_ip), target_port_(target_port), input_queue_(input_queue), jpeg_quality_(jpeg_quality) {
 
     sockfd_ = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd_ < 0) {
@@ -111,11 +76,11 @@ void UdpVideoSender::sender_thread_func() {
                     raw_image.data.data(),
                     raw_image.width,
                     raw_image.height,
-                    80,
+                    jpeg_quality_, // Use the member variable
                     JCS_RGB
                 );
 
-                ImageFrame mjpeg_frame;
+                ImageFrame mjpeg_frame = {}; // Explicitly zero-initialize or default-construct
                 mjpeg_frame.jpeg_data = std::move(mjpeg_data);
                 send_mjpeg_frame(mjpeg_frame);
 
@@ -129,7 +94,6 @@ void UdpVideoSender::sender_thread_func() {
 void UdpVideoSender::send_mjpeg_frame(const ImageFrame& frame) {
     const uint8_t* data_ptr = frame.jpeg_data.data();
     size_t total_size = frame.jpeg_data.size();
-    size_t bytes_sent = 0;
     
     const size_t FRAG_HEADER_SIZE = 6;
     static uint16_t sequence_number = 0;
@@ -164,7 +128,7 @@ void UdpVideoSender::send_mjpeg_frame(const ImageFrame& frame) {
 
         std::memcpy(packet_buffer.data() + FRAG_HEADER_SIZE, data_ptr + offset, current_fragment_size);
 
-        ssize_t sent_bytes_current_frag = sendto(sockfd_, (const char*)packet_buffer.data(), packet_buffer.size(), 0,
+        ssize_t sent_bytes_current_frag = sendto(sockfd_, reinterpret_cast<const char*>(packet_buffer.data()), packet_buffer.size(), 0,
                                                  (const sockaddr*)&server_addr_, sizeof(server_addr_));
         if (sent_bytes_current_frag < 0) {
             LOG_ERROR("UdpVideoSender: Failed to send UDP fragment " + std::to_string(i) + " for frame " + std::to_string(sequence_number) + ": " + strerror(errno));
