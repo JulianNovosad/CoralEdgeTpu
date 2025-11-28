@@ -151,8 +151,18 @@ int main(int argc, char** argv) {
     });
 
     LOG_INFO("Application started successfully. Waiting for shutdown signal ('o' followed by Enter).");
+
+    auto last_performance_report_time = std::chrono::high_resolution_clock::now();
+    const std::chrono::seconds performance_report_interval(5); // Report every 5 seconds
+
     while (!shutdown_requested) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        auto now = std::chrono::high_resolution_clock::now();
+        if (now - last_performance_report_time >= performance_report_interval) {
+            inference_engine->get_performance_metrics();
+            last_performance_report_time = now;
+        }
     }
 
     input_thread.join();
