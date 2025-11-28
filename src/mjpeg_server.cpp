@@ -21,10 +21,12 @@
 #include <sstream>        // For std::ostringstream
 #include <iomanip>        // For std::hex, std::setfill, std::setw
 #include <cstring>        // For strerror
+#include <opencv2/opencv.hpp>
 
 // Boundary string for MJPEG multipart stream.
 // This string separates individual JPEG frames within the HTTP response.
 const std::string MJPEG_BOUNDARY = "opencv_boundary";
+
 
 /**
  * @brief Constructor for MjpegServer.
@@ -97,10 +99,28 @@ bool MjpegServer::start() {
         return false;
     }
 
+    LOG_INFO("MjpegServer is now listening for connections on port " + std::to_string(port_));
+
+    std::promise<bool> server_ready_promise;
+    std::future<bool> server_ready_future = server_ready_promise.get_future();
+
     running_ = true;
-    input_queue_.set_running(true); // Signal input queue to be active.
-    server_thread_ = std::thread(&MjpegServer::server_thread_func, this);
-    LOG_INFO("MJPEG server started on port " + std::to_string(port_));
+    input_queue_.set_running(true);
+    server_thread_ = std::thread(&MjpegServer::server_thread_func, this, std::move(server_ready_promise));
+
+    // Wait for the server_thread_func to signal that it has fully started its accept loop
+    server_ready_future.wait();
+    if (!server_ready_future.get()) {
+        LOG_ERROR("MjpegServer thread failed to signal readiness.");
+        running_ = false;
+        if (server_thread_.joinable()) {
+            server_thread_.join();
+        }
+        close(server_sock_);
+        return false;
+    }
+    
+    LOG_INFO("MjpegServer is fully operational on port " + std::to_string(port_));
     return true;
 }
 
@@ -137,16 +157,19 @@ void MjpegServer::stop() {
  * client, it detaches a new thread to handle the client's request, allowing
  * the server to serve multiple clients concurrently.
  */
-void MjpegServer::server_thread_func() {
+void MjpegServer::server_thread_func(std::promise<bool> server_ready_promise) {
+    server_ready_promise.set_value(true); // Signal that the server thread is ready and its accept loop will start.
+
     while (running_) {
-        sockaddr_in client_addr{}; // Structure to hold client address information.
+        sockaddr_in client_addr{};
         socklen_t client_addr_len = sizeof(client_addr);
-        // Accept a new client connection. This call blocks until a client connects or the socket is shut down.
         int client_sock = accept(server_sock_, (struct sockaddr*)&client_addr, &client_addr_len);
 
         if (client_sock < 0) {
             if (running_) { // Only report an error if the server is still expected to be running.
                 LOG_ERROR("Failed to accept client connection: " + std::string(strerror(errno)));
+            } else {
+                LOG_INFO("Server stopping, accept() call interrupted."); // Expected behavior on shutdown.
             }
             continue; // Continue to the next iteration, waiting for another client.
         }
@@ -156,82 +179,53 @@ void MjpegServer::server_thread_func() {
     }
 }
 
-/**
- * @brief Handles an individual client connection for MJPEG streaming.
- *
- * This function reads the client's HTTP request, sends appropriate MJPEG stream
- * headers, and then continuously retrieves the latest MJPEG frames from the
- * input queue, sending them to the connected client as a multipart/x-mixed-replace
- * HTTP response.
- *
- * @param client_sock The socket file descriptor for the connected client.
- */
 void MjpegServer::handle_client(int client_sock) {
-    char buffer[2048]; // Buffer to read incoming HTTP request.
-    ssize_t bytes_received = recv(client_sock, buffer, sizeof(buffer) - 1, 0); // Read client request.
-    if (bytes_received <= 0) {
-        LOG_WARNING("Client disconnected or error receiving request.");
+    LOG_INFO("MjpegServer: Sent HTTP headers to client (sock: " + std::to_string(client_sock) + ")");
+
+    // --- TEMPORARY: STATIC RED JPEG FOR DIAGNOSTICS ---
+    cv::Mat red_frame(480, 640, CV_8UC3, cv::Scalar(0, 0, 255)); // BGR format (Blue=0, Green=0, Red=255)
+    std::vector<uchar> red_jpeg_data;
+    std::vector<int> compression_params;
+    compression_params.push_back(cv::IMWRITE_JPEG_QUALITY);
+    compression_params.push_back(80); // JPEG quality
+    if (!cv::imencode(".jpg", red_frame, red_jpeg_data, compression_params)) {
+        LOG_ERROR("MjpegServer: Failed to encode static red frame to JPEG.");
         close(client_sock);
         return;
     }
-    buffer[bytes_received] = '\0'; // Null-terminate the received data.
-    // LOG_INFO("Received request from client:\n" + std::string(buffer)); // For debugging requests.
+    // --- END TEMPORARY ---
 
-    // Basic request parsing: check for GET / or GET /stream
-    if (std::string(buffer).rfind("GET / ", 0) != 0 && std::string(buffer).rfind("GET /stream ", 0) != 0) {
-        // For any other request, send a simple 404 Not Found response.
-        std::string response = "HTTP/1.0 404 Not Found\r\nContent-Length: 13\r\n\r\n404 Not Found";
-        send(client_sock, response.c_str(), response.length(), 0);
-        close(client_sock);
-        return;
-    }
-
-    // Send MJPEG stream HTTP headers for multipart/x-mixed-replace.
-    std::ostringstream header_ss;
-    header_ss << "HTTP/1.0 200 OK\r\n";
-    header_ss << "Cache-Control: no-cache\r\n";       // Prevent caching.
-    header_ss << "Pragma: no-cache\r\n";             // For older HTTP/1.0 clients.
-    header_ss << "Connection: close\r\n";            // Connection will be closed by server.
-    header_ss << "Content-Type: multipart/x-mixed-replace; boundary=" << MJPEG_BOUNDARY << "\r\n"; // Main content type.
-    header_ss << "\r\n"; // End of headers.
-    std::string headers = header_ss.str();
-    if (send(client_sock, headers.c_str(), headers.length(), 0) < 0) {
-        LOG_ERROR("Failed to send MJPEG stream headers to client: " + std::string(strerror(errno)));
-        close(client_sock);
-        return;
-    }
-
-    ImageFrame frame;
     // Loop to continuously send MJPEG frames while the server is running and frames are available.
-    while (running_ && input_queue_.peek_latest(frame)) { // Peek the latest frame from the queue.
+    LOG_INFO("MjpegServer: Starting frame sending loop for client (sock: " + std::to_string(client_sock) + ") - Sending STATIC RED FRAME");
+    while (running_) {
+        // Use the static red_jpeg_data instead of queue
         std::ostringstream content_ss;
         content_ss << "--" << MJPEG_BOUNDARY << "\r\n";        // Start of a new part with boundary.
         content_ss << "Content-Type: image/jpeg\r\n";          // Content type of the part.
-        content_ss << "Content-Length: " << frame.jpeg_data.size() << "\r\n"; // Size of the JPEG data.
+        content_ss << "Content-Length: " << red_jpeg_data.size() << "\r\n"; // Size of the JPEG data.
         content_ss << "\r\n"; // End of content headers for this part.
         std::string content_headers = content_ss.str();
 
         // Send content headers for the current JPEG frame.
         if (send(client_sock, content_headers.c_str(), content_headers.length(), 0) < 0) {
-            LOG_ERROR("Failed to send content headers for MJPEG frame to client: " + std::string(strerror(errno)));
+            LOG_ERROR("MjpegServer: Failed to send content headers for STATIC RED frame (size: " + std::to_string(red_jpeg_data.size()) + ", sock: " + std::to_string(client_sock) + "): " + std::string(strerror(errno)));
             break; // Exit loop if send fails.
         }
 
         // Send the actual JPEG data.
-        if (send(client_sock, (const char*)frame.jpeg_data.data(), frame.jpeg_data.size(), 0) < 0) {
-            LOG_ERROR("Failed to send JPEG data to client: " + std::string(strerror(errno)));
+        if (send(client_sock, (const char*)red_jpeg_data.data(), red_jpeg_data.size(), 0) < 0) {
+            LOG_ERROR("MjpegServer: Failed to send STATIC RED JPEG data (size: " + std::to_string(red_jpeg_data.size()) + ", sock: " + std::to_string(client_sock) + "): " + std::string(strerror(errno)));
             break; // Exit loop if send fails.
         }
 
         // Send the boundary delimiter after the JPEG data.
         if (send(client_sock, "\r\n", 2, 0) < 0) {
-            LOG_ERROR("Failed to send boundary delimiter to client: " + std::string(strerror(errno)));
+            LOG_ERROR("MjpegServer: Failed to send boundary delimiter (sock: " + std::to_string(client_sock) + "): " + std::string(strerror(errno)));
             break; // Exit loop if send fails.
         }
-        // Small delay to control frame rate and prevent excessive CPU usage.
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        std::this_thread::sleep_for(std::chrono::milliseconds(30)); // Delay to control frame rate.
     }
 
+    LOG_INFO("MjpegServer: Client disconnected (sock: " + std::to_string(client_sock) + ")");
     close(client_sock); // Close client socket after stream ends or error.
-    // LOG_INFO("Client disconnected."); // For debugging client connections.
 }
