@@ -349,6 +349,7 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         tpu_image_data.width = tpu_cfg.size.width;
         tpu_image_data.height = tpu_cfg.size.height;
         const unsigned int tpu_line_bytes = tpu_cfg.size.width * 3; // BGR888 is 3 bytes per pixel
+        LOG_INFO("Resizing TPU image data to: " + std::to_string(tpu_line_bytes * tpu_cfg.size.height));
         tpu_image_data.data.resize(tpu_line_bytes * tpu_cfg.size.height);
         
         uint8_t* dest_ptr = tpu_image_data.data.data();
