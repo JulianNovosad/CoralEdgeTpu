@@ -99,6 +99,8 @@ public:
      */
     int get_input_height() const { return input_height_; }
 
+    void get_performance_metrics();
+
 private:
     /**
      * @brief The main function executed by each inference worker thread.
@@ -152,6 +154,13 @@ private:
     tflite::ops::builtin::BuiltinOpResolver resolver_; ///< Op resolver for built-in TFLite operations.
     std::vector<std::thread> worker_threads_; ///< Vector of active inference worker threads.
     std::atomic<bool> running_ = false; ///< Atomic flag to control the running state of the inference engine.
+    
+    // Performance measurement members
+    std::vector<long long> inference_times_ms_;
+    std::mutex inference_times_mutex_;
+    long long total_inferences_ = 0;
+    std::chrono::time_point<std::chrono::high_resolution_clock> performance_start_time_;
+
     
     // Note: The interpreter_pool_ and interpreter_pool_mutex_ are remnants from a previous
     // design where interpreters were pooled. In the current design, each worker thread

@@ -248,11 +248,21 @@ void InferenceEngine::worker_thread_func() {
             // Prepare the input tensor for the interpreter.
             set_input_tensor(interpreter.get(), input_image);
 
+            auto inference_start_time = std::chrono::high_resolution_clock::now(); // Start timing
+
             // Invoke the TensorFlow Lite interpreter to perform inference.
             if (interpreter->Invoke() != kTfLiteOk) {
                 LOG_ERROR("Failed to invoke interpreter. Skipping frame.");
                 continue; // Skip this frame.
             }
+            
+            auto inference_end_time = std::chrono::high_resolution_clock::now(); // End timing
+            long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(inference_end_time - inference_start_time).count();
+
+            // Store inference time and increment total count
+            std::lock_guard<std::mutex> lock(inference_times_mutex_);
+            inference_times_ms_.push_back(duration_ms);
+            total_inferences_++;
             
             // Parse the output tensors to get detection results.
             std::vector<DetectionResult> results = get_output_tensor(interpreter.get());
@@ -330,4 +340,48 @@ std::vector<DetectionResult> InferenceEngine::get_output_tensor(tflite::Interpre
         }
     }
     return results;
+}
+
+void InferenceEngine::get_performance_metrics() {
+    std::lock_guard<std::mutex> lock(inference_times_mutex_);
+
+    if (total_inferences_ == 0) {
+        LOG_INFO("InferenceEngine: No inferences recorded for performance metrics.");
+        return;
+    }
+
+    // Calculate Average FPS
+    // Assuming a fixed time window for measurement, or if we want over total run time.
+    // For simplicity, let's calculate based on total_inferences_ and average duration.
+    double average_duration_ms = 0;
+    for (long long duration : inference_times_ms_) {
+        average_duration_ms += duration;
+    }
+    average_duration_ms /= total_inferences_;
+    double average_fps = 1000.0 / average_duration_ms;
+
+    // Calculate Standard Deviation of Latency
+    double sum_sq_diff = 0;
+    for (long long duration : inference_times_ms_) {
+        sum_sq_diff += (duration - average_duration_ms) * (duration - average_duration_ms);
+    }
+    double std_dev_ms = std::sqrt(sum_sq_diff / total_inferences_);
+
+    // Calculate 99th Percentile Latency
+    std::sort(inference_times_ms_.begin(), inference_times_ms_.end());
+    size_t percentile_99_index = static_cast<size_t>(std::round(total_inferences_ * 0.99));
+    long long p99_latency_ms = inference_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_inferences_ - 1))]; // Ensure index is valid
+
+    LOG_INFO("--- Inference Performance Metrics ---");
+    LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
+    LOG_INFO("  Average FPS: " + std::to_string(average_fps));
+    LOG_INFO("  Average Latency: " + std::to_string(average_duration_ms) + " ms");
+    LOG_INFO("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
+    LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    LOG_INFO("-------------------------------------");
+
+    // Clear data for the next measurement window
+    inference_times_ms_.clear();
+    total_inferences_ = 0;
+    performance_start_time_ = std::chrono::high_resolution_clock::now();
 }
