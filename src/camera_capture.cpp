@@ -378,3 +378,20 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     
     camera_->queueRequest(request);
 }
+
+void CameraCapture::get_state() const {
+    LOG_INFO("--- CameraCapture State ---");
+    LOG_INFO("  Running: " + std::to_string(running_));
+    LOG_INFO("  Main Stream Resolution: " + std::to_string(width_) + "x" + std::to_string(height_));
+    LOG_INFO("  TPU Stream Resolution: " + std::to_string(tpu_width_) + "x" + std::to_string(tpu_height_));
+    if (camera_manager_ && !camera_manager_->cameras().empty()) {
+        LOG_INFO("  Camera ID: " + camera_manager_->cameras().front()->id());
+    }
+    LOG_INFO("  Actual Configured Main Stream: " + std::to_string(actual_size_.width) + "x" + std::to_string(actual_size_.height) + " " + pixelFormatToString(actual_pixel_format_));
+    LOG_INFO("  Actual Configured Stride: " + std::to_string(actual_stride_));
+    if (allocator_) {
+        LOG_INFO("  Number of buffers (Main): " + std::to_string(allocator_->buffers(video_stream_).size()));
+        LOG_INFO("  Number of buffers (TPU): " + std::to_string(allocator_->buffers(tpu_stream_).size()));
+    }
+    LOG_INFO("---------------------------");
+}

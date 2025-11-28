@@ -166,3 +166,16 @@ std::string UdpSender::detection_to_json(const std::vector<DetectionResult>& res
     oss << "]"; // End of JSON array
     return oss.str();
 }
+
+void UdpSender::get_state() const {
+    LOG_INFO("--- UdpSender State (Bounding Box) ---");
+    LOG_INFO("  Running: " + std::to_string(running_));
+    LOG_INFO("  Target IP: " + target_ip_);
+    LOG_INFO("  Target Port: " + std::to_string(target_port_));
+    if (sockfd_ != -1) {
+        LOG_INFO("  Socket FD: " + std::to_string(sockfd_));
+    } else {
+        LOG_INFO("  Socket: Not initialized or closed.");
+    }
+    LOG_INFO("--------------------------------------");
+}

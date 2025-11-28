@@ -242,3 +242,15 @@ void MjpegServer::handle_client(int client_sock) {
     LOG_INFO("MjpegServer: Client disconnected (sock: " + std::to_string(client_sock) + ")");
     close(client_sock); // Close client socket after stream ends or error.
 }
+
+void MjpegServer::get_state() const {
+    LOG_INFO("--- MjpegServer State ---");
+    LOG_INFO("  Running: " + std::to_string(running_));
+    LOG_INFO("  Listening Port: " + std::to_string(port_));
+    if (server_sock_ != -1) {
+        LOG_INFO("  Server Socket FD: " + std::to_string(server_sock_));
+    } else {
+        LOG_INFO("  Server Socket: Not initialized or closed.");
+    }
+    LOG_INFO("-------------------------");
+}
