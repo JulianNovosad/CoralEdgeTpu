@@ -9,7 +9,7 @@ find . -name "CMakeCache.txt" -delete
 # 1. Package installs and verification
 echo "1. Installing required packages..."
 sudo apt-get update -y
-sudo apt-get install -y build-essential cmake git libjpeg-dev libjpeg62-turbo-dev libusb-1.0-0-dev libcamera-dev pkg-config
+sudo apt-get install -y libcamera-dev
 
 # 2. EdgeTPU runtime install and check
 echo "2. Installing EdgeTPU runtime and checking device..."

@@ -40,7 +40,7 @@ add_executable(detector
     src/video_overlay_processor.cpp
     src/jpeg_wrapper.cpp
     src/util_logging.cpp
-    src/frame_displayer.cpp
+    src/config_loader.cpp # Added ConfigLoader source file
 )
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})

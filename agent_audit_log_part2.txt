@@ -1,0 +1,14 @@
+--- PHASE 11: CLEANUP & FINAL REVIEW ---
+Problem: Cleanup temporary code, add config.json to .gitignore, perform final static analysis and memory check.
+Fixes:
+  - Removed temporary static red JPEG.
+  - Added config.json to .gitignore.
+  - Re-added `request_complete_callback` to `CameraCapture`.
+  - Fixed `cppcheck` error `ctuuninitvar` in `UdpVideoSender`.
+  - Initialized `CameraCapture::actual_stride_ = 0` and moved `camera_manager_` initialization.
+  - Removed unused `rgb_to_ycbcr` and `convert_yuv_to_bgr` functions.
+  - Replaced C-style casts with `reinterpret_cast`.
+  - Removed unused variable `bytes_sent`.
+  - Suppressed `unknownMacro` warnings in `jpeg_wrapper.cpp`.
+Verification: `make` builds cleanly. Static analysis tools (clang-tidy, cppcheck) and Valgrind confirm no new application-level issues; remaining issues are external library-related.
+---------------------------------------------------------

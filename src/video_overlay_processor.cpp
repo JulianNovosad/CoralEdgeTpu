@@ -41,11 +41,13 @@ VideoOverlayProcessor::VideoOverlayProcessor(
     ImageQueue& inference_image_queue,
     UdpQueue& detection_results_queue,
     MjpegQueue& overlaid_mjpeg_output_queue,
-    const std::vector<std::string>& labels)
+    const std::vector<std::string>& labels,
+    int jpeg_quality) // Added jpeg_quality
     : inference_image_queue_(inference_image_queue),
       detection_results_queue_(detection_results_queue),
       overlaid_mjpeg_output_queue_(overlaid_mjpeg_output_queue),
-      labels_(labels) {
+      labels_(labels),
+      jpeg_quality_(jpeg_quality) { // Initialize member
     // JpegCompressGuard is default constructed, ready for use.
 }
 
@@ -147,7 +149,7 @@ void VideoOverlayProcessor::processing_thread_func() {
                 image_to_overlay.data.data(),
                 image_to_overlay.width,
                 image_to_overlay.height,
-                80, // JPEG quality (0-100), 80 is a good balance.
+                jpeg_quality_, // Use the member variable
                 JCS_RGB // Assuming RGB input for libjpeg.
             );
             LOG_INFO("VideoOverlayProcessor: Finished JPEG compression.");
@@ -265,33 +267,7 @@ void VideoOverlayProcessor::draw_overlays(ImageData& image_data, const std::vect
     }
 }
 
-// BGR to YCbCr conversion - not currently used directly, as libjpeg-turbo JCS_RGB often works with BGR input directly.
-// This function is kept for reference or if explicit color space conversion becomes necessary.
-/**
- * @brief Converts RGB pixel components to YCbCr (YUV) color space.
- *
- * This function implements a standard approximation for converting Red, Green,
- * Blue color values to Luma (Y) and Chrominance (Cb, Cr) components,
- * clamping the output values to the 0-255 range.
- *
- * @param r Red component (0-255).
- * @param g Green component (0-255).
- * @param b Blue component (0-255).
- * @param y Output Luma component.
- * @param cb Output Blue-difference chrominance component.
- * @param cr Output Red-difference chrominance component.
- */
-void VideoOverlayProcessor::rgb_to_ycbcr(uint8_t r, uint8_t g, uint8_t b, uint8_t& y, uint8_t& cb, uint8_t& cr) {
-    // Standard BT.601 conversion (approximated for integer math)
-    y = static_cast<uint8_t>(std::round( 0.299 * r + 0.587 * g + 0.114 * b));
-    cb = static_cast<uint8_t>(std::round(-0.169 * r - 0.331 * g + 0.500 * b + 128));
-    cr = static_cast<uint8_t>(std::round( 0.500 * r - 0.419 * g - 0.081 * b + 128));
 
-    // Clamp values to 0-255 (std::min/max with uint8_t can be tricky, cast to int first)
-    y = std::min((int)255, std::max((int)0, (int)y));
-    cb = std::min((int)255, std::max((int)0, (int)cb));
-    cr = std::min((int)255, std::max((int)0, (int)cr));
-}
 
 void VideoOverlayProcessor::get_state() const {
     LOG_INFO("--- VideoOverlayProcessor State ---");
