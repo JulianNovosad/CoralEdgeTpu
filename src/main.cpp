@@ -20,7 +20,7 @@
 #include "udp_video_sender.h"
 #include "video_overlay_processor.h"
 // #include "image_resizer.h" // Obsolete: Image resizing is now handled by the ISP.
-#include "frame_displayer.h"
+// #include "frame_displayer.h" // Obsolete: Display is handled by MJPEG stream.
 
 std::atomic<bool> shutdown_requested(false);
 
@@ -42,6 +42,8 @@ std::vector<std::string> load_labels(const std::string& path) {
 int main(int argc, char** argv) {
     Logger& logger = Logger::getInstance();
     LOG_INFO("CoralEdgeTpu Detector Starting...");
+
+    signal(SIGPIPE, SIG_IGN);
 
     // --- Application Configuration ---
     const std::string model_path = "/home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite";
@@ -123,11 +125,9 @@ int main(int argc, char** argv) {
         !udp_raw_video_sender.start() ||
         !video_overlay_processor.start() ||
         !udp_bounding_box_sender.start() ||
-        // !frame_displayer.start() || // Disabled FrameDisplayer
         !overlaid_mjpeg_server.start()) {
         
         LOG_ERROR("Failed to start one or more modules. Shutting down.");
-        // frame_displayer.stop(); // Disabled FrameDisplayer
         overlaid_mjpeg_server.stop();
         udp_bounding_box_sender.stop();
         video_overlay_processor.stop();
@@ -158,6 +158,5 @@ int main(int argc, char** argv) {
     input_thread.join();
 
     LOG_INFO("Shutting down application modules...");
-    // frame_displayer.stop(); // Disabled FrameDisplayer
     overlaid_mjpeg_server.stop();
 }

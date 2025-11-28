@@ -180,7 +180,20 @@ void MjpegServer::server_thread_func(std::promise<bool> server_ready_promise) {
 }
 
 void MjpegServer::handle_client(int client_sock) {
-    LOG_INFO("MjpegServer: Sent HTTP headers to client (sock: " + std::to_string(client_sock) + ")");
+    // Send the initial HTTP response header for a multipart MJPEG stream.
+    std::string header = "HTTP/1.0 200 OK\r\n";
+    header += "Content-Type: multipart/x-mixed-replace; boundary=--" + MJPEG_BOUNDARY + "\r\n";
+    header += "Cache-Control: no-cache\r\n";
+    header += "Pragma: no-cache\r\n";
+    header += "Connection: close\r\n";
+    header += "\r\n"; // End of headers
+    
+    if (send(client_sock, header.c_str(), header.length(), MSG_NOSIGNAL) < 0) {
+        LOG_ERROR("MjpegServer: Failed to send initial HTTP headers to client (sock: " + std::to_string(client_sock) + "): " + std::string(strerror(errno)));
+        close(client_sock);
+        return;
+    }
+    LOG_INFO("MjpegServer: Sent initial HTTP headers to client (sock: " + std::to_string(client_sock) + ")");
 
     // --- TEMPORARY: STATIC RED JPEG FOR DIAGNOSTICS ---
     cv::Mat red_frame(480, 640, CV_8UC3, cv::Scalar(0, 0, 255)); // BGR format (Blue=0, Green=0, Red=255)
@@ -207,19 +220,19 @@ void MjpegServer::handle_client(int client_sock) {
         std::string content_headers = content_ss.str();
 
         // Send content headers for the current JPEG frame.
-        if (send(client_sock, content_headers.c_str(), content_headers.length(), 0) < 0) {
+        if (send(client_sock, content_headers.c_str(), content_headers.length(), MSG_NOSIGNAL) < 0) {
             LOG_ERROR("MjpegServer: Failed to send content headers for STATIC RED frame (size: " + std::to_string(red_jpeg_data.size()) + ", sock: " + std::to_string(client_sock) + "): " + std::string(strerror(errno)));
             break; // Exit loop if send fails.
         }
 
         // Send the actual JPEG data.
-        if (send(client_sock, (const char*)red_jpeg_data.data(), red_jpeg_data.size(), 0) < 0) {
+        if (send(client_sock, (const char*)red_jpeg_data.data(), red_jpeg_data.size(), MSG_NOSIGNAL) < 0) {
             LOG_ERROR("MjpegServer: Failed to send STATIC RED JPEG data (size: " + std::to_string(red_jpeg_data.size()) + ", sock: " + std::to_string(client_sock) + "): " + std::string(strerror(errno)));
             break; // Exit loop if send fails.
         }
 
         // Send the boundary delimiter after the JPEG data.
-        if (send(client_sock, "\r\n", 2, 0) < 0) {
+        if (send(client_sock, "\r\n", 2, MSG_NOSIGNAL) < 0) {
             LOG_ERROR("MjpegServer: Failed to send boundary delimiter (sock: " + std::to_string(client_sock) + "): " + std::string(strerror(errno)));
             break; // Exit loop if send fails.
         }
