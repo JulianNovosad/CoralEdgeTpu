@@ -30,7 +30,10 @@ extern "C" {
      * @param options A pointer to delegate-specific options (can be nullptr for default).
      * @return A pointer to a TfLiteDelegate instance, or nullptr on failure.
      */
-    TfLiteDelegate* tflite_plugin_create_delegate(const void* options);
+    TfLiteDelegate* tflite_plugin_create_delegate(char** options_keys,
+                                                  char** options_values,
+                                                  size_t num_options,
+                                                  void (*report_error)(const char*));
 
     /**
      * @brief Destroys an Edge TPU delegate instance.
@@ -75,7 +78,7 @@ InferenceEngine::InferenceEngine(const std::string& model_path, ImageQueue& inpu
     
     // Pre-check for Edge TPU delegate creation during initialization.
     // This helps in failing fast if the Edge TPU is not available or drivers are not installed.
-    TfLiteDelegate* test_delegate = tflite_plugin_create_delegate(nullptr);
+    TfLiteDelegate* test_delegate = tflite_plugin_create_delegate(nullptr, nullptr, 0, nullptr);
     if (!test_delegate) {
         throw std::runtime_error("Failed to create Edge TPU delegate during initialization. Ensure Edge TPU drivers are installed and device is connected.");
     }
@@ -185,7 +188,7 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
     }
 
     // Create the Edge TPU delegate.
-    TfLiteDelegate* delegate = tflite_plugin_create_delegate(nullptr);
+    TfLiteDelegate* delegate = tflite_plugin_create_delegate(nullptr, nullptr, 0, nullptr);
     if (!delegate) {
         LOG_ERROR("Failed to create EdgeTPU delegate. Ensure libedgetpu1-std is installed and device is connected.");
         return nullptr;
@@ -222,10 +225,8 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
  * prepares the input tensor, invokes the TensorFlow Lite interpreter, parses
  * the output tensors, and pushes detection results to the UDP output queue.
  * The loop continues until the `running_` flag is set to false.
- */
+ */// The main function for an inference worker thread.
 void InferenceEngine::worker_thread_func() {
-    // Each worker thread creates and owns its own interpreter instance.
-    // This avoids thread-safety issues with a single interpreter.
     std::unique_ptr<tflite::Interpreter> interpreter = create_interpreter();
     if (!interpreter) {
         LOG_ERROR("Worker thread failed to create interpreter. Exiting thread.");
@@ -234,13 +235,12 @@ void InferenceEngine::worker_thread_func() {
     
     ImageData input_image;
     while (running_) {
-        // Attempt to pop an image from the input queue.
-        // The queue's pop method will block until data is available or `running_` is false.
         if (input_queue_.pop(input_image)) {
             // Validate input image data size against expected model input size.
+            // The input image is now expected to be RGB, so the size check is direct.
             int expected_input_size = input_width_ * input_height_ * input_channels_;
             if (input_image.data.size() != expected_input_size) {
-                 LOG_ERROR("Input image data size (" + std::to_string(input_image.data.size()) + 
+                 LOG_ERROR("Input RGB image data size (" + std::to_string(input_image.data.size()) + 
                            ") does not match expected model input size (" + std::to_string(expected_input_size) + "). Skipping frame.");
                  continue; // Skip this frame and try the next one.
             }
@@ -265,40 +265,19 @@ void InferenceEngine::worker_thread_func() {
     }
 }
 
-/**
- * @brief Prepares the interpreter's input tensor with image data.
- *
- * This function copies the raw image data into the interpreter's input tensor.
- * It also handles the color channel swap from BGR (from camera) to RGB (expected by model).
- * Performs validation checks for tensor type and size.
- *
- * @param interpreter A pointer to the TensorFlow Lite interpreter.
- * @param image The ImageData object containing the raw image pixels.
- */
+// Prepares the interpreter's input tensor with image data.
 void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const ImageData& image) {
     int input_tensor_idx = interpreter->inputs()[0];
     TfLiteTensor* input_tensor = interpreter->tensor(input_tensor_idx);
 
-    // Validate input tensor type. Expects UINT8 for quantized models.
     if (input_tensor->type != kTfLiteUInt8) {
         LOG_ERROR("Input tensor type is not kTfLiteUInt8 as expected. Current type: " + std::to_string(input_tensor->type) + ". Skipping frame.");
         return;
     }
-    // The input_tensor->bytes (expected size) should have already been validated against image.data.size()
-    // before this call in worker_thread_func.
 
-    // Get a pointer to the input tensor's data buffer.
     uint8_t* tensor_data = interpreter->typed_input_tensor<uint8_t>(0);
-    const uint8_t* image_data = image.data.data();
-    int num_pixels = input_width_ * input_height_;
-
-    // Perform BGR to RGB conversion by swapping the red and blue channels.
-    // Assuming 3 channels (RGB) in both input and output.
-    for (int i = 0; i < num_pixels; ++i) {
-        tensor_data[i * 3 + 0] = image_data[i * 3 + 2]; // R = B (from source)
-        tensor_data[i * 3 + 1] = image_data[i * 3 + 1]; // G = G (from source)
-        tensor_data[i * 3 + 2] = image_data[i * 3 + 0]; // B = R (from source)
-    }
+    // Directly copy RGB data, no conversion needed as input_image is now RGB.
+    memcpy(tensor_data, image.data.data(), image.data.size());
 }
 
 /**
