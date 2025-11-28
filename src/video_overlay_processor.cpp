@@ -73,8 +73,7 @@ bool VideoOverlayProcessor::start() {
         return false;
     }
     running_ = true;
-    // Set associated queues to running state if needed, though they are usually managed externally.
-    overlaid_mjpeg_output_queue_.set_running(true);
+    overlaid_mjpeg_output_queue_.set_running(true); // Ensure output queue is marked as running
     processing_thread_ = std::thread(&VideoOverlayProcessor::processing_thread_func, this);
     LOG_INFO("VideoOverlayProcessor started.");
     return true;
@@ -91,6 +90,9 @@ void VideoOverlayProcessor::stop() {
         return; // Already stopped.
     }
     LOG_INFO("Stopping VideoOverlayProcessor...");
+    // Signal all associated queues to stop.
+    inference_image_queue_.set_running(false);
+    detection_results_queue_.set_running(false);
     overlaid_mjpeg_output_queue_.set_running(false);
     if (processing_thread_.joinable()) {
         processing_thread_.join();
@@ -108,62 +110,60 @@ void VideoOverlayProcessor::stop() {
  */
 void VideoOverlayProcessor::processing_thread_func() {
     ImageData current_image;
-    // The detection_results_queue_ is designed to pass std::vector<DetectionResult>,
-    // so we need a place to store it.
     std::vector<DetectionResult> current_detections; 
 
-    while (running_) {
-        // Try to get the latest image. This queue is shared with InferenceEngine.
-        // It's crucial that this doesn't block indefinitely if the InferenceEngine is also popping.
-        // The pop operation in ThreadSafeQueue handles blocking until data or shutdown.
-        if (!inference_image_queue_.pop(current_image)) {
-            // If pop returns false, it means the queue is empty and stopping.
-            if (!running_) break; // If we are stopping, exit loop
-            std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Otherwise, wait for more images
-            continue;
-        }
-
-        // Try to get the latest detections. This queue is shared with UdpSender.
-        // Using pop here means we will consume detections. For overlay, we want the detections
-        // that are as close in time to the current_image as possible.
-        // Ideally, detections would be timestamped and matched, but for simplicity,
-        // we take the latest available detections. `pop` from UdpQueue clears if empty.
-        detection_results_queue_.pop(current_detections); 
-        // If the pop failed (queue empty and stopping), current_detections will be empty, which is fine.
-
-        // Create a modifiable copy of the image data for drawing.
-        // We assume image_to_overlay.data is BGR format as output by rpicam-vid for inference.
-        ImageData image_to_overlay = current_image;
+        while (running_) {
+            LOG_INFO("VideoOverlayProcessor: processing_thread_func loop started. running_ = " + std::to_string(running_));
+            LOG_INFO("VideoOverlayProcessor: Attempting to pop image from queue.");
+            if (!inference_image_queue_.pop(current_image)) {
+                LOG_INFO("VideoOverlayProcessor: Pop image returned false. running_ = " + std::to_string(running_));
+                break; // Exit loop if queue is empty and stop requested.
+            }
+            LOG_INFO("VideoOverlayProcessor: Successfully popped image. running_ = " + std::to_string(running_));
+    
+            // Try to get the latest detections.
+            if (!detection_results_queue_.pop(current_detections)) {
+                LOG_INFO("VideoOverlayProcessor: Pop detections returned false. running_ = " + std::to_string(running_));
+                if (!running_) { // Check after pop if shutdown was requested during wait
+                    break; // Exit if pop failed due to shutdown
+                }
+                current_detections.clear(); // Ensure it's empty if pop failed but still running
+            }
+            LOG_INFO("VideoOverlayProcessor: Popped detections (if any). running_ = " + std::to_string(running_));        ImageData image_to_overlay = current_image;
 
         // Draw bounding boxes and labels onto the image data if detections are present.
         if (!current_detections.empty()) {
+            LOG_INFO("VideoOverlayProcessor: Drawing overlays.");
             draw_overlays(image_to_overlay, current_detections);
+            LOG_INFO("VideoOverlayProcessor: Finished drawing overlays.");
         }
 
         // Compress the overlaid image data into MJPEG format.
         try {
+            LOG_INFO("VideoOverlayProcessor: Starting JPEG compression.");
             // The input color space for JpegCompressGuard::compress_image
-            // needs to match the format of image_to_overlay.data.
-            // Since rpicam-vid outputs BGR888 and draw_overlays operates on it,
-            // the data is BGR. libjpeg-turbo's JCS_RGB often handles BGR input
-            // by internally swapping channels if configured, or it can be explicitly
-            // told it's BGR using JCS_EXT_BGR if available.
-            // For now, we will assume JCS_RGB and that libjpeg will handle the conversion
-            // from BGR input to YCbCr for JPEG compression.
+            // is now assumed to be RGB888 directly. JCS_RGB usually handles this correctly.
             std::vector<uint8_t> mjpeg_data = jpeg_compressor_.compress_image(
                 image_to_overlay.data.data(),
                 image_to_overlay.width,
                 image_to_overlay.height,
                 80, // JPEG quality (0-100), 80 is a good balance.
-                JCS_RGB // Assuming libjpeg handles BGR as RGB input.
+                JCS_RGB // Assuming RGB input for libjpeg.
             );
+            LOG_INFO("VideoOverlayProcessor: Finished JPEG compression.");
 
+            if (mjpeg_data.empty()) {
+                LOG_ERROR("VideoOverlayProcessor: JPEG compression resulted in empty data. Skipping frame.");
+                continue; // Skip pushing empty frame
+            }
+            
             // Push the compressed MJPEG frame to the output queue.
             ImageFrame overlaid_frame;
             overlaid_frame.width = image_to_overlay.width;
             overlaid_frame.height = image_to_overlay.height;
             overlaid_frame.jpeg_data = std::move(mjpeg_data);
             overlaid_mjpeg_output_queue_.push(std::move(overlaid_frame));
+            LOG_INFO("VideoOverlayProcessor: Pushed overlaid frame to HTTP queue."); // Added log
         } catch (const std::runtime_error& e) {
             LOG_ERROR("VideoOverlayProcessor: JPEG compression failed: " + std::string(e.what()));
         }
@@ -182,6 +182,7 @@ void VideoOverlayProcessor::processing_thread_func() {
  * @param detections The detection results to overlay, containing bounding box coordinates and class IDs.
  */
 void VideoOverlayProcessor::draw_overlays(ImageData& image_data, const std::vector<DetectionResult>& detections) {
+    LOG_INFO("VideoOverlayProcessor: Entering draw_overlays.");
     const int channels = 3; // Assuming BGR format (3 channels).
     const int width = image_data.width;
     const int height = image_data.height;
