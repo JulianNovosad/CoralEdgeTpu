@@ -75,6 +75,7 @@ public:
      * @return True if the sender is running, false otherwise.
      */
     bool is_running() const { return running_; }
+    void get_state() const;
 
 private:
     /**

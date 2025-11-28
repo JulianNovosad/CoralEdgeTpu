@@ -34,10 +34,9 @@ public:
     bool start();
     void stop();
     bool is_running() const { return running_; }
-
-private:
-    void request_complete_callback(libcamera::Request* request);
+    void get_state() const;
     bool setup_camera();
+    void request_complete_callback(libcamera::Request* request);
 
 
 
