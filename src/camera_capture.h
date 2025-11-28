@@ -55,6 +55,7 @@ private:
     libcamera::Stream* tpu_stream_ = nullptr;
     std::unique_ptr<libcamera::FrameBufferAllocator> allocator_;
     std::vector<std::unique_ptr<libcamera::Request>> requests_; ///< Store requests created.
+    std::vector<libcamera::Request*> returned_requests_; // Stores raw pointers to requests returned during shutdown for explicit destruction
 
     libcamera::PixelFormat actual_pixel_format_; ///< Actual pixel format provided by the camera.
     libcamera::Size actual_size_; ///< Actual size provided by the camera.
