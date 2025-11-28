@@ -15,6 +15,7 @@
 #include <vector>
 #include <thread>
 #include <atomic>
+#include <future> // For std::promise and std::future
 #include <sys/socket.h> // For socket programming types
 
 #include "pipeline_structs.h" // Use the new central header
@@ -47,6 +48,10 @@ public:
      */
     ~MjpegServer();
 
+    // Delete copy constructor and copy assignment operator due to std::atomic member
+    MjpegServer(const MjpegServer&) = delete;
+    MjpegServer& operator=(const MjpegServer&) = delete;
+
     /**
      * @brief Starts the MJPEG server.
      *
@@ -70,6 +75,7 @@ public:
      * @return True if the server is running, false otherwise.
      */
     bool is_running() const { return running_; }
+    void get_state() const;
 
 private:
     /**
@@ -78,7 +84,7 @@ private:
      * This function binds to the specified port, listens for incoming connections,
      * accepts clients, and then detaches a new thread to handle each client.
      */
-    void server_thread_func();
+    void server_thread_func(std::promise<bool> server_ready_promise);
 
     /**
      * @brief Handles an individual client connection for MJPEG streaming.
@@ -94,6 +100,7 @@ private:
     int port_; ///< The TCP port number the server listens on.
     MjpegQueue& input_queue_; ///< Reference to the queue from which MJPEG frames are retrieved.
     std::atomic<bool> running_ = false; ///< Atomic flag to control the server's running state.
+    std::promise<bool> server_ready_promise_; // Added for synchronization
     std::thread server_thread_; ///< The main thread running the server_thread_func.
     int server_sock_ = -1; ///< The socket file descriptor for the listening server socket.
 };

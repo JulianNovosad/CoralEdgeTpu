@@ -45,6 +45,14 @@ int main(int argc, char** argv) {
 
     signal(SIGPIPE, SIG_IGN);
 
+    bool dump_state_requested = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--dump-state") {
+            dump_state_requested = true;
+            break;
+        }
+    }
+
     // --- Application Configuration ---
     const std::string model_path = "/home/pi/CoralEdgeTpu/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite";
     const std::string labels_path = "/home/pi/CoralEdgeTpu/coco_labels.txt";
@@ -66,33 +74,96 @@ int main(int argc, char** argv) {
     UdpQueue inference_results_queue;
     MjpegQueue overlaid_mjpeg_to_http_queue;
 
-    // --- Module Initialization ---
+    // These variables need to be declared once in an outer scope
+    std::vector<std::string> labels;
+    std::unique_ptr<InferenceEngine> inference_engine;
+    unsigned int inference_width = 0, inference_height = 0;
+    unsigned int tpu_stream_width = 0, tpu_stream_height = 0;
+
+    // --- Module Initialization (Conditional) ---
+    if (dump_state_requested) {
+        LOG_INFO("--- Application State Dump Requested ---");
+
+        if (!std::filesystem::exists(model_path)) {
+            LOG_ERROR("Model file not found: " + model_path);
+            logger.stop_writer_thread();
+            return 1;
+        }
+        labels = load_labels(labels_path); // Assign to pre-declared var
+        if (labels.empty()) {
+            LOG_ERROR("Labels file not found or is empty: " + labels_path);
+            logger.stop_writer_thread();
+            return 1;
+        }
+
+        try {
+            inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, inference_results_queue, 2); // Assign
+        } catch (const std::runtime_error& e) {
+            LOG_ERROR("Failed to initialize Inference Engine for state dump: " + std::string(e.what()));
+            logger.stop_writer_thread();
+            return 1;
+        }
+        
+        inference_width = inference_engine->get_input_width(); // Assign
+        inference_height = inference_engine->get_input_height(); // Assign
+        tpu_stream_width = inference_width; // Assign
+        tpu_stream_height = inference_height; // Assign
+
+        std::list<std::reference_wrapper<ImageQueue>> primary_camera_output_queues;
+        primary_camera_output_queues.push_back(std::ref(full_res_for_overlay_queue));
+        primary_camera_output_queues.push_back(std::ref(full_res_for_udp_queue));
+
+        CameraCapture primary_camera(high_res_width, high_res_height, tpu_stream_width, tpu_stream_height, primary_camera_output_queues, tpu_inference_queue, camera_watchdog_timeout);
+        if (!primary_camera.setup_camera()) { // Call setup_camera explicitly for dump state
+            LOG_ERROR("Failed to setup camera for state dump.");
+            logger.stop_writer_thread();
+            return 1;
+        }
+        UdpVideoSender udp_raw_video_sender(MOBILE_APP_IP, UDP_RAW_VIDEO_PORT, full_res_for_udp_queue);
+        VideoOverlayProcessor video_overlay_processor(full_res_for_overlay_queue, inference_results_queue, overlaid_mjpeg_to_http_queue, labels);
+        UdpSender udp_bounding_box_sender(MOBILE_APP_IP, UDP_BOUNDING_BOX_PORT, inference_results_queue);
+        MjpegServer overlaid_mjpeg_server(HTTP_OVERLAID_VIDEO_PORT, overlaid_mjpeg_to_http_queue);
+
+        // Call get_state() on each initialized module
+        primary_camera.get_state();
+        inference_engine->get_state();
+        udp_raw_video_sender.get_state();
+        video_overlay_processor.get_state();
+        udp_bounding_box_sender.get_state();
+        overlaid_mjpeg_server.get_state();
+
+        LOG_INFO("--- Application State Dump Complete ---");
+        logger.stop_writer_thread();
+        return 0; // Exit after dumping state
+    }
+
+    // --- Module Initialization (Normal Run) ---
     if (!std::filesystem::exists(model_path)) {
         LOG_ERROR("Model file not found: " + model_path);
         return 1;
     }
-    std::vector<std::string> labels = load_labels(labels_path);
+    labels = load_labels(labels_path); // Assign to pre-declared var
     if (labels.empty()) {
         LOG_ERROR("Labels file not found or is empty: " + labels_path);
         return 1;
     }
 
-    std::unique_ptr<InferenceEngine> inference_engine;
     try {
         // The inference engine now reads directly from the camera's TPU queue.
-        inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, inference_results_queue, 2);
+        inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, inference_results_queue, 2); // Assign
     } catch (const std::runtime_error& e) {
         LOG_ERROR("Failed to initialize Inference Engine: " + std::string(e.what()));
         return 1;
     }
     
-    const unsigned int inference_width = inference_engine->get_input_width();
-    const unsigned int inference_height = inference_engine->get_input_height();
+    inference_width = inference_engine->get_input_width(); // Assign
+    inference_height = inference_engine->get_input_height(); // Assign
 
     // The TPU stream will now be requested at the exact inference resolution,
     // making the ImageResizer redundant.
-    const unsigned int tpu_stream_width = inference_width;
-    const unsigned int tpu_stream_height = inference_height;
+    tpu_stream_width = inference_width; // Assign
+    tpu_stream_height = inference_height; // Assign
+
 
     LOG_INFO("--- Configuration ---");
     LOG_INFO(std::string("  High-res Camera: ") + std::to_string(high_res_width) + "x" + std::to_string(high_res_height));

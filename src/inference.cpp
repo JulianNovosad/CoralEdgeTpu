@@ -385,3 +385,12 @@ void InferenceEngine::get_performance_metrics() {
     total_inferences_ = 0;
     performance_start_time_ = std::chrono::high_resolution_clock::now();
 }
+
+void InferenceEngine::get_state() const {
+    LOG_INFO("--- InferenceEngine State ---");
+    LOG_INFO("  Running: " + std::to_string(running_));
+    LOG_INFO("  Model Path: " + model_path_);
+    LOG_INFO("  Input Dimensions: " + std::to_string(input_width_) + "x" + std::to_string(input_height_) + "x" + std::to_string(input_channels_));
+    LOG_INFO("  Number of Worker Threads: " + std::to_string(num_threads_));
+    LOG_INFO("-----------------------------");
+}

@@ -62,6 +62,7 @@ public:
      * @return True if running, false otherwise.
      */
     bool is_running() const { return running_; }
+    void get_state() const;
 
 private:
     /**

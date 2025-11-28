@@ -292,3 +292,10 @@ void VideoOverlayProcessor::rgb_to_ycbcr(uint8_t r, uint8_t g, uint8_t b, uint8_
     cb = std::min((int)255, std::max((int)0, (int)cb));
     cr = std::min((int)255, std::max((int)0, (int)cr));
 }
+
+void VideoOverlayProcessor::get_state() const {
+    LOG_INFO("--- VideoOverlayProcessor State ---");
+    LOG_INFO("  Running: " + std::to_string(running_));
+    LOG_INFO("  Number of Labels: " + std::to_string(labels_.size()));
+    LOG_INFO("---------------------------------");
+}

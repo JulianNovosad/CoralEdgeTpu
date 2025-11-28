@@ -98,6 +98,7 @@ public:
      * @return The height in pixels.
      */
     int get_input_height() const { return input_height_; }
+    void get_state() const;
 
     void get_performance_metrics();
 
