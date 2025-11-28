@@ -75,13 +75,15 @@ bool CameraCapture::start() {
     // Queue initial requests
     frame_count_ = 0;
     last_frame_time_ = std::chrono::high_resolution_clock::now();
-    for (std::unique_ptr<libcamera::Request>& req_ptr : requests_) { 
+    for (std::unique_ptr<libcamera::Request>& req_ptr : requests_) {
+        LOG_INFO("CameraCapture: Attempting to queue request.");
         if (camera_->queueRequest(req_ptr.release())) { // Release unique_ptr ownership
             LOG_ERROR("Failed to queue initial request.");
             running_ = false; // Signal failure
             stop(); // Attempt to clean up
             return false;
         }
+        LOG_INFO("CameraCapture: Successfully queued request.");
     }
     requests_.clear(); // Unique_ptrs moved, so vector is logically empty
 
@@ -163,13 +165,13 @@ bool CameraCapture::setup_camera() {
 
     // Configure main stream (index 0)
     libcamera::StreamConfiguration& mainCfg = config->at(0);
-    mainCfg.pixelFormat = libcamera::formats::BGR888;
+    mainCfg.pixelFormat = libcamera::formats::RGB888;
     mainCfg.size.width = width_;
     mainCfg.size.height = height_;
 
     // Configure tpu stream (index 1)
     libcamera::StreamConfiguration& tpuCfg = config->at(1);
-    tpuCfg.pixelFormat = libcamera::formats::BGR888;
+    tpuCfg.pixelFormat = libcamera::formats::RGB888;
     tpuCfg.size.width = tpu_width_;
     tpuCfg.size.height = tpu_height_;
     
@@ -310,23 +312,12 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     if (video_mmap_ptr == MAP_FAILED) {
         LOG_ERROR("CameraCapture: Failed to mmap video stream frame buffer: " + std::string(strerror(errno)));
     } else {
-        // --- Correct, row-by-row copy to handle stride ---
         ImageData video_image_data;
         video_image_data.width = video_cfg.size.width;
         video_image_data.height = video_cfg.size.height;
-        const unsigned int video_line_bytes = video_cfg.size.width * 3; // BGR888 is 3 bytes per pixel
-        video_image_data.data.resize(video_line_bytes * video_cfg.size.height);
-
-        uint8_t* dest_ptr = video_image_data.data.data();
-        const uint8_t* src_ptr = static_cast<const uint8_t*>(video_mmap_ptr);
-
-        for (unsigned int i = 0; i < video_cfg.size.height; ++i) {
-            memcpy(dest_ptr, src_ptr, video_line_bytes);
-            src_ptr += video_cfg.stride;
-            dest_ptr += video_line_bytes;
-        }
-        // --- End of correct copy ---
-
+        // Assuming RGB888 is 3 bytes per pixel
+        video_image_data.data.resize(video_image_data.width * video_image_data.height * 3); 
+        std::memcpy(video_image_data.data.data(), video_mmap_ptr, video_image_data.data.size());
         video_image_data.timestamp = std::chrono::high_resolution_clock::now();
 
         for (auto& queue_ref : main_output_queues_) {
@@ -338,30 +329,18 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     // Process TPU Stream
     const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
     const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
-    const libcamera::FrameBuffer::Plane& tpu_plane = tpu_fb->planes()[0]; // Still need this for mmap
+    const libcamera::FrameBuffer::Plane& tpu_plane = tpu_fb->planes()[0];
 
     void* tpu_mmap_ptr = mmap(NULL, tpu_plane.length, PROT_READ, MAP_SHARED, tpu_plane.fd.get(), 0);
     if (tpu_mmap_ptr == MAP_FAILED) {
         LOG_ERROR("CameraCapture: Failed to mmap TPU stream frame buffer: " + std::string(strerror(errno)));
     } else {
-        // --- Correct, row-by-row copy to handle stride ---
         ImageData tpu_image_data;
         tpu_image_data.width = tpu_cfg.size.width;
         tpu_image_data.height = tpu_cfg.size.height;
-        const unsigned int tpu_line_bytes = tpu_cfg.size.width * 3; // BGR888 is 3 bytes per pixel
-        LOG_INFO("Resizing TPU image data to: " + std::to_string(tpu_line_bytes * tpu_cfg.size.height));
-        tpu_image_data.data.resize(tpu_line_bytes * tpu_cfg.size.height);
-        
-        uint8_t* dest_ptr = tpu_image_data.data.data();
-        const uint8_t* src_ptr = static_cast<const uint8_t*>(tpu_mmap_ptr);
-
-        for (unsigned int i = 0; i < tpu_cfg.size.height; ++i) {
-            memcpy(dest_ptr, src_ptr, tpu_line_bytes);
-            src_ptr += tpu_cfg.stride;
-            dest_ptr += tpu_line_bytes;
-        }
-        // --- End of correct copy ---
-
+        // Assuming RGB888 is 3 bytes per pixel
+        tpu_image_data.data.resize(tpu_image_data.width * tpu_image_data.height * 3);
+        std::memcpy(tpu_image_data.data.data(), tpu_mmap_ptr, tpu_image_data.data.size());
         tpu_image_data.timestamp = std::chrono::high_resolution_clock::now();
         tpu_output_queue_.push_and_drop_if_full(tpu_image_data);
         munmap(tpu_mmap_ptr, tpu_plane.length);
@@ -389,11 +368,4 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     }
     
     camera_->queueRequest(request);
-}
-
-void CameraCapture::convert_yuv420_to_rgb888(const libcamera::FrameBuffer* buffer, const libcamera::StreamConfiguration& stream_config, ImageData& rgb_image) {
-    // This function is now deprecated and should not be used.
-    // The pipeline has been updated to request native BGR888 frames from the camera,
-    // eliminating the need for CPU-based color conversion.
-    LOG_ERROR("convert_yuv420_to_rgb888 is deprecated and should not be called.");
 }
