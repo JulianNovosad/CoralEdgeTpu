@@ -1,0 +1,15 @@
+## Gemini Added Memories
+- Current Project State:
+- Fixed: Generated camera configuration, Qt errors, shutdown signal, VideoOverlayProcessor shutdown stall, and the ERROR Camera camera.cpp:1344 Request(X:C:0/2:0) is not valid.
+- Resolution: Implemented dual-stream configuration, corrected frame buffer access, and applied the critical request recycling fix using `libcamera::Request::ReuseBuffers`.
+- Last Code State:
+  - src/main.cpp: High-res: 1536x864, TPU: 320x320. Dual-stream passed to CameraCapture.
+  - src/camera_capture.h: Updated CameraCapture constructor with tpu_width, tpu_height, tpu_stream_ and video_stream_ are members. main_output_queues_ and tpu_output_queue_ were also correctly defined.
+  - src/camera_capture.cpp:
+    - Updated CameraCapture constructor to initialize tpu_width_ and tpu_height_.
+    - Modified setup_camera() to generate dual-stream configuration, configure main and TPU streams (resolution, RGB888 format), validate and apply the configuration, get stream pointers, allocate buffers for both streams, and create requests with attached buffers. Removed global `camera_->setControls` for `AeEnable` and instead set `request->controls().set(libcamera::controls::AeEnable, true);` for each request during creation.
+    - Added a static helper function `process_frame_buffer` for safe memory mapping and data copying.
+    - Updated request_complete_callback to use `process_frame_buffer` for the TPU stream and adapted manual handling for the main stream (pushing to multiple queues).
+    - Implemented the critical request recycling fix using `request->reuse(libcamera::Request::ReuseBuffers)` and removed the problematic manual buffer re-attachment loop.
+  - src/video_overlay_processor.cpp: Fixes for shutdown stall implemented.
+  - src/pipeline_structs.h: No changes yet for timed pop().
