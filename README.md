@@ -17,7 +17,7 @@ Dit elimineert versie-hell, Python-dependency chaos en ontbrekende upstream file
   * Preprocessing
   * Edge TPU delegatie
   * Postprocessing (bounding boxes, scores, klassen)
-* Handmatig gebouwde TensorFlow Lite 2.11.1 voor ARM64
+* Handmatig gebouwde TensorFlow Lite 2.5.0 voor ARM64
 * Gepatchte en gestabiliseerde Flatbuffers-versie
 * Volledige dependency-graph **meegeleverd in deze repo**
 * Werkende example app (`src/main.cpp`)
