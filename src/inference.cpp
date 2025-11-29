@@ -60,8 +60,8 @@ extern "C" {
  * @throws std::runtime_error if the model fails to load, delegate pre-check fails,
  *         or input tensor dimensions are invalid.
  */
-InferenceEngine::InferenceEngine(const std::string& model_path, ImageQueue& input_queue, UdpQueue& udp_output_queue, int num_threads)
-    : model_path_(model_path), input_queue_(input_queue), udp_output_queue_(udp_output_queue), num_threads_(num_threads) {
+InferenceEngine::InferenceEngine(const std::string& model_path, ImageQueue& input_queue, DetectionResultsQueue& detection_results_output_queue, int num_threads)
+    : model_path_(model_path), input_queue_(input_queue), detection_results_output_queue_(detection_results_output_queue), num_threads_(num_threads) {
 
     // Load the TensorFlow Lite model from the file system.
     model_ = tflite::FlatBufferModel::BuildFromFile(model_path_.c_str());
@@ -134,7 +134,7 @@ bool InferenceEngine::start() {
     running_ = true;
     // Signal to associated queues that they should continue running.
     input_queue_.set_running(true);
-    udp_output_queue_.set_running(true);
+    detection_results_output_queue_.set_running(true);
 
     // Create and launch worker threads. Each thread will create its own interpreter.
     for (int i = 0; i < num_threads_; ++i) {
@@ -155,7 +155,7 @@ void InferenceEngine::stop() {
     if (running_.exchange(false)) { // Atomically set running_ to false and check previous value
         LOG_INFO("Stopping InferenceEngine...");
         // Signal associated queues to stop.
-        udp_output_queue_.set_running(false);
+        detection_results_output_queue_.set_running(false);
         input_queue_.set_running(false);
         
         // Join all worker threads to ensure they complete their tasks or exit.
@@ -235,14 +235,14 @@ void InferenceEngine::worker_thread_func() {
     
     ImageData input_image;
     while (running_) {
-        if (input_queue_.pop(input_image)) {
-            // Validate input image data size against expected model input size.
-            // The input image is now expected to be RGB, so the size check is direct.
-            int expected_input_size = input_width_ * input_height_ * input_channels_;
-            if (input_image.data.size() != expected_input_size) {
-                 LOG_ERROR("Input RGB image data size (" + std::to_string(input_image.data.size()) + 
-                           ") does not match expected model input size (" + std::to_string(expected_input_size) + "). Skipping frame.");
-                 continue; // Skip this frame and try the next one.
+            if (input_queue_.pop(input_image)) {
+                LOG_INFO("InferenceEngine received image - Dimensions: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Data size: " + std::to_string(input_image.data.size()));
+                // Validate input image data size against expected model input size.
+                // The input image is now expected to be RGB, so the size check is direct.
+                int expected_input_size = input_width_ * input_height_ * input_channels_;
+                if (input_image.data.size() != expected_input_size) {
+                     LOG_ERROR("Input RGB image data size (" + std::to_string(input_image.data.size()) + 
+                               ") does not match expected model input size (" + std::to_string(expected_input_size) + "). Skipping frame.");                 continue; // Skip this frame and try the next one.
             }
 
             // Prepare the input tensor for the interpreter.
@@ -253,7 +253,7 @@ void InferenceEngine::worker_thread_func() {
             // Invoke the TensorFlow Lite interpreter to perform inference.
             if (interpreter->Invoke() != kTfLiteOk) {
                 LOG_ERROR("Failed to invoke interpreter. Skipping frame.");
-                continue; // Skip this frame.
+                continue; // Skip this.
             }
             
             auto inference_end_time = std::chrono::high_resolution_clock::now(); // End timing
@@ -269,7 +269,7 @@ void InferenceEngine::worker_thread_func() {
             
             // Push detection results to the UDP output queue if any detections were made.
             if (!results.empty()) {
-                udp_output_queue_.push(std::move(results));
+                detection_results_output_queue_.push(std::move(results));
             }
         }
     }

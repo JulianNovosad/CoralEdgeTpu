@@ -1,0 +1,23 @@
+feat: Implement live video and bounding box visualization
+
+This commit introduces live video streaming with bounding box overlays, leveraging the existing HttpServer and VideoOverlayProcessor components.
+
+Key changes include:
+- **src/pipeline_structs.h**: Defined `DetectionResultsQueue` for type-safe passing of detection results.
+- **src/video_overlay_processor.h/.cpp**:
+  - Modified the constructor to accept a `DetectionResultsQueue` for detection results.
+  - Implemented `worker_thread_func` to pop video frames, peek latest detection results, draw bounding boxes and labels onto the frames using OpenCV, and push the overlaid frames to an output queue.
+  - Corrected `start()` and `stop()` methods to use the correct queue member name (`input_video_queue_`).
+  - Changed `start()` method return type to `bool` to indicate success/failure.
+- **src/inference.h/.cpp**:
+  - Updated to use `DetectionResultsQueue` as the output queue type for detection results, replacing the placeholder `UdpQueue`.
+- **src/http_server.h/.cpp**:
+  - Changed `start()` method return type to `bool` to indicate success/failure.
+- **src/main.cpp**:
+  - Created necessary queues (`DetectionResultsQueue detection_results_for_overlay_queue`, `ImageQueue overlaid_video_queue`).
+  - Instantiated `InferenceEngine` to output to `detection_results_for_overlay_queue`.
+  - Instantiated `VideoOverlayProcessor` to consume `main_camera_output_queue` and `detection_results_for_overlay_queue`, and output to `overlaid_video_queue`.
+  - Instantiated `HttpServer` to serve frames from `overlaid_video_queue`.
+  - Updated the startup and shutdown sequences to include `VideoOverlayProcessor` and `HttpServer`.
+
+These changes enable users to access a live video stream with detected objects and their bounding boxes via a web browser.

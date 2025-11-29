@@ -1,15 +1,39 @@
 ## Gemini Added Memories
 - Current Project State:
-- Fixed: Generated camera configuration, Qt errors, shutdown signal, VideoOverlayProcessor shutdown stall, and the ERROR Camera camera.cpp:1344 Request(X:C:0/2:0) is not valid.
-- Resolution: Implemented dual-stream configuration, corrected frame buffer access, and applied the critical request recycling fix using `libcamera::Request::ReuseBuffers`.
+- Fixed: Generated camera configuration, Qt errors, shutdown signal, VideoOverlayProcessor shutdown stall, ERROR Camera camera.cpp:1344 Request(X:C:0/2:0) is not valid, and the image input size mismatch error. Live video and bounding box visualization implemented.
+- Resolution: Implemented dual-stream configuration, corrected frame buffer access with resizing for the TPU stream, applied the critical request recycling fix using `libcamera::Request::ReuseBuffers`, ensured correct scope for variables in `main.cpp`, refined queue management to prevent mixed stream input to the inference engine, and integrated `VideoOverlayProcessor` and `HttpServer` for live visualization.
 - Last Code State:
-  - src/main.cpp: High-res: 1536x864, TPU: 320x320. Dual-stream passed to CameraCapture.
-  - src/camera_capture.h: Updated CameraCapture constructor with tpu_width, tpu_height, tpu_stream_ and video_stream_ are members. main_output_queues_ and tpu_output_queue_ were also correctly defined.
+  - src/main.cpp:
+    - High-res: 1536x864, TPU: 300x300 (after resizing). Dual-stream passed to CameraCapture.
+    - Corrected variable scoping (`inference_engine`, `inf_w`, `inf_h`).
+    - Introduced `main_camera_output_queue` to separate main stream output from `tpu_inference_queue`.
+    - Integrated `VideoOverlayProcessor` and `HttpServer`.
+  - src/camera_capture.h:
+    - Updated CameraCapture constructor to accept `target_tpu_width` and `target_tpu_height`.
+    - Added `target_tpu_width_` and `target_tpu_height_` as private members.
   - src/camera_capture.cpp:
-    - Updated CameraCapture constructor to initialize tpu_width_ and tpu_height_.
-    - Modified setup_camera() to generate dual-stream configuration, configure main and TPU streams (resolution, RGB888 format), validate and apply the configuration, get stream pointers, allocate buffers for both streams, and create requests with attached buffers. Removed global `camera_->setControls` for `AeEnable` and instead set `request->controls().set(libcamera::controls::AeEnable, true);` for each request during creation.
-    - Added a static helper function `process_frame_buffer` for safe memory mapping and data copying.
-    - Updated request_complete_callback to use `process_frame_buffer` for the TPU stream and adapted manual handling for the main stream (pushing to multiple queues).
+    - Updated CameraCapture constructor to initialize `target_tpu_width_` and `target_tpu_height_`.
+    - Modified `process_frame_buffer` to accept target dimensions and implemented `cv::resize` for the TPU stream when actual dimensions don't match.
+    - Updated `request_complete_callback` to pass `target_tpu_width_` and `target_tpu_height_` to `process_frame_buffer` for the TPU stream.
     - Implemented the critical request recycling fix using `request->reuse(libcamera::Request::ReuseBuffers)` and removed the problematic manual buffer re-attachment loop.
-  - src/video_overlay_processor.cpp: Fixes for shutdown stall implemented.
-  - src/pipeline_structs.h: No changes yet for timed pop().
+  - src/video_overlay_processor.h:
+    - Updated constructor signature to accept `DetectionResultsQueue& input_detection_queue`.
+    - Added `input_detection_queue_` as a private member.
+    - Changed `start()` method return type to `bool`.
+  - src/video_overlay_processor.cpp:
+    - Updated constructor to initialize `input_detection_queue_`.
+    - Corrected `input_queue_` references to `input_video_queue_` in `start()` and `stop()`.
+    - Changed `start()` method return type to `bool` and updated implementation.
+    - Implemented `worker_thread_func()` to pop `ImageData`, peek `DetectionResult`, draw bounding boxes and labels using OpenCV, and push the overlaid image to `output_queue_`.
+  - src/inference.h:
+    - Updated constructor signature to use `DetectionResultsQueue& detection_results_output_queue`.
+    - Changed `udp_output_queue_` to `detection_results_output_queue_` as a private member.
+  - src/inference.cpp:
+    - Updated constructor to initialize `detection_results_output_queue_`.
+    - Replaced all occurrences of `udp_output_queue_` with `detection_results_output_queue_`.
+  - src/http_server.h:
+    - Changed `start()` method return type to `bool`.
+  - src/http_server.cpp:
+    - Changed `start()` method return type to `bool` and updated implementation.
+  - src/pipeline_structs.h:
+    - Added `DetectionResultsQueue` as a type alias for `ThreadSafeQueue<std::vector<DetectionResult>>`.

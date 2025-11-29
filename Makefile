@@ -129,6 +129,54 @@ detector/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/build
 .PHONY : detector/fast
 
+civetweb/src/civetweb.o: civetweb/src/civetweb.c.o
+.PHONY : civetweb/src/civetweb.o
+
+# target to build an object file
+civetweb/src/civetweb.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.o
+.PHONY : civetweb/src/civetweb.c.o
+
+civetweb/src/civetweb.i: civetweb/src/civetweb.c.i
+.PHONY : civetweb/src/civetweb.i
+
+# target to preprocess a source file
+civetweb/src/civetweb.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.i
+.PHONY : civetweb/src/civetweb.c.i
+
+civetweb/src/civetweb.s: civetweb/src/civetweb.c.s
+.PHONY : civetweb/src/civetweb.s
+
+# target to generate assembly for a file
+civetweb/src/civetweb.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
+.PHONY : civetweb/src/civetweb.c.s
+
+src/ballistics.o: src/ballistics.cpp.o
+.PHONY : src/ballistics.o
+
+# target to build an object file
+src/ballistics.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/ballistics.cpp.o
+.PHONY : src/ballistics.cpp.o
+
+src/ballistics.i: src/ballistics.cpp.i
+.PHONY : src/ballistics.i
+
+# target to preprocess a source file
+src/ballistics.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/ballistics.cpp.i
+.PHONY : src/ballistics.cpp.i
+
+src/ballistics.s: src/ballistics.cpp.s
+.PHONY : src/ballistics.s
+
+# target to generate assembly for a file
+src/ballistics.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/ballistics.cpp.s
+.PHONY : src/ballistics.cpp.s
+
 src/camera_capture.o: src/camera_capture.cpp.o
 .PHONY : src/camera_capture.o
 
@@ -152,6 +200,54 @@ src/camera_capture.s: src/camera_capture.cpp.s
 src/camera_capture.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/camera_capture.cpp.s
 .PHONY : src/camera_capture.cpp.s
+
+src/config_loader.o: src/config_loader.cpp.o
+.PHONY : src/config_loader.o
+
+# target to build an object file
+src/config_loader.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.o
+.PHONY : src/config_loader.cpp.o
+
+src/config_loader.i: src/config_loader.cpp.i
+.PHONY : src/config_loader.i
+
+# target to preprocess a source file
+src/config_loader.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.i
+.PHONY : src/config_loader.cpp.i
+
+src/config_loader.s: src/config_loader.cpp.s
+.PHONY : src/config_loader.s
+
+# target to generate assembly for a file
+src/config_loader.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.s
+.PHONY : src/config_loader.cpp.s
+
+src/http_server.o: src/http_server.cpp.o
+.PHONY : src/http_server.o
+
+# target to build an object file
+src/http_server.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_server.cpp.o
+.PHONY : src/http_server.cpp.o
+
+src/http_server.i: src/http_server.cpp.i
+.PHONY : src/http_server.i
+
+# target to preprocess a source file
+src/http_server.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_server.cpp.i
+.PHONY : src/http_server.cpp.i
+
+src/http_server.s: src/http_server.cpp.s
+.PHONY : src/http_server.s
+
+# target to generate assembly for a file
+src/http_server.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_server.cpp.s
+.PHONY : src/http_server.cpp.s
 
 src/inference.o: src/inference.cpp.o
 .PHONY : src/inference.o
@@ -177,30 +273,6 @@ src/inference.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/inference.cpp.s
 .PHONY : src/inference.cpp.s
 
-src/jpeg_wrapper.o: src/jpeg_wrapper.cpp.o
-.PHONY : src/jpeg_wrapper.o
-
-# target to build an object file
-src/jpeg_wrapper.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o
-.PHONY : src/jpeg_wrapper.cpp.o
-
-src/jpeg_wrapper.i: src/jpeg_wrapper.cpp.i
-.PHONY : src/jpeg_wrapper.i
-
-# target to preprocess a source file
-src/jpeg_wrapper.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.i
-.PHONY : src/jpeg_wrapper.cpp.i
-
-src/jpeg_wrapper.s: src/jpeg_wrapper.cpp.s
-.PHONY : src/jpeg_wrapper.s
-
-# target to generate assembly for a file
-src/jpeg_wrapper.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.s
-.PHONY : src/jpeg_wrapper.cpp.s
-
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
 
@@ -224,54 +296,6 @@ src/main.s: src/main.cpp.s
 src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
-
-src/mjpeg_server.o: src/mjpeg_server.cpp.o
-.PHONY : src/mjpeg_server.o
-
-# target to build an object file
-src/mjpeg_server.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/mjpeg_server.cpp.o
-.PHONY : src/mjpeg_server.cpp.o
-
-src/mjpeg_server.i: src/mjpeg_server.cpp.i
-.PHONY : src/mjpeg_server.i
-
-# target to preprocess a source file
-src/mjpeg_server.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/mjpeg_server.cpp.i
-.PHONY : src/mjpeg_server.cpp.i
-
-src/mjpeg_server.s: src/mjpeg_server.cpp.s
-.PHONY : src/mjpeg_server.s
-
-# target to generate assembly for a file
-src/mjpeg_server.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/mjpeg_server.cpp.s
-.PHONY : src/mjpeg_server.cpp.s
-
-src/udp_sender.o: src/udp_sender.cpp.o
-.PHONY : src/udp_sender.o
-
-# target to build an object file
-src/udp_sender.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/udp_sender.cpp.o
-.PHONY : src/udp_sender.cpp.o
-
-src/udp_sender.i: src/udp_sender.cpp.i
-.PHONY : src/udp_sender.i
-
-# target to preprocess a source file
-src/udp_sender.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/udp_sender.cpp.i
-.PHONY : src/udp_sender.cpp.i
-
-src/udp_sender.s: src/udp_sender.cpp.s
-.PHONY : src/udp_sender.s
-
-# target to generate assembly for a file
-src/udp_sender.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/udp_sender.cpp.s
-.PHONY : src/udp_sender.cpp.s
 
 src/util_logging.o: src/util_logging.cpp.o
 .PHONY : src/util_logging.o
@@ -297,6 +321,30 @@ src/util_logging.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.s
 .PHONY : src/util_logging.cpp.s
 
+src/video_overlay_processor.o: src/video_overlay_processor.cpp.o
+.PHONY : src/video_overlay_processor.o
+
+# target to build an object file
+src/video_overlay_processor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o
+.PHONY : src/video_overlay_processor.cpp.o
+
+src/video_overlay_processor.i: src/video_overlay_processor.cpp.i
+.PHONY : src/video_overlay_processor.i
+
+# target to preprocess a source file
+src/video_overlay_processor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.i
+.PHONY : src/video_overlay_processor.cpp.i
+
+src/video_overlay_processor.s: src/video_overlay_processor.cpp.s
+.PHONY : src/video_overlay_processor.s
+
+# target to generate assembly for a file
+src/video_overlay_processor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.s
+.PHONY : src/video_overlay_processor.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -306,27 +354,33 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... detector"
+	@echo "... civetweb/src/civetweb.o"
+	@echo "... civetweb/src/civetweb.i"
+	@echo "... civetweb/src/civetweb.s"
+	@echo "... src/ballistics.o"
+	@echo "... src/ballistics.i"
+	@echo "... src/ballistics.s"
 	@echo "... src/camera_capture.o"
 	@echo "... src/camera_capture.i"
 	@echo "... src/camera_capture.s"
+	@echo "... src/config_loader.o"
+	@echo "... src/config_loader.i"
+	@echo "... src/config_loader.s"
+	@echo "... src/http_server.o"
+	@echo "... src/http_server.i"
+	@echo "... src/http_server.s"
 	@echo "... src/inference.o"
 	@echo "... src/inference.i"
 	@echo "... src/inference.s"
-	@echo "... src/jpeg_wrapper.o"
-	@echo "... src/jpeg_wrapper.i"
-	@echo "... src/jpeg_wrapper.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
-	@echo "... src/mjpeg_server.o"
-	@echo "... src/mjpeg_server.i"
-	@echo "... src/mjpeg_server.s"
-	@echo "... src/udp_sender.o"
-	@echo "... src/udp_sender.i"
-	@echo "... src/udp_sender.s"
 	@echo "... src/util_logging.o"
 	@echo "... src/util_logging.i"
 	@echo "... src/util_logging.s"
+	@echo "... src/video_overlay_processor.o"
+	@echo "... src/video_overlay_processor.i"
+	@echo "... src/video_overlay_processor.s"
 .PHONY : help
 
 
