@@ -111,52 +111,10 @@ CMakeFiles/detector.dir/src/inference.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/inference.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/inference.cpp -o CMakeFiles/detector.dir/src/inference.cpp.s
 
-CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: CMakeFiles/detector.dir/flags.make
-CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: src/mjpeg_server.cpp
-CMakeFiles/detector.dir/src/mjpeg_server.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/detector.dir/src/mjpeg_server.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/mjpeg_server.cpp.o -MF CMakeFiles/detector.dir/src/mjpeg_server.cpp.o.d -o CMakeFiles/detector.dir/src/mjpeg_server.cpp.o -c /home/pi/CoralEdgeTpu/src/mjpeg_server.cpp
-
-CMakeFiles/detector.dir/src/mjpeg_server.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/mjpeg_server.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/mjpeg_server.cpp > CMakeFiles/detector.dir/src/mjpeg_server.cpp.i
-
-CMakeFiles/detector.dir/src/mjpeg_server.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/mjpeg_server.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/mjpeg_server.cpp -o CMakeFiles/detector.dir/src/mjpeg_server.cpp.s
-
-CMakeFiles/detector.dir/src/udp_sender.cpp.o: CMakeFiles/detector.dir/flags.make
-CMakeFiles/detector.dir/src/udp_sender.cpp.o: src/udp_sender.cpp
-CMakeFiles/detector.dir/src/udp_sender.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/detector.dir/src/udp_sender.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/udp_sender.cpp.o -MF CMakeFiles/detector.dir/src/udp_sender.cpp.o.d -o CMakeFiles/detector.dir/src/udp_sender.cpp.o -c /home/pi/CoralEdgeTpu/src/udp_sender.cpp
-
-CMakeFiles/detector.dir/src/udp_sender.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/udp_sender.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/udp_sender.cpp > CMakeFiles/detector.dir/src/udp_sender.cpp.i
-
-CMakeFiles/detector.dir/src/udp_sender.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/udp_sender.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/udp_sender.cpp -o CMakeFiles/detector.dir/src/udp_sender.cpp.s
-
-CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o: CMakeFiles/detector.dir/flags.make
-CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o: src/jpeg_wrapper.cpp
-CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o -MF CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o.d -o CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o -c /home/pi/CoralEdgeTpu/src/jpeg_wrapper.cpp
-
-CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/jpeg_wrapper.cpp > CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.i
-
-CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/jpeg_wrapper.cpp -o CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.s
-
 CMakeFiles/detector.dir/src/util_logging.cpp.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/src/util_logging.cpp.o: src/util_logging.cpp
 CMakeFiles/detector.dir/src/util_logging.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/detector.dir/src/util_logging.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/detector.dir/src/util_logging.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/util_logging.cpp.o -MF CMakeFiles/detector.dir/src/util_logging.cpp.o.d -o CMakeFiles/detector.dir/src/util_logging.cpp.o -c /home/pi/CoralEdgeTpu/src/util_logging.cpp
 
 CMakeFiles/detector.dir/src/util_logging.cpp.i: cmake_force
@@ -167,15 +125,87 @@ CMakeFiles/detector.dir/src/util_logging.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/util_logging.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/util_logging.cpp -o CMakeFiles/detector.dir/src/util_logging.cpp.s
 
+CMakeFiles/detector.dir/src/config_loader.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/src/config_loader.cpp.o: src/config_loader.cpp
+CMakeFiles/detector.dir/src/config_loader.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/detector.dir/src/config_loader.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/config_loader.cpp.o -MF CMakeFiles/detector.dir/src/config_loader.cpp.o.d -o CMakeFiles/detector.dir/src/config_loader.cpp.o -c /home/pi/CoralEdgeTpu/src/config_loader.cpp
+
+CMakeFiles/detector.dir/src/config_loader.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/config_loader.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/config_loader.cpp > CMakeFiles/detector.dir/src/config_loader.cpp.i
+
+CMakeFiles/detector.dir/src/config_loader.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/config_loader.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/config_loader.cpp -o CMakeFiles/detector.dir/src/config_loader.cpp.s
+
+CMakeFiles/detector.dir/src/ballistics.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/src/ballistics.cpp.o: src/ballistics.cpp
+CMakeFiles/detector.dir/src/ballistics.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/detector.dir/src/ballistics.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/ballistics.cpp.o -MF CMakeFiles/detector.dir/src/ballistics.cpp.o.d -o CMakeFiles/detector.dir/src/ballistics.cpp.o -c /home/pi/CoralEdgeTpu/src/ballistics.cpp
+
+CMakeFiles/detector.dir/src/ballistics.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/ballistics.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/ballistics.cpp > CMakeFiles/detector.dir/src/ballistics.cpp.i
+
+CMakeFiles/detector.dir/src/ballistics.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/ballistics.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/ballistics.cpp -o CMakeFiles/detector.dir/src/ballistics.cpp.s
+
+CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o: src/video_overlay_processor.cpp
+CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o -MF CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o.d -o CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o -c /home/pi/CoralEdgeTpu/src/video_overlay_processor.cpp
+
+CMakeFiles/detector.dir/src/video_overlay_processor.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/video_overlay_processor.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/video_overlay_processor.cpp > CMakeFiles/detector.dir/src/video_overlay_processor.cpp.i
+
+CMakeFiles/detector.dir/src/video_overlay_processor.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/video_overlay_processor.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/video_overlay_processor.cpp -o CMakeFiles/detector.dir/src/video_overlay_processor.cpp.s
+
+CMakeFiles/detector.dir/src/http_server.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/src/http_server.cpp.o: src/http_server.cpp
+CMakeFiles/detector.dir/src/http_server.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/detector.dir/src/http_server.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/http_server.cpp.o -MF CMakeFiles/detector.dir/src/http_server.cpp.o.d -o CMakeFiles/detector.dir/src/http_server.cpp.o -c /home/pi/CoralEdgeTpu/src/http_server.cpp
+
+CMakeFiles/detector.dir/src/http_server.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/http_server.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/http_server.cpp > CMakeFiles/detector.dir/src/http_server.cpp.i
+
+CMakeFiles/detector.dir/src/http_server.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/http_server.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/http_server.cpp -o CMakeFiles/detector.dir/src/http_server.cpp.s
+
+CMakeFiles/detector.dir/civetweb/src/civetweb.c.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/civetweb/src/civetweb.c.o: civetweb/src/civetweb.c
+CMakeFiles/detector.dir/civetweb/src/civetweb.c.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building C object CMakeFiles/detector.dir/civetweb/src/civetweb.c.o"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/detector.dir/civetweb/src/civetweb.c.o -MF CMakeFiles/detector.dir/civetweb/src/civetweb.c.o.d -o CMakeFiles/detector.dir/civetweb/src/civetweb.c.o -c /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c
+
+CMakeFiles/detector.dir/civetweb/src/civetweb.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/detector.dir/civetweb/src/civetweb.c.i"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c > CMakeFiles/detector.dir/civetweb/src/civetweb.c.i
+
+CMakeFiles/detector.dir/civetweb/src/civetweb.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/detector.dir/civetweb/src/civetweb.c.s"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c -o CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
+
 # Object files for target detector
 detector_OBJECTS = \
 "CMakeFiles/detector.dir/src/main.cpp.o" \
 "CMakeFiles/detector.dir/src/camera_capture.cpp.o" \
 "CMakeFiles/detector.dir/src/inference.cpp.o" \
-"CMakeFiles/detector.dir/src/mjpeg_server.cpp.o" \
-"CMakeFiles/detector.dir/src/udp_sender.cpp.o" \
-"CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o" \
-"CMakeFiles/detector.dir/src/util_logging.cpp.o"
+"CMakeFiles/detector.dir/src/util_logging.cpp.o" \
+"CMakeFiles/detector.dir/src/config_loader.cpp.o" \
+"CMakeFiles/detector.dir/src/ballistics.cpp.o" \
+"CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o" \
+"CMakeFiles/detector.dir/src/http_server.cpp.o" \
+"CMakeFiles/detector.dir/civetweb/src/civetweb.c.o"
 
 # External object files for target detector
 detector_EXTERNAL_OBJECTS =
@@ -183,13 +213,72 @@ detector_EXTERNAL_OBJECTS =
 detector: CMakeFiles/detector.dir/src/main.cpp.o
 detector: CMakeFiles/detector.dir/src/camera_capture.cpp.o
 detector: CMakeFiles/detector.dir/src/inference.cpp.o
-detector: CMakeFiles/detector.dir/src/mjpeg_server.cpp.o
-detector: CMakeFiles/detector.dir/src/udp_sender.cpp.o
-detector: CMakeFiles/detector.dir/src/jpeg_wrapper.cpp.o
 detector: CMakeFiles/detector.dir/src/util_logging.cpp.o
+detector: CMakeFiles/detector.dir/src/config_loader.cpp.o
+detector: CMakeFiles/detector.dir/src/ballistics.cpp.o
+detector: CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o
+detector: CMakeFiles/detector.dir/src/http_server.cpp.o
+detector: CMakeFiles/detector.dir/civetweb/src/civetweb.c.o
 detector: CMakeFiles/detector.dir/build.make
+detector: /usr/lib/aarch64-linux-gnu/libopencv_stitching.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_alphamat.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_aruco.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_barcode.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_bgsegm.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_bioinspired.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_ccalib.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_cvv.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_dnn_objdetect.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_dnn_superres.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_dpm.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_face.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_freetype.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_fuzzy.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_hdf.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_hfs.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_img_hash.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_intensity_transform.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_line_descriptor.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_mcc.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_quality.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_rapid.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_reg.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_rgbd.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_saliency.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_shape.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_stereo.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_structured_light.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_superres.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_surface_matching.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_tracking.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_videostab.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_viz.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_wechat_qrcode.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_xobjdetect.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_xphoto.so.4.6.0
+detector: /lib/aarch64-linux-gnu/libssl.so.3
+detector: /lib/aarch64-linux-gnu/libcrypto.so.3
+detector: /usr/lib/aarch64-linux-gnu/libopencv_highgui.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_datasets.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_plot.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_text.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_ml.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_phase_unwrapping.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_optflow.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_ximgproc.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_video.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_videoio.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_imgcodecs.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_objdetect.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_calib3d.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_dnn.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_features2d.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_flann.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_photo.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_imgproc.so.4.6.0
+detector: /usr/lib/aarch64-linux-gnu/libopencv_core.so.4.6.0
 detector: CMakeFiles/detector.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Linking CXX executable detector"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Linking CXX executable detector"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/detector.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

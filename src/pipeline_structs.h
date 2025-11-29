@@ -50,18 +50,6 @@ struct DetectionResult {
 };
 
 /**
- * @brief Represents an MJPEG encoded image frame.
- *
- * Contains the JPEG compressed data and dimensions, used for streaming
- * to clients (e.g., web browsers).
- */
-struct ImageFrame {
-    std::vector<uint8_t> jpeg_data; ///< JPEG compressed image data.
-    size_t width;                   ///< Width of the image in pixels.
-    size_t height;                  ///< Height of the image in pixels.
-};
-
-/**
  * @brief Combines ImageData with associated DetectionResults.
  *
  * This struct could be used if there's a need to pass the original image
@@ -215,7 +203,8 @@ private:
 using ImageQueue = ThreadSafeQueue<ImageData>;
 /// @brief Type alias for a thread-safe queue holding vectors of DetectionResult objects.
 using UdpQueue = ThreadSafeQueue<std::vector<DetectionResult>>;
+/// @brief Type alias for a thread-safe queue holding vectors of DetectionResult objects specifically for overlay.
+using DetectionResultsQueue = ThreadSafeQueue<std::vector<DetectionResult>>;
 /// @brief Type alias for a thread-safe queue holding ImageFrame (MJPEG) objects.
-using MjpegQueue = ThreadSafeQueue<ImageFrame>;
 
 #endif // PIPELINE_STRUCTS_H

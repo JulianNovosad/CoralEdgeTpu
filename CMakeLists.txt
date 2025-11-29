@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(CoralEdgeTpuDetector CXX)
+project(CoralEdgeTpuDetector CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,17 +34,18 @@ add_executable(detector
     src/main.cpp
     src/camera_capture.cpp
     src/inference.cpp
-    src/mjpeg_server.cpp
-    src/udp_sender.cpp
-    src/udp_video_sender.cpp
-    src/video_overlay_processor.cpp
-    src/jpeg_wrapper.cpp
     src/util_logging.cpp
     src/config_loader.cpp # Added ConfigLoader source file
+    src/ballistics.cpp
+    src/video_overlay_processor.cpp
+    src/http_server.cpp
+    civetweb/src/civetweb.c
 )
+set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C)
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})
 
+add_definitions(-DOPENSSL_API_3_0)
 target_link_libraries(detector PRIVATE
     ${OpenCV_LIBS}
     # Explicitly link required libraries
@@ -54,6 +55,8 @@ target_link_libraries(detector PRIVATE
     camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
     camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
     Threads::Threads # For pthreads
+    /lib/aarch64-linux-gnu/libssl.so.3
+    /lib/aarch64-linux-gnu/libcrypto.so.3
 )
 
 target_link_options(detector PRIVATE "-Wl,-rpath,'$ORIGIN/../lib'")
@@ -65,4 +68,5 @@ target_include_directories(detector PRIVATE
     ${FLATBUFFERS_INCLUDE_DIR}
     ${JPEG_INCLUDE_DIRS}
     /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    civetweb/include
 )
