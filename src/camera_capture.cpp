@@ -28,7 +28,9 @@ static std::string pixelFormatToString(const libcamera::PixelFormat& format) {
 static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  const libcamera::StreamConfiguration& cfg,
                                  ImageQueue& queue,
-                                 const char* stream_name) {
+                                 const char* stream_name,
+                                 unsigned int target_width,
+                                 unsigned int target_height) {
     if (fb->planes().empty()) { return false; }
     
     const libcamera::FrameBuffer::Plane& plane = fb->planes()[0];
@@ -40,22 +42,38 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
         return false;
     }
 
-    // Calculate expected size (assuming RGB888, 3 bytes per pixel)
-    size_t expected_size = cfg.size.width * cfg.size.height * 3;
+    // Calculate expected size based on actual frame configuration
+    size_t actual_size = cfg.size.width * cfg.size.height * 3; // Assuming RGB888, 3 bytes per pixel
     
     ImageData image_data;
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
-    image_data.data.resize(expected_size);
+    image_data.data.resize(actual_size);
     
     // 2. Copy data from mmap'd memory to the ImageData vector
-    std::memcpy(image_data.data.data(), mmap_ptr, expected_size); 
+    std::memcpy(image_data.data.data(), mmap_ptr, actual_size); 
     image_data.timestamp = std::chrono::high_resolution_clock::now();
     
     // 3. Unmap the buffer
     munmap(mmap_ptr, plane.length);
+
+    // 4. Resize if necessary
+    if (image_data.width != target_width || image_data.height != target_height) {
+        LOG_INFO("Resizing " + std::string(stream_name) + " from " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) +
+                 " to " + std::to_string(target_width) + "x" + std::to_string(target_height));
+
+        cv::Mat original_image(image_data.height, image_data.width, CV_8UC3, image_data.data.data());
+        cv::Mat resized_image;
+        cv::resize(original_image, resized_image, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
+
+        // Update image_data with resized dimensions and data
+        image_data.width = target_width;
+        image_data.height = target_height;
+        image_data.data.assign(resized_image.data, resized_image.data + (resized_image.total() * resized_image.elemSize()));
+    }
     
-    // 4. Push data to the queue
+    // 5. Push data to the queue
+    LOG_INFO("Pushing " + std::string(stream_name) + " to queue. Final dimensions: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) + ", data size: " + std::to_string(image_data.data.size()));
     queue.push_and_drop_if_full(image_data);
     
     return true;
@@ -67,6 +85,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
 
 CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
                              unsigned int tpu_width, unsigned int tpu_height,
+                             unsigned int target_tpu_width, unsigned int target_tpu_height,
                              std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
                              ImageQueue& tpu_output_queue,
                              std::chrono::seconds watchdog_timeout)
@@ -74,10 +93,12 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
       height_(main_height),
       tpu_width_(tpu_width),
       tpu_height_(tpu_height),
+      target_tpu_width_(target_tpu_width),
+      target_tpu_height_(target_tpu_height),
       main_output_queues_(main_output_queues),
       tpu_output_queue_(tpu_output_queue),
       watchdog_timeout_(watchdog_timeout),
-      camera_manager_(nullptr),
+      camera_manager_(std::make_unique<libcamera::CameraManager>()), // Initialize here
       camera_(nullptr),
       allocator_(nullptr),
       running_(false),
@@ -320,6 +341,18 @@ bool CameraCapture::setup_camera() {
     video_stream_ = mainCfg.stream();
     tpu_stream_ = tpuCfg.stream();
 
+    if (video_stream_) {
+        LOG_INFO("Actual Video Stream Config: " + std::to_string(video_stream_->configuration().size.width) + "x" + std::to_string(video_stream_->configuration().size.height) + " format: " + pixelFormatToString(video_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("Video stream is null after configuration.");
+    }
+
+    if (tpu_stream_) {
+        LOG_INFO("Actual TPU Stream Config: " + std::to_string(tpu_stream_->configuration().size.width) + "x" + std::to_string(tpu_stream_->configuration().size.height) + " format: " + pixelFormatToString(tpu_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("TPU stream is null after configuration.");
+    }
+
     // Allocate buffers for main video stream
     allocator_ = std::make_unique<libcamera::FrameBufferAllocator>(camera_);
     ret = allocator_->allocate(video_stream_);
@@ -441,7 +474,7 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
         
         // Use helper for TPU stream
-        process_frame_buffer(tpu_fb, tpu_cfg, tpu_output_queue_, "TPU Stream");
+        process_frame_buffer(tpu_fb, tpu_cfg, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_);
 
     } else {
         LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");

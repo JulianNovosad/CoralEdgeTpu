@@ -1,0 +1,23 @@
+feat: Implement dual-stream camera capture and fix request recycling
+
+This commit implements the following changes based on detailed instructions:
+
+- **src/camera_capture.h**:
+  - Updated CameraCapture constructor to accept and initialize `tpu_width` and `tpu_height`.
+
+- **src/camera_capture.cpp**:
+  - **Constructor**: Initialized `tpu_width_` and `tpu_height_`.
+  - **`setup_camera()`**:
+    - Implemented dual-stream configuration to generate two streams (high-res for main video, low-res for TPU).
+    - Configured both streams with specified resolutions and RGB888 pixel format.
+    - Validated and applied the camera configuration.
+    - Allocated frame buffers for both streams.
+    - Created `libcamera::Request` objects and attached buffers for both streams.
+    - Removed problematic global `camera_->setControls` for `AeEnable` and instead set `request->controls().set(libcamera::controls::AeEnable, true);` for each request during creation to ensure AE is enabled.
+  - **`process_frame_buffer`**: Added a static helper function for safe memory mapping (`mmap`) and data copying (`memcpy`) from `libcamera::FrameBuffer` to `ImageData` objects, pushing them to a queue.
+  - **`request_complete_callback()`**:
+    - Refactored TPU stream processing to utilize the new `process_frame_buffer` helper function.
+    - Adapted main video stream processing to manually extract `ImageData` and distribute it to multiple output queues, as required.
+    - Implemented the critical request recycling fix by using `request->reuse(libcamera::Request::ReuseBuffers);` to preserve buffer attachments, resolving potential "FrameBuffer already set" errors or crashes. The manual buffer re-attachment loop was removed.
+
+These changes are crucial for stabilizing dual-stream capture and correctly handling libcamera requests.

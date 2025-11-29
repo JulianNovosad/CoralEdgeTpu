@@ -27,6 +27,7 @@ class CameraCapture {
 public:
     CameraCapture(unsigned int main_width, unsigned int main_height,
                   unsigned int tpu_width, unsigned int tpu_height,
+                  unsigned int target_tpu_width, unsigned int target_tpu_height,
                   std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
                   ImageQueue& tpu_output_queue,
                   std::chrono::seconds watchdog_timeout);
@@ -51,6 +52,9 @@ public:
     unsigned int height_;
     unsigned int tpu_width_;
     unsigned int tpu_height_;
+
+    unsigned int target_tpu_width_;
+    unsigned int target_tpu_height_;
 
     std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_;  // RGB888 frames for live stream
     ImageQueue& tpu_output_queue_;  // RGB888 frames for TPU

@@ -52,7 +52,7 @@ public:
      *                         detection results are pushed.
      * @param num_threads The number of worker threads to spawn for parallel inference.
      */
-    InferenceEngine(const std::string& model_path, ImageQueue& input_queue, UdpQueue& udp_output_queue, int num_threads = 1);
+    InferenceEngine(const std::string& model_path, ImageQueue& input_queue, DetectionResultsQueue& detection_results_output_queue, int num_threads = 1);
 
     /**
      * @brief Destructor for InferenceEngine.
@@ -144,7 +144,7 @@ private:
 
     std::string model_path_; ///< Path to the TensorFlow Lite model file.
     ImageQueue& input_queue_; ///< Reference to the input queue for image data.
-    UdpQueue& udp_output_queue_; ///< Reference to the output queue for detection results.
+    DetectionResultsQueue& detection_results_output_queue_; ///< Reference to the output queue for detection results.
     int num_threads_; ///< Number of inference worker threads.
 
     int input_width_ = 0; ///< Input width required by the loaded model.
