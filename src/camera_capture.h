@@ -8,7 +8,7 @@
 #include <libcamera/stream.h>
 #include <libcamera/request.h>
 #include <libcamera/geometry.h>
-#include <libcamera/pixel_format.h> // For libcamera::PixelFormat and libcamera::formats
+#include <libcamera/pixel_format.h>
 
 #include <thread>
 #include <atomic>
@@ -16,21 +16,22 @@
 #include <string>
 #include <chrono>
 #include <list>
-#include <memory> // For std::unique_ptr
+#include <memory>
+#include <functional>
 
-#include "pipeline_structs.h" // For ImageQueue
+#include <opencv2/opencv.hpp>
 
-/**
- * @brief Manages camera capture using the low-level libcamera C++ API.
- *
- * This class directly interacts with libcamera to open, configure, and stream
- * frames from the camera. It converts YUV420 sensor data to RGB888 before
- * pushing frames into shared ImageQueue instances.
- */
+#include "pipeline_structs.h"
+
 class CameraCapture {
 public:
-    CameraCapture(unsigned int main_width, unsigned int main_height, unsigned int tpu_width, unsigned int tpu_height, std::list<std::reference_wrapper<ImageQueue>>& main_output_queues, ImageQueue& tpu_output_queue, std::chrono::seconds watchdog_timeout);
+    CameraCapture(unsigned int main_width, unsigned int main_height,
+                  unsigned int tpu_width, unsigned int tpu_height,
+                  std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
+                  ImageQueue& tpu_output_queue,
+                  std::chrono::seconds watchdog_timeout);
     ~CameraCapture();
+
     bool start();
     void stop();
     bool is_running() const { return running_; }
@@ -38,36 +39,43 @@ public:
     bool setup_camera();
     void request_complete_callback(libcamera::Request* request);
 
+    bool acquire_camera();
 
+    bool init_video_encoder(const std::string& output_uri, int fps);
 
-    unsigned int width_;  ///< Desired output width (RGB888).
-    unsigned int height_; ///< Desired output height (RGB888).
+    void set_overlay_callback(std::function<void(cv::Mat& frame)> callback) {
+        overlay_callback_ = callback;
+    }
+
+    unsigned int width_;
+    unsigned int height_;
     unsigned int tpu_width_;
     unsigned int tpu_height_;
-    std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_; ///< Queues for RGB888 ImageData.
-    ImageQueue& tpu_output_queue_; // New queue for TPU stream output
-    std::chrono::seconds watchdog_timeout_; ///< Not directly used by libcamera API, kept for compatibility.
+
+    std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_;  // RGB888 frames for live stream
+    ImageQueue& tpu_output_queue_;  // RGB888 frames for TPU
+    std::chrono::seconds watchdog_timeout_;
 
     std::unique_ptr<libcamera::CameraManager> camera_manager_;
     std::shared_ptr<libcamera::Camera> camera_;
-    libcamera::Stream* video_stream_ = nullptr; ///< The YUV420 video stream.
+    libcamera::Stream* video_stream_ = nullptr;
     libcamera::Stream* tpu_stream_ = nullptr;
     std::unique_ptr<libcamera::FrameBufferAllocator> allocator_;
-    std::vector<std::unique_ptr<libcamera::Request>> requests_; ///< Store requests created.
-    std::vector<libcamera::Request*> returned_requests_; // Stores raw pointers to requests returned during shutdown for explicit destruction
+    std::vector<std::unique_ptr<libcamera::Request>> requests_;
+    // Removed: std::vector<libcamera::Request*> returned_requests_; as it was unused and non-critical.
 
-    libcamera::PixelFormat actual_pixel_format_; ///< Actual pixel format provided by the camera.
-    libcamera::Size actual_size_; ///< Actual size provided by the camera.
-    unsigned int actual_stride_ = 0; ///< Actual stride of the YUV420 frame data.
+    libcamera::PixelFormat actual_pixel_format_;
+    libcamera::Size actual_size_;
+    unsigned int actual_stride_ = 0;
 
     std::atomic<bool> running_ = false;
 
-    // For FPS calculation
     std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_;
     int frame_count_ = 0;
-    static const int kFpsReportInterval = 100; // Report FPS every 100 frames
+    static const int kFpsReportInterval = 100;
 
-    // For YUV conversion context.
+    std::unique_ptr<cv::VideoWriter> video_writer_;  // H.264 encoder
+    std::function<void(cv::Mat& frame)> overlay_callback_;  // Overlay callback
 };
 
 #endif // CAMERA_CAPTURE_H
