@@ -15,6 +15,7 @@
 #include <string>
 #include <fstream>
 #include <mutex>          // For std::mutex
+#include <condition_variable> // Required for std::condition_variable
 #include <chrono>         // For std::chrono::system_clock, time_point
 #include <queue>          // For std::queue<LogEntry>
 #include <thread>         // For std::thread
@@ -141,6 +142,7 @@ private:
     std::string log_file_prefix_;                ///< The prefix used for log filenames.
     std::ofstream log_file_;                     ///< Output file stream for logging to a file.
     std::mutex log_mutex_;                       ///< Mutex to protect access to the log queue.
+    std::condition_variable cond_var_;           ///< Condition variable for writer thread signaling.
     std::queue<LogEntry> log_queue_;             ///< Queue for asynchronous log message processing.
     std::thread writer_thread_;                  ///< Dedicated thread for writing log messages.
     std::atomic<bool> running_ = false;          ///< Atomic flag to control the writer thread's running state.

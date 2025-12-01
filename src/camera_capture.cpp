@@ -1,3 +1,14 @@
+#include <string>    // For std::string, std::to_string
+#include <vector>    // For std::vector
+#include <memory>    // For std::unique_ptr, std::make_unique, std::shared_ptr
+#include <utility>   // For std::move
+#include <chrono>    // For std::chrono
+#include <sstream>   // For std::stringstream
+#include <cstring>   // For memcpy
+#include <sys/mman.h> // For mmap, munmap
+#include <unistd.h>  // For close
+#include <errno.h>   // For errno, strerror
+
 #include "camera_capture.h"
 #include "util_logging.h"
 
@@ -9,10 +20,6 @@
 #include <iostream>
 #include <map>
 #include <iomanip>
-#include <cstring> // For memcpy
-#include <sys/mman.h> // For mmap, munmap
-#include <unistd.h> // For close
-#include <vector>
 
 // Define the constant used in the callback 
 static constexpr unsigned int kFpsReportInterval = 100; 
@@ -27,6 +34,7 @@ static std::string pixelFormatToString(const libcamera::PixelFormat& format) {
 
 static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  const libcamera::StreamConfiguration& cfg,
+                                 BufferPool<uint8_t>& buffer_pool,
                                  ImageQueue& queue,
                                  const char* stream_name,
                                  unsigned int target_width,
@@ -42,39 +50,60 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
         return false;
     }
 
-    // Calculate expected size based on actual frame configuration
     size_t actual_size = cfg.size.width * cfg.size.height * 3; // Assuming RGB888, 3 bytes per pixel
     
+    // 2. Acquire a buffer from the pool
+    auto pooled_buffer = buffer_pool.acquire();
+    if (!pooled_buffer) {
+        LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer from the pool. Dropping frame.");
+        munmap(mmap_ptr, plane.length);
+        return false;
+    }
+    
+    // 3. Copy data from mmap'd memory to the pooled buffer
+    std::memcpy(pooled_buffer->data.data(), mmap_ptr, actual_size); 
+    pooled_buffer->size = actual_size;
+    
+    // 4. Unmap the buffer
+    munmap(mmap_ptr, plane.length);
+
     ImageData image_data;
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
-    image_data.data.resize(actual_size);
-    
-    // 2. Copy data from mmap'd memory to the ImageData vector
-    std::memcpy(image_data.data.data(), mmap_ptr, actual_size); 
     image_data.timestamp = std::chrono::high_resolution_clock::now();
-    
-    // 3. Unmap the buffer
-    munmap(mmap_ptr, plane.length);
 
-    // 4. Resize if necessary
+    // 5. Resize if necessary
     if (image_data.width != target_width || image_data.height != target_height) {
         LOG_INFO("Resizing " + std::string(stream_name) + " from " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) +
                  " to " + std::to_string(target_width) + "x" + std::to_string(target_height));
 
-        cv::Mat original_image(image_data.height, image_data.width, CV_8UC3, image_data.data.data());
+        cv::Mat original_image(image_data.height, image_data.width, CV_8UC3, pooled_buffer->data.data());
         cv::Mat resized_image;
         cv::resize(original_image, resized_image, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
 
-        // Update image_data with resized dimensions and data
+        // Acquire a new buffer for the resized image
+        auto resized_pooled_buffer = buffer_pool.acquire();
+        if (!resized_pooled_buffer) {
+            LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer for resizing. Dropping frame.");
+            return false;
+        }
+        
+        size_t resized_size = resized_image.total() * resized_image.elemSize();
+        std::memcpy(resized_pooled_buffer->data.data(), resized_image.data, resized_size);
+        resized_pooled_buffer->size = resized_size;
+        
         image_data.width = target_width;
         image_data.height = target_height;
-        image_data.data.assign(resized_image.data, resized_image.data + (resized_image.total() * resized_image.elemSize()));
+        image_data.buffer = std::move(resized_pooled_buffer);
+
+    } else {
+        // No resize needed, use the original buffer
+        image_data.buffer = std::move(pooled_buffer);
     }
     
-    // 5. Push data to the queue
-    LOG_INFO("Pushing " + std::string(stream_name) + " to queue. Final dimensions: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) + ", data size: " + std::to_string(image_data.data.size()));
-    queue.push_and_drop_if_full(image_data);
+    // 6. Push data to the queue
+    LOG_INFO("Pushing " + std::string(stream_name) + " to queue. Final dimensions: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) + ", data size: " + std::to_string(image_data.buffer->size));
+    queue.push_and_drop_if_full(std::move(image_data));
     
     return true;
 }
@@ -86,6 +115,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
 CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
                              unsigned int tpu_width, unsigned int tpu_height,
                              unsigned int target_tpu_width, unsigned int target_tpu_height,
+                             BufferPool<uint8_t>& image_buffer_pool,
                              std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
                              ImageQueue& tpu_output_queue,
                              std::chrono::seconds watchdog_timeout)
@@ -97,6 +127,7 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
       target_tpu_height_(target_tpu_height),
       main_output_queues_(main_output_queues),
       tpu_output_queue_(tpu_output_queue),
+      image_buffer_pool_(image_buffer_pool),
       watchdog_timeout_(watchdog_timeout),
       camera_manager_(std::make_unique<libcamera::CameraManager>()), // Initialize here
       camera_(nullptr),
@@ -446,19 +477,26 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
             if (video_mmap_ptr == MAP_FAILED) {
                 LOG_ERROR("CameraCapture: Failed to mmap video stream frame buffer: " + std::string(strerror(errno)));
             } else {
-                ImageData video_image_data;
-                video_image_data.width = video_cfg.size.width;
-                video_image_data.height = video_cfg.size.height;
-                // Assuming RGB888 is 3 bytes per pixel
-                size_t expected_size = video_image_data.width * video_image_data.height * 3;
-                video_image_data.data.resize(expected_size); 
-                std::memcpy(video_image_data.data.data(), video_mmap_ptr, expected_size);
-                video_image_data.timestamp = std::chrono::high_resolution_clock::now();
-                
-                // Output to all main queues
-                for (auto& queue_ref : main_output_queues_) {
-                    queue_ref.get().push_and_drop_if_full(video_image_data);
+                auto pooled_buffer = image_buffer_pool_.acquire();
+                if (pooled_buffer) {
+                    ImageData video_image_data;
+                    video_image_data.width = video_cfg.size.width;
+                    video_image_data.height = video_cfg.size.height;
+                    size_t expected_size = video_image_data.width * video_image_data.height * 3;
+                    
+                    std::memcpy(pooled_buffer->data.data(), video_mmap_ptr, expected_size);
+                    pooled_buffer->size = expected_size;
+                    video_image_data.buffer = std::move(pooled_buffer);
+                    video_image_data.timestamp = std::chrono::high_resolution_clock::now();
+                    
+                    // Output to all main queues
+                    for (auto& queue_ref : main_output_queues_) {
+                        queue_ref.get().push_and_drop_if_full(video_image_data);
+                    }
+                } else {
+                    LOG_WARNING("CameraCapture: Failed to acquire buffer for main stream. Dropping frame.");
                 }
+
                 munmap(video_mmap_ptr, video_plane.length);
             }
         } else {
@@ -473,8 +511,8 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
         const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
         
-        // Use helper for TPU stream
-        process_frame_buffer(tpu_fb, tpu_cfg, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_);
+        // Use helper for TPU stream, passing the buffer pool
+        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_);
 
     } else {
         LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");

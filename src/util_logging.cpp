@@ -87,8 +87,8 @@ void Logger::start_writer_thread() {
  * It then waits for the thread to join, ensuring a clean shutdown.
  */
 void Logger::stop_writer_thread() {
-    if (running_) {
-        running_ = false; // Signal the thread to stop.
+    if (running_.exchange(false)) { // Atomically set to false and check old value
+        cond_var_.notify_one(); // Wake up the writer thread
         if (writer_thread_.joinable()) {
             writer_thread_.join(); // Wait for the thread to finish.
         }
@@ -105,8 +105,11 @@ void Logger::stop_writer_thread() {
  * @param message The log message content.
  */
 void Logger::log(const std::string& level, const std::string& message) {
-    std::lock_guard<std::mutex> lock(log_mutex_); // Protect queue access.
-    log_queue_.push({std::chrono::system_clock::now(), level, message}); // Enqueue the log entry.
+    {
+        std::lock_guard<std::mutex> lock(log_mutex_); // Protect queue access.
+        log_queue_.push({std::chrono::system_clock::now(), level, message}); // Enqueue the log entry.
+    }
+    cond_var_.notify_one();
 }
 
 /**
@@ -119,11 +122,14 @@ void Logger::log(const std::string& level, const std::string& message) {
  * @param value The value for the JSON log entry (expected to be a valid JSON string or primitive).
  */
 void Logger::log_json(const std::string& key, const std::string& value) {
-    std::lock_guard<std::mutex> lock(log_mutex_); // Protect queue access.
-    // For simplicity, we'll format this as a string.
-    // A more robust JSON logger might use a dedicated JSON library.
-    std::string json_message = "{\"" + key + "\": " + value + "}";
-    log_queue_.push({std::chrono::system_clock::now(), "JSON", json_message}); // Enqueue structured log.
+    {
+        std::lock_guard<std::mutex> lock(log_mutex_); // Protect queue access.
+        // For simplicity, we'll format this as a string.
+        // A more robust JSON logger might use a dedicated JSON library.
+        std::string json_message = "{\"" + key + "\": " + value + "}";
+        log_queue_.push({std::chrono::system_clock::now(), "JSON", json_message}); // Enqueue structured log.
+    }
+    cond_var_.notify_one();
 }
 
 /**
@@ -134,18 +140,18 @@ void Logger::log_json(const std::string& key, const std::string& value) {
  * as long as `running_` is true or there are messages still in the queue.
  */
 void Logger::writer_thread_func() {
-    // Continue running if explicitly enabled OR if there are still messages to process
-    while (running_ || !log_queue_.empty()) {
+    while (true) {
         std::unique_lock<std::mutex> lock(log_mutex_);
-        // If the queue is empty, release the lock and sleep briefly to avoid busy-waiting.
-        if (log_queue_.empty()) {
-            lock.unlock();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            continue;
+        // Wait until the queue is not empty or the logger is shutting down
+        cond_var_.wait(lock, [this] { return !log_queue_.empty() || !running_; });
+
+        // If shutting down and the queue is empty, exit the loop
+        if (!running_ && log_queue_.empty()) {
+            break;
         }
 
         // Retrieve and remove the oldest log entry.
-        LogEntry entry = log_queue_.front();
+        LogEntry entry = std::move(log_queue_.front());
         log_queue_.pop();
         lock.unlock(); // Release lock before writing to allow other threads to log.
 

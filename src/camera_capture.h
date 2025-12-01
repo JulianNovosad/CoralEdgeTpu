@@ -22,12 +22,14 @@
 #include <opencv2/opencv.hpp>
 
 #include "pipeline_structs.h"
+#include "buffer_pool.h"
 
 class CameraCapture {
 public:
     CameraCapture(unsigned int main_width, unsigned int main_height,
                   unsigned int tpu_width, unsigned int tpu_height,
                   unsigned int target_tpu_width, unsigned int target_tpu_height,
+                  BufferPool<uint8_t>& image_buffer_pool,
                   std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
                   ImageQueue& tpu_output_queue,
                   std::chrono::seconds watchdog_timeout);
@@ -58,6 +60,7 @@ public:
 
     std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_;  // RGB888 frames for live stream
     ImageQueue& tpu_output_queue_;  // RGB888 frames for TPU
+    BufferPool<uint8_t>& image_buffer_pool_; // Pool for image buffers
     std::chrono::seconds watchdog_timeout_;
 
     std::unique_ptr<libcamera::CameraManager> camera_manager_;
