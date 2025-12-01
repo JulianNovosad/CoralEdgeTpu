@@ -2,12 +2,14 @@
 #define VIDEO_OVERLAY_PROCESSOR_H
 
 #include "pipeline_structs.h"
+#include <thread> // Required for std::thread
 
 class VideoOverlayProcessor {
 public:
     VideoOverlayProcessor(ImageQueue& input_video_queue,
                           DetectionResultsQueue& input_detection_queue,
-                          ImageQueue& output_video_queue);
+                          ImageQueue& output_video_queue,
+                          const std::vector<std::string>& labels);
     ~VideoOverlayProcessor();
 
     bool start();
@@ -19,6 +21,7 @@ private:
     ImageQueue& input_video_queue_;
     DetectionResultsQueue& input_detection_queue_;
     ImageQueue& output_queue_;
+    const std::vector<std::string>& labels_;
     std::atomic<bool> running_;
     std::thread worker_thread_;
 };

@@ -21,6 +21,7 @@ public:
     std::chrono::seconds get_camera_watchdog_timeout() const;
     int get_inference_worker_threads() const;
     int get_jpeg_quality() const;
+    double get_camera_fps() const;
 
 private:
     nlohmann::json config_data_;
