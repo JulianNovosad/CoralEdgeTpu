@@ -4,10 +4,12 @@
 
 VideoOverlayProcessor::VideoOverlayProcessor(ImageQueue& input_video_queue,
                                          DetectionResultsQueue& input_detection_queue,
-                                         ImageQueue& output_video_queue)
+                                         ImageQueue& output_video_queue,
+                                         const std::vector<std::string>& labels)
     : input_video_queue_(input_video_queue),
       input_detection_queue_(input_detection_queue),
       output_queue_(output_video_queue),
+      labels_(labels),
       running_(false) {
     // Constructor logic
 }
@@ -50,39 +52,39 @@ void VideoOverlayProcessor::worker_thread_func() {
 
     while (running_) {
         if (input_video_queue_.pop(image_data)) {
-            // Peek latest detections. If none available, use an empty vector.
-            // Using peek_latest to not consume detections if multiple frames arrive before new detections.
-            if (!input_detection_queue_.peek_latest(latest_detections)) {
-                latest_detections.clear(); // Clear old detections if no new ones are available or queue is empty
-            }
+            // Use the new peek_latest with a lambda to copy the data from the pooled buffer.
+            latest_detections.clear();
+            input_detection_queue_.peek_latest([&latest_detections](const std::shared_ptr<DetectionResultBuffer>& detections_buffer) {
+                if (detections_buffer && detections_buffer->size > 0) {
+                    latest_detections.assign(detections_buffer->data.begin(), detections_buffer->data.begin() + detections_buffer->size);
+                }
+            });
 
-            // Convert ImageData to cv::Mat
-            cv::Mat frame(image_data.height, image_data.width, CV_8UC3, image_data.data.data());
+            // Convert ImageData to cv::Mat, wrapping the data from the pooled buffer
+            cv::Mat frame(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
 
             // Draw bounding boxes and labels
             for (const auto& detection : latest_detections) {
-                // Assuming bounding box coordinates are normalized [0,1]
-                int xmin = static_cast<int>(detection.xmin * image_data.width);
-                int ymin = static_cast<int>(detection.ymin * image_data.height);
-                int xmax = static_cast<int>(detection.xmax * image_data.width);
-                int ymax = static_cast<int>(detection.ymax * image_data.height);
+                // Coordinates are now absolute pixels from the inference engine
+                int xmin = static_cast<int>(detection.xmin);
+                int ymin = static_cast<int>(detection.ymin);
+                int xmax = static_cast<int>(detection.xmax);
+                int ymax = static_cast<int>(detection.ymax);
 
                 cv::rectangle(frame, cv::Point(xmin, ymin), cv::Point(xmax, ymax), cv::Scalar(0, 255, 0), 2); // Green rectangle
                 
-                // For label, we'd need access to labels vector, which VideoOverlayProcessor doesn't have.
-                // For now, just class ID and score.
-                std::string label = "Class: " + std::to_string(detection.class_id) + " Score: " + std::to_string(static_cast<int>(detection.score * 100)) + "%";
-                cv::putText(frame, label, cv::Point(xmin, ymin - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
+                char label_buffer[256];
+                if (detection.class_id >= 0 && static_cast<size_t>(detection.class_id) < labels_.size()) {
+                    snprintf(label_buffer, sizeof(label_buffer), "%s: %d%%", labels_[detection.class_id].c_str(), static_cast<int>(detection.score * 100));
+                } else {
+                    snprintf(label_buffer, sizeof(label_buffer), "ID %d: %d%%", detection.class_id, static_cast<int>(detection.score * 100));
+                }
+                cv::putText(frame, label_buffer, cv::Point(xmin, ymin - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
             }
 
-            // Convert cv::Mat back to ImageData
-            // No need to copy if image_data.data is directly modified by cv::Mat (CV_8UC3, image_data.data.data())
-            // But if frame is re-allocated (e.g., resizing or new Mat after drawing), we need to copy back
-            // For drawing, frame operates on image_data.data directly, so no copy back for data is strictly needed unless size changed.
-            // However, it's safer to ensure the ImageData is fully updated.
-            image_data.data.assign(frame.data, frame.data + (frame.total() * frame.elemSize()));
-            
-            output_queue_.push(image_data);
+            // The drawing is done in-place on the buffer. Just move the original ImageData object
+            // with its shared_ptr to the next queue.
+            output_queue_.push(std::move(image_data));
         }
     }
 }

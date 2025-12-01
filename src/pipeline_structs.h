@@ -1,13 +1,3 @@
-/**
- * @file pipeline_structs.h
- * @brief Defines common data structures and a thread-safe queue template
- *        used across the CoralEdgeTpu Detector application pipeline.
- *
- * This header centralizes the definitions for image data, detection results,
- * and frames, along with a robust thread-safe queue implementation essential
- * for inter-module communication in a multi-threaded real-time system.
- */
-
 #ifndef PIPELINE_STRUCTS_H
 #define PIPELINE_STRUCTS_H
 
@@ -18,21 +8,23 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
-#include "util_logging.h" // Added for LOG_INFO
+#include <memory> // For std::shared_ptr
+#include <functional> // For std::function
+#include "buffer_pool.h" // For BufferPool
 
 
 // --- Generic Data Structures ---
 
 /**
- * @brief Represents raw image data captured from a camera.
+ * @brief Represents raw image data, now using a pooled buffer.
  *
- * Contains the raw pixel data, dimensions, and a timestamp for when the
- * frame was captured, useful for latency measurements.
+ * Contains a shared pointer to a buffer from a pool, dimensions, and a timestamp.
+ * This avoids deep copies of pixel data.
  */
 struct ImageData {
-    std::vector<uint8_t> data; ///< Raw pixel data (e.g., BGR888 bytes).
-    size_t width;              ///< Width of the image in pixels.
-    size_t height;             ///< Height of the image in pixels.
+    std::shared_ptr<PooledBuffer<uint8_t>> buffer; ///< Shared pointer to a pooled buffer holding pixel data.
+    size_t width;                                  ///< Width of the image in pixels.
+    size_t height;                                 ///< Height of the image in pixels.
     std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of image capture.
 };
 
@@ -148,29 +140,24 @@ public:
     }
 
     /**
-     * @brief Peeks at the latest item in the queue without removing it.
+     * @brief Peeks at the latest item in the queue without removing it, executing a function on it.
      *
      * This is a non-blocking peek once data is available. It waits until the
      * queue is not empty or the queue is no longer running. If an item is
-     * available, it copies the last item. Useful for servers that only need
-     * the most recent state.
+     * available, it executes the provided function with the latest item.
+     * This avoids expensive copies under the lock.
      *
-     * @param frame Reference to where the latest data item will be copied.
-     * @return True if a data item was successfully peeked, false if the queue
-     *         is stopped and empty.
+     * @param visitor A function or lambda to be executed with the latest item.
+     * @return True if a data item was successfully peeked and the visitor was called,
+     *         false if the queue is stopped and empty.
      */
-    bool peek_latest(T& frame) {
+    bool peek_latest(std::function<void(const T&)> visitor) {
         std::unique_lock<std::mutex> lock(mutex_);
-        // Wait until queue is not empty OR the `running_` flag is false (signaling shutdown)
-        LOG_INFO("ThreadSafeQueue: peek_latest waiting...");
         cond_var_.wait(lock, [this]{ return !queue_.empty() || !running_; });
-        LOG_INFO("ThreadSafeQueue: peek_latest woke up. Queue empty: " + std::to_string(queue_.empty()) + ", Running: " + std::to_string(running_));
         if (queue_.empty()) {
-            LOG_INFO("ThreadSafeQueue: peek_latest returning false (empty or stopped).");
             return false; // Queue is empty and stopped.
         }
-        frame = queue_.back(); // Get the latest frame
-        LOG_INFO("ThreadSafeQueue: peek_latest returning true. Queue size: " + std::to_string(queue_.size()));
+        visitor(queue_.back()); // Execute visitor on the latest frame
         return true;
     }
     
@@ -201,10 +188,15 @@ private:
 
 /// @brief Type alias for a thread-safe queue holding ImageData objects.
 using ImageQueue = ThreadSafeQueue<ImageData>;
-/// @brief Type alias for a thread-safe queue holding vectors of DetectionResult objects.
-using UdpQueue = ThreadSafeQueue<std::vector<DetectionResult>>;
-/// @brief Type alias for a thread-safe queue holding vectors of DetectionResult objects specifically for overlay.
-using DetectionResultsQueue = ThreadSafeQueue<std::vector<DetectionResult>>;
-/// @brief Type alias for a thread-safe queue holding ImageFrame (MJPEG) objects.
+
+// Define a type for a pooled buffer of detection results
+using DetectionResultBuffer = PooledBuffer<DetectionResult>;
+/// @brief Type alias for a thread-safe queue holding shared pointers to pooled detection result buffers.
+using DetectionResultsQueue = ThreadSafeQueue<std::shared_ptr<DetectionResultBuffer>>;
+
+// Define a type for a pooled buffer of H.264 NAL units
+using H264Buffer = PooledBuffer<uint8_t>;
+/// @brief Type alias for a thread-safe queue holding shared pointers to pooled H.264 buffers.
+using H264Queue = ThreadSafeQueue<std::shared_ptr<H264Buffer>>;
 
 #endif // PIPELINE_STRUCTS_H

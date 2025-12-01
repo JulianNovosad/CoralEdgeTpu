@@ -27,6 +27,7 @@
 #include <queue>    // For std::queue (used in interpreter_pool_)
 
 #include "pipeline_structs.h" // Use the new central header for queue types and data structures
+#include "buffer_pool.h"      // For BufferPool
 
 /**
  * @brief Manages the TensorFlow Lite inference pipeline with Edge TPU acceleration.
@@ -48,11 +49,16 @@ public:
      * @param model_path The filesystem path to the TensorFlow Lite model file.
      * @param input_queue Reference to the thread-safe ImageQueue from which
      *                    raw image data frames are consumed.
-     * @param udp_output_queue Reference to the thread-safe UdpQueue to which
-     *                         detection results are pushed.
+     * @param detection_results_output_queue Reference to the thread-safe DetectionResultsQueue to which
+     *                                       detection results are pushed.
+     * @param detection_result_pool Reference to the buffer pool for detection results.
      * @param num_threads The number of worker threads to spawn for parallel inference.
      */
-    InferenceEngine(const std::string& model_path, ImageQueue& input_queue, DetectionResultsQueue& detection_results_output_queue, int num_threads = 1);
+    InferenceEngine(const std::string& model_path, 
+                    ImageQueue& input_queue, 
+                    DetectionResultsQueue& detection_results_output_queue, 
+                    BufferPool<DetectionResult>& detection_result_pool,
+                    int num_threads = 1);
 
     /**
      * @brief Destructor for InferenceEngine.
@@ -138,13 +144,14 @@ private:
      * raw tensor data into a vector of DetectionResult objects.
      *
      * @param interpreter Pointer to the TensorFlow Lite interpreter.
-     * @return A vector of detected objects.
+     * @return A shared pointer to a pooled buffer containing the detected objects.
      */
-    std::vector<DetectionResult> get_output_tensor(tflite::Interpreter* interpreter);
+    std::shared_ptr<DetectionResultBuffer> get_output_tensor(tflite::Interpreter* interpreter);
 
     std::string model_path_; ///< Path to the TensorFlow Lite model file.
     ImageQueue& input_queue_; ///< Reference to the input queue for image data.
     DetectionResultsQueue& detection_results_output_queue_; ///< Reference to the output queue for detection results.
+    BufferPool<DetectionResult>& detection_result_pool_; ///< Pool for detection result buffers.
     int num_threads_; ///< Number of inference worker threads.
 
     int input_width_ = 0; ///< Input width required by the loaded model.

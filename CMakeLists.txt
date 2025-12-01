@@ -17,6 +17,15 @@ find_package(OpenCV REQUIRED)
 message(STATUS "Found libjpeg: ${JPEG_LIBRARIES}")
 message(STATUS "Found OpenCV: ${OpenCV_LIBS}")
 
+# Attempt to find x264
+pkg_check_modules(X264 QUIET x264)
+if (X264_FOUND)
+    message(STATUS "Found x264: ${X264_LIBRARIES}")
+    include_directories(${X264_INCLUDE_DIRS})
+else()
+    message(WARNING "x264 not found. H.264 encoding via libx264 may not work.")
+endif()
+
 # --- Find Local/Custom Dependencies ---
 set(TFLITE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(TFLITE_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
@@ -39,9 +48,10 @@ add_executable(detector
     src/ballistics.cpp
     src/video_overlay_processor.cpp
     src/http_server.cpp
+    src/h264_encoder.cpp
     civetweb/src/civetweb.c
 )
-set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C)
+set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS USE_WEBSOCKET)
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})
 
@@ -59,6 +69,10 @@ target_link_libraries(detector PRIVATE
     /lib/aarch64-linux-gnu/libcrypto.so.3
 )
 
+if (X264_FOUND)
+    target_link_libraries(detector PRIVATE ${X264_LIBRARIES})
+endif()
+
 target_link_options(detector PRIVATE "-Wl,-rpath,'$ORIGIN/../lib'")
 
 message(STATUS "Target 'detector' configured. Ready to build.")
@@ -69,4 +83,5 @@ target_include_directories(detector PRIVATE
     ${JPEG_INCLUDE_DIRS}
     /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
     civetweb/include
+    src # Include the src directory for h264_encoder.h, etc.
 )
