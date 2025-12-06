@@ -200,6 +200,137 @@ dmesg | grep apex
 
 ---
 
+# Geoptimaliseerd Stage‑Gate Plan (Herzien v2)
+
+Dit document bevat het bijgewerkte, beknopte en actionabele Stage‑Gate plan voor het CoralEdgeTpu‑project. Het vervangt de vorige versies en reflecteert de huidige architectuur‑ en meetbeslissingen.
+
+---
+
+## Stage 0: Technische haalbaarheid & prestatiegrenzen
+
+**Doel:** Basale throughput en latentie meten van kernsubsystemen zonder volledige integratie.
+
+**Te meten subsystemen (kort):**
+
+* **Logica module (RT‑thread single source):** alle ballistiek‑gerelateerde code (sensorfusie/IMU, object tracking, hit‑scan / voorspeld inslagpunt, veiligheids‑ & onzekerheidspropagatie, servo‑actuatie API). Implementatiebestand: `src/logic.*` (inclusief `src/object_tracker.*` functionality). *Opmerking:* servo reactietijd wordt **niet** runtime gemeten (zie servo_latency.csv).
+* **Camera (RT‑thread):** `src/camera_capture.*` — FPS en frame latency (gescheiden meting).
+* **TPU (inference):** `src/inference.*` + `.tflite` model — inferentie latentie (gescheiden meting).
+
+> **Belangrijk:** De "logica module" is een enkele bronfile (of set tightly‑coupled bestanden) die sensorfusie, objecttracking, hit‑scan, veiligheidslogica en de servo/actuator interface **centraliseert**. Camera en TPU blijven als aparte, meetbare subsystemen.
+
+**Gating criteria (Stage 0):**
+
+* Meetrapport per subsystem met minimaal: p50/p95/p99 latency, throughput (FPS of_ops/s), en korte beschrijving van meetmethode.
+* Logica module: time‑to‑prediction (end‑to‑end door sensorfusie → hit‑scan → predictie) gemeten en gedocumenteerd (servo latency **niet** inbegrepen).
+* Kernel‑aanpassingen (PCIe, IRQ‑affiniteiten, MSI‑X) gedocumenteerd indien toegepast.
+* Theorie‑document voor ballistiek + onzekerheidspropagatie met acceptatiegrenzen.
+
+**Resultaat:** Subsystemale prestatiegrenzen vastgesteld → Goedkeuring voor Stage 1
+
+---
+
+## Stage 1: Systeembrede C++ implementatie & bottleneckanalyse
+
+**Doel:** Alle core subsystems functioneel systeem‑breed met expliciete code‑mappings, correcte synchronisatie en volledige documentatie.
+
+**Core Subsystems (directe code‑mappings):**
+
+* **AI + Logica (Orchestrator):** `src/logic.*` — bevat nu ook object tracking (`object_tracker`), sensorfusion/IMU, hit‑scan (voorspeld inslagpunt), veiligheids/onzekerheidspropagatie en de servo actuatie API (PCA9685 interface / safety controller behaviour).
+* **Camera & DMA (RT‑thread):** `src/camera_capture.*`, `src/buffer_pool.h`, `src/pipeline_structs.h`.
+* **TPU Inferentie:** `src/inference.*` + `.tflite` model.
+* **Overige non‑RT modules:** `src/video_overlay_processor.*`, `src/config_loader.*`, `src/h264_encoder.*`, `src/http_server.*`.
+
+**Nieuwe/Vernieuwde componenten (Stage 1):**
+
+* **Hardware/Software Killswitch:** `src/process_supervisor.*`.
+* **Fallback modes b/c/d:** in `src/logic.*` met expliciete logging en activatie‑criteria.
+* **Software monitoring:** temperatuur & resource‑gebruik via `src/process_supervisor.*` (CSV logs per module).
+* **Logging:** `src/util_logging.*` levert gestructureerde CSV logs naar `/home/pi/CoralEdgeTpu/logs/` met rotatie (3 bestanden per module).
+
+  * **CSV Formaat:** `monotonic_time_ns,module,stage,p50,p95,p99,temp,fps`.
+  * **Timestamp bron:** `CLOCK_MONOTONIC_RAW`.
+
+**Gating criteria (Stage 1):**
+
+* Alle subsystems draaien onafhankelijk en kunnen start/stop en gezondheidschecks doorstaan.
+* `src/logic.*` moet een bewezen veiligheids‑ en onzekerheidspropagatiemodule bevatten (alle inputs behalve servo latency worden hierin gebruikt).
+* Communicatie tussen RT‑modules gebruikt lock‑free of RT‑vriendelijke queues (bij voorkeur `boost::lockfree::spsc_queue` of equivalent) met duidelijk gedefinieerde ownership/invariants in `README.md`.
+* Documentatie: kern‑`structs` en `unions` zijn beschreven met grootte, alignment en thread ownership.
+* Logging conform CSV‑format en rotatie zoals hierboven. → Goedkeuring voor Stage 2
+
+---
+
+## Stage 2: Volledige integratie & performance engineering
+
+**Doel:** End‑to‑end pipeline met minimale copies en real‑time karakter voor productie‑achtige workloads (doel: 100k frames validatie). We streven naar zero‑copy waar mogelijk zonder kernel/library rebuilds; als directe DMA buffer‑deling niet haalbaar is, implementeer de snelst mogelijke RT‑vriendelijke fallback (geen rebuilding van `libedgetpu` of `tflite`).
+
+**Integratie focus:**
+
+* **Zero‑copy pipeline:** probeer `memfd`/dmabuf deling tussen `src/camera_capture.*` → `src/inference.*` → `src/video_overlay_processor.*`. Indien dit niet haalbaar zonder grote rebuilds, ontwerp en implementeer de snelst mogelijke, veilige RT‑fallback (gedeelde preallocated buffers + `mmap`/synchronisatie).
+* **Volledige integratie:** alle subsystems werken samen zonder onnodige shims.
+* **Fallback‑switching:** gedocumenteerde tests en log‑meldingen via `src/util_logging.*` en UI‑meldingen via `src/http_server.*`.
+
+**Frontend (extern UI):**
+
+* De client UI draait **niet** op de Pi zelf maar op een extern workstation of mobiele app.
+* Vereisten client: ontvangt live video, ontvangt bounding boxes én het **voorspelde ballistische inslagpunt**; deze drie elementen (video + bounding boxes + voorspeld inslagpunt) moeten zichtbaar en gesynchroniseerd zijn op de client. Het statische crosshair is alleen een referentie en hoeft niet te worden gematcht op tijd‑basis.
+* Synchronisatie: client/stream moet timestamps of sequentienummers gebruiken om overlay data correct op frames te plakken.
+
+**Prestatie eisen (100.000 frames):**
+
+* **E2E latentie:** ≤ 100 ms gemiddeld, jitter < 5% (p95/p99 within budget).
+* **TPU throughput:** ≥ 90 FPS op 100 FPS capture (90% realtime verwerking target).
+* **Thermisch:** geen throttling tijdens lange tests.
+* **Jitter monitoring:** continue logging naar CSV.
+
+**Build deliverable:** foutloos systeemimage voor Raspberry Pi 5B (target kernel en distro documenteren in release notes).
+
+**Gating criteria (Stage 2):**
+
+* Zero‑copy of snelle RT fallback geïmplementeerd en getest.
+* Alle fallback modes en UI‑integratie getest.
+* Prestatie‑doelen gehaald of gedocumenteerde mitigaties beschikbaar. → Goedkeuring voor Stage 3
+
+---
+
+## Stage 3: Validatie & verificatie
+
+**Doel:** Lange duurstress‑tests en veldvalidatie van kritieke systemen.
+
+**Test procedures:**
+
+* **4‑uur stress test:** continue logging van thermiek en jitter naar CSV + geautomatiseerde PNG grafieken.
+* **Vuurleiding verificatie:** tests in gecontroleerde omgeving/schietzaal: effect op vuurbeslissingen meten en validatie van onzekerheidsmodel.
+* **Killswitch verificatie:** hardware/software killswitch testen tijdens volle belasting.
+* **Experimentatie:** meerdere resoluties en configuraties via `src/config_loader.*`.
+
+**Stabiliteitseis:** E2E latency blijft binnen 5% van nominale waarde over de testduur.
+
+**Gating criteria (Stage 3):**
+
+* Veiligheidsmarges bevestigd.
+* Thermische stabiliteit aangetoond.
+* Vuurleidingsmodel gevalideerd. → Goedkeuring voor Stage 4
+
+---
+
+## Opslag van voorkennis en artefacten
+
+* **Servo latency:** `servo_latency.csv` (pre‑measured), wordt gebruikt als input voor analyses maar **niet** voor runtime onzekerheidspropagatie.
+* **Meetdata & logs:** `/home/pi/CoralEdgeTpu/logs/` met per‑module subdirectory en rotatie (3 bestandshistorie).
+* **Release snapshots:** bewaar git‑tags of commit‑hashes die gebruikt zijn voor reproduceerbaarheid.
+
+---
+
+## Notities & richtlijnen
+
+* Nooit harde paden coderen; gebruik `find`/`grep` voor discovery in scripts en CI.
+* Na 2–3 codewijzigingen: run `./build.sh` en valideer build logs.
+* Debugging: gebruik `gdb`/`valgrind`/`perf` voor concurrency/latency analysis.
+* Structureer `src/logic.*` zodat alle veiligheidskritieke routines (uncertainty propagation, safety checks) duidelijk gemarkeerd en testbaar zijn.
+
+---
+
 ## ✉️ Contact
 
 Project door: **Julian Novosad**
