@@ -122,7 +122,7 @@ void HttpServer::broadcast_packet(std::shared_ptr<H264Buffer> buffer) {
     std::lock_guard<std::mutex> lock(clients_mutex_);
     // LOG_INFO("Broadcasting packet of size " + std::to_string(buffer->size) + " to " + std::to_string(clients_.size()) + " clients.");
     for (auto const& [conn, client] : clients_) {
-        client->queue->push(buffer); // Push the shared_ptr, avoids copy
+        client->queue->push(std::move(buffer)); // Push the shared_ptr, avoids copy
     }
 }
 

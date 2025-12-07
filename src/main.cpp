@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
     LOG_INFO("Main: HttpServer initialized.");
 
     LOG_INFO("Main: Starting CameraCapture, InferenceEngine, VideoOverlayProcessor, H264Encoder, and HttpServer...");
-    if (!primary_camera.start() || !inference_engine->start() || !overlay_processor.start() || !h264_encoder.start() || !http_server.start()) {
+    if (!inference_engine->start() || !primary_camera.start() || !overlay_processor.start() || !h264_encoder.start() || !http_server.start()) {
         LOG_ERROR("Failed to start one or more modules.");
         primary_camera.stop();
         inference_engine->stop();
@@ -148,6 +148,14 @@ int main(int argc, char** argv) {
     overlay_processor.stop();
     h264_encoder.stop(); // Stop the H264Encoder
     http_server.stop();
+
+    // Explicitly clear queues to ensure PooledPtrs are destructed before BufferPools
+    tpu_inference_queue.clear();
+    main_camera_output_queue.clear();
+    detection_results_for_overlay_queue.clear();
+    overlaid_video_queue.clear();
+    h264_output_queue.clear();
+    
     logger.stop_writer_thread();
 
     LOG_INFO("Shutdown complete.");

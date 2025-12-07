@@ -22,7 +22,7 @@
  * This avoids deep copies of pixel data.
  */
 struct ImageData {
-    std::shared_ptr<PooledBuffer<uint8_t>> buffer; ///< Shared pointer to a pooled buffer holding pixel data.
+    BufferPool<uint8_t>::PooledPtr buffer; ///< Shared pointer to a pooled buffer holding pixel data.
     size_t width;                                  ///< Width of the image in pixels.
     size_t height;                                 ///< Height of the image in pixels.
     std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of image capture.
@@ -81,14 +81,14 @@ public:
      *
      * @param new_data The data item to be pushed.
      */
-    void push(T data) {
+    void push(T&& data) {
         std::unique_lock<std::mutex> lock(mutex_);
         queue_.push(std::move(data));
         // lock.unlock(); // Removed unlock before notify
         cond_var_.notify_one();
     }
 
-    void push_and_drop_if_full(T data) {
+    void push_and_drop_if_full(T&& data) {
         std::unique_lock<std::mutex> lock(mutex_);
         if (queue_.size() >= max_size_) {
             queue_.pop();
@@ -107,7 +107,7 @@ public:
      *
      * @param new_frame The MJPEG frame to be pushed.
      */
-    void push_mjpeg(T new_frame) {
+    void push_mjpeg(T&& new_frame) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!queue_.empty()) {
             queue_.pop(); // Discard older frame
@@ -174,6 +174,19 @@ public:
         if (!val) {
             cond_var_.notify_all(); // Notify all waiting threads on shutdown
         }
+    }
+
+    /**
+     * @brief Clears all items from the queue.
+     *
+     * This method locks the queue and removes all elements. It should be called
+     * during shutdown to ensure proper destruction of elements before
+     * BufferPools might be deallocated.
+     */
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::queue<T> empty_queue;
+        std::swap(queue_, empty_queue); // Efficiently clear the queue
     }
 
 private:
