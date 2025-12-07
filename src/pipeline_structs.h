@@ -33,22 +33,19 @@ struct ImageData {
 };
 
 /**
- * @brief Represents Inertial Measurement Unit (IMU) data.
+ * @brief Represents orientation data.
  *
- * Contains accelerometer, gyroscope, and optionally magnetometer readings,
- * along with a timestamp for when the data was captured.
+ * Contains yaw, pitch, and roll readings, along with a timestamp for when the data was captured.
  */
-struct IMUData {
-    float accel_x, accel_y, accel_z; ///< Accelerometer readings in m/s^2.
-    float gyro_x, gyro_y, gyro_z;    ///< Gyroscope readings in rad/s.
-    float mag_x, mag_y, mag_z;       ///< Magnetometer readings in microteslas (optional).
-    std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of IMU data capture.
+struct OrientationData {
+    float yaw;   ///< Yaw angle in degrees or radians.
+    float pitch; ///< Pitch angle in degrees or radians.
+    float roll;  ///< Roll angle in degrees or radians.
+    std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of orientation data capture.
 
     // Default constructor to initialize all members to 0 or an appropriate default
-    IMUData() : accel_x(0.0f), accel_y(0.0f), accel_z(0.0f),
-                gyro_x(0.0f), gyro_y(0.0f), gyro_z(0.0f),
-                mag_x(0.0f), mag_y(0.0f), mag_z(0.0f),
-                timestamp(std::chrono::high_resolution_clock::now()) {}
+    OrientationData() : yaw(0.0f), pitch(0.0f), roll(0.0f),
+                        timestamp(std::chrono::high_resolution_clock::now()) {}
 };
 
 /**

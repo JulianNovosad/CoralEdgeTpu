@@ -20,8 +20,7 @@ Dit elimineert versie-hell, Python-dependency chaos en ontbrekende upstream file
 * Handmatig gebouwde TensorFlow Lite 2.5.0 voor ARM64
 * Gepatchte en gestabiliseerde Flatbuffers-versie
 * Volledige dependency-graph **meegeleverd in deze repo**
-* Werkende example app (`src/main.cpp`)
-* Ondersteuning voor `ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite`
+* Ondersteuning voor `*_edgetpu.tflite` AI modellen.
 
 ---
 
@@ -50,7 +49,7 @@ CoralEdgeTpu/
 
 * Raspberry Pi 5
 * Google Coral M.2 TPU (PCIe)
-* `libedgetpu1-std` of `libedgetpu1-max`
+* `libedgetpu1-std`
 * CMake ≥ 3.16
 * g++ ≥ 10
 * Bazelisk (meegeleverd)
@@ -235,7 +234,7 @@ Dit document bevat het bijgewerkte, beknopte en actionabele Stage‑Gate plan vo
 
 **Core Subsystems (directe code‑mappings):**
 
-* **AI + Logica (Orchestrator):** `src/logic.*` — bevat nu ook object tracking (`object_tracker`), sensorfusion/IMU, hit‑scan (voorspeld inslagpunt), veiligheids/onzekerheidspropagatie en de servo actuatie API (PCA9685 interface / safety controller behaviour).
+* **AI + Logica (Orchestrator):** `src/logic.*` — bevat nu ook object tracking (`object_tracker`), orientatiesensoren, hit‑scan (voorspeld inslagpunt tegenover de draadkruis), veiligheids/onzekerheidspropagatie en de servo actuatie API (PCA9685 interface / safety controller behaviour).
 * **Camera & DMA (RT‑thread):** `src/camera_capture.*`, `src/buffer_pool.h`, `src/pipeline_structs.h`.
 * **TPU Inferentie:** `src/inference.*` + `.tflite` model.
 * **Overige non‑RT modules:** `src/video_overlay_processor.*`, `src/config_loader.*`, `src/h264_encoder.*`, `src/http_server.*`.
