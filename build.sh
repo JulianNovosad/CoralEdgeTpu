@@ -56,11 +56,19 @@ cp -r civetweb_temp/include civetweb/
 
 # 4. TensorFlow v2.5.0 checkout, patch, and build TFLite shared lib
 echo "4. Building TensorFlow Lite v2.5.0 shared library..."
-rm -rf tensorflow_2.5.0 # Explicitly remove to ensure fresh clone
-git clone https://github.com/tensorflow/tensorflow.git tensorflow_2.5.0
-cd tensorflow_2.5.0
-git checkout v2.5.0
-cd ..
+if [ ! -d "tensorflow_2.5.0" ]; then
+    echo "Cloning TensorFlow v2.5.0 for the first time..."
+    git clone https://github.com/tensorflow/tensorflow.git tensorflow_2.5.0
+    cd tensorflow_2.5.0
+    git checkout v2.5.0
+    cd ..
+else
+    echo "TensorFlow v2.5.0 already cloned. Ensuring correct version."
+    cd tensorflow_2.5.0
+    git fetch origin
+    git checkout v2.5.0
+    cd ..
+fi
 
 
 

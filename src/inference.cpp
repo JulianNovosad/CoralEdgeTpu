@@ -22,12 +22,14 @@ void edgetpu_error_reporter(const char* msg) {
 
 InferenceEngine::InferenceEngine(const std::string& model_path, 
                                      ImageQueue& input_queue, 
-                                     DetectionResultsQueue& detection_results_output_queue, 
-                                     BufferPool<DetectionResult>& detection_result_pool,
+                                     DetectionResultsQueue& detection_results_for_overlay_queue, 
+                                     DetectionResultsQueue& detection_results_for_logic_queue, 
+                                     std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool,
                                      int num_threads)
     : model_path_(model_path), 
       input_queue_(input_queue), 
-      detection_results_output_queue_(detection_results_output_queue), 
+      detection_results_for_overlay_queue_(detection_results_for_overlay_queue), 
+      detection_results_for_logic_queue_(detection_results_for_logic_queue),
       detection_result_pool_(detection_result_pool),
       num_threads_(num_threads) {
 
@@ -77,8 +79,6 @@ bool InferenceEngine::start() {
     }
 
     running_ = true;
-    input_queue_.set_running(true);
-    detection_results_output_queue_.set_running(true);
 
     for (int i = 0; i < num_threads_; ++i) {
         worker_threads_.emplace_back(&InferenceEngine::worker_thread_func, this);
@@ -91,8 +91,7 @@ bool InferenceEngine::start() {
 void InferenceEngine::stop() {
     if (running_.exchange(false)) {
         LOG_INFO("Stopping InferenceEngine...");
-        detection_results_output_queue_.set_running(false);
-        input_queue_.set_running(false);
+
         
         for (std::thread& thread : worker_threads_) {
             if (thread.joinable()) {
@@ -175,7 +174,8 @@ void InferenceEngine::worker_thread_func() {
             auto results_buffer = get_output_tensor(interpreter.get());
             
             if (results_buffer && results_buffer->size > 0) {
-                detection_results_output_queue_.push(std::move(results_buffer));
+                detection_results_for_overlay_queue_.push(results_buffer); // Push to overlay queue
+                detection_results_for_logic_queue_.push(results_buffer); // Push to logic queue
             }
         }
     }
@@ -195,7 +195,7 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
 }
 
 std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite::Interpreter* interpreter) {
-    auto results_buffer = detection_result_pool_.acquire();
+    auto results_buffer = detection_result_pool_->acquire();
     if (!results_buffer) {
         LOG_WARNING("Failed to acquire a detection result buffer from the pool. No results will be reported for this frame.");
         return nullptr;
@@ -260,13 +260,21 @@ void InferenceEngine::get_performance_metrics() {
 
     std::sort(inference_times_ms_.begin(), inference_times_ms_.end());
     size_t percentile_99_index = static_cast<size_t>(std::round(total_inferences_ * 0.99));
-    long long p99_latency_ms = inference_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_inferences_ - 1))];
+    size_t percentile_95_index = static_cast<size_t>(std::round(total_inferences_ * 0.95));
+    size_t percentile_50_index = static_cast<size_t>(std::round(total_inferences_ * 0.50));
 
+    long long p99_latency_ms = inference_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_inferences_ - 1))];
+    long long p95_latency_ms = inference_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_inferences_ - 1))];
+    long long p50_latency_ms = inference_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_inferences_ - 1))];
+
+    LOG_CSV("InferenceEngine", "Inference", p50_latency_ms, p95_latency_ms, p99_latency_ms, 0.0, average_fps);
     LOG_INFO("--- Inference Performance Metrics ---");
     LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
     LOG_INFO("  Average FPS: " + std::to_string(average_fps));
     LOG_INFO("  Average Latency: " + std::to_string(average_duration_ms) + " ms");
     LOG_INFO("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
+    LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
     LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
     LOG_INFO("-------------------------------------");
 

@@ -38,7 +38,8 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  ImageQueue& queue,
                                  const char* stream_name,
                                  unsigned int target_width,
-                                 unsigned int target_height) {
+                                 unsigned int target_height,
+                                 std::chrono::high_resolution_clock::time_point capture_timestamp) {
     if (fb->planes().empty()) { return false; }
     
     const libcamera::FrameBuffer::Plane& plane = fb->planes()[0];
@@ -84,7 +85,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     pooled_yuv_buffer.reset();
 
     // Acquire a new buffer from the pool for the BGR image
-    auto bgr_pooled_buffer = buffer_pool.acquire();
+    auto bgr_pooled_buffer = buffer_pool->acquire();
     if (!bgr_pooled_buffer) {
         LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer for BGR converted image. Dropping frame.");
         return false;
@@ -94,10 +95,9 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     std::memcpy(bgr_pooled_buffer->data.data(), bgr_image.data, bgr_size);
     bgr_pooled_buffer->size = bgr_size;
     
-    ImageData image_data;
+    ImageData image_data(capture_timestamp); // Pass the capture_timestamp to the constructor
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
-    image_data.timestamp = std::chrono::high_resolution_clock::now();
     image_data.buffer = std::move(bgr_pooled_buffer); // Use the BGR buffer
 
     // 5. Resize if necessary (now using BGR image_data.buffer)
@@ -110,7 +110,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
         cv::resize(original_image_bgr, resized_image_bgr, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
 
         // Acquire a new buffer for the resized image
-        auto resized_bgr_pooled_buffer = buffer_pool.acquire();
+        auto resized_bgr_pooled_buffer = buffer_pool->acquire();
         if (!resized_bgr_pooled_buffer) {
             LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer for resized image. Dropping frame.");
             return false;
@@ -128,7 +128,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     
     // 6. Push data to the queue
     LOG_INFO("Pushing " + std::string(stream_name) + " to queue. Final dimensions: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) + ", data size: " + std::to_string(image_data.buffer->size));
-    queue.push_and_drop_if_full(std::move(image_data));
+    queue.push(std::move(image_data));
     
     return true;
 }
@@ -155,7 +155,8 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
       camera_(nullptr),
       allocator_(nullptr),
       running_(false),
-      last_frame_time_(std::chrono::high_resolution_clock::now()) {
+      last_frame_time_(std::chrono::high_resolution_clock::now()),
+      total_frames_processed_(0) {
     
     int ret = camera_manager_->start();
     if (ret) {
@@ -252,9 +253,6 @@ bool CameraCapture::start() {
     LOG_INFO("Libcamera camera started.");
 
     running_ = true;
-    for (auto& queue_ref : main_output_queues_) {
-        queue_ref.get().set_running(true);
-    }
     
     // 5. Queue initial requests
     frame_count_ = 0;
@@ -279,11 +277,6 @@ void CameraCapture::stop() {
         return;
     }
     LOG_INFO("Stopping CameraCapture...");
-
-    // 2. Stop downstream queues
-    for (auto& queue_ref : main_output_queues_) {
-        queue_ref.get().set_running(false);
-    }
 
     if (camera_) {
         // 3. CRITICAL: Disconnect the callback first.
@@ -480,7 +473,18 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         // Allow requeueing even on failure to recover
     }
 
+    // Get the hardware capture timestamp from the request metadata
+    std::chrono::high_resolution_clock::time_point hardware_capture_timestamp;
+    auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
+    if (md_timestamp) {
+        hardware_capture_timestamp = std::chrono::high_resolution_clock::time_point(std::chrono::nanoseconds(*md_timestamp));
+    } else {
+        LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
+        hardware_capture_timestamp = std::chrono::high_resolution_clock::now();
+    }
+
     // --- PROCESSING START ---
+    auto processing_start_time = std::chrono::high_resolution_clock::now();
     
     // Capture buffer map BEFORE calling reuse()
     libcamera::Request::BufferMap captured_buffers = request->buffers();
@@ -502,38 +506,61 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
                 // Assuming YUV420 input from libcamera now
                 size_t yuv_size = video_plane.length;
                 
-                // Acquire a buffer to temporarily hold YUV data
+    // 2. Acquire a buffer from the pool
     auto pooled_yuv_buffer = image_buffer_pool_->acquire(); // Temporarily hold YUV data
-                if (!pooled_yuv_buffer) {
-                    LOG_WARNING("CameraCapture: Failed to acquire YUV buffer for main stream. Dropping frame.");
-                    // The munmap for video_mmap_ptr should happen here if pooled_yuv_buffer acquisition failed
-                    // but it will be handled at the end of this 'else' block
-                } else {
-                    std::memcpy(pooled_yuv_buffer->data.data(), video_mmap_ptr, yuv_size);
+    if (!pooled_yuv_buffer) {
+        LOG_WARNING("CameraCapture: Failed to acquire YUV buffer for main stream. Dropping frame.");
+        if (munmap(video_mmap_ptr, video_plane.length) == -1) {
+            LOG_ERROR("CameraCapture: Failed to munmap video stream frame buffer after YUV buffer acquisition failure: " + std::string(strerror(errno)));
+        }
+        return;
+    }
+    
+    std::memcpy(pooled_yuv_buffer->data.data(), video_mmap_ptr, yuv_size);
+    pooled_yuv_buffer->size = yuv_size;
 
-                    // Convert YUV420 to BGR for processing (OpenCV default)
-                    cv::Mat yuv_image(video_cfg.size.height + video_cfg.size.height / 2, video_cfg.size.width, CV_8UC1, pooled_yuv_buffer->data.data());
-                    cv::Mat bgr_image;
-                    cv::cvtColor(yuv_image, bgr_image, cv::COLOR_YUV2BGR_I420);
+    // Log YUV image info before conversion
+    LOG_INFO("CameraCapture: YUV image before cvtColor - Width: " + std::to_string(video_cfg.size.width) + 
+             ", Height: " + std::to_string(video_cfg.size.height) + 
+             ", YUV data size: " + std::to_string(yuv_size));
 
-                    // Acquire a new buffer for the BGR image
-                auto pooled_yuv_buffer = image_buffer_pool_->acquire();
-                    if (!bgr_pooled_buffer) {
-                        LOG_WARNING("CameraCapture: Failed to acquire BGR buffer for main stream. Dropping frame.");
-                    } else {
-                        size_t bgr_size = bgr_image.total() * bgr_image.elemSize();
-                        std::memcpy(bgr_pooled_buffer->data.data(), bgr_image.data, bgr_size);
-                        bgr_pooled_buffer->size = bgr_size;
+    // Convert YUV420 to BGR for processing (OpenCV default)
+    cv::Mat yuv_image(video_cfg.size.height + video_cfg.size.height / 2, video_cfg.size.width, CV_8UC1, pooled_yuv_buffer->data.data());
+    cv::Mat bgr_image;
+    cv::cvtColor(yuv_image, bgr_image, cv::COLOR_YUV2BGR_I420);
 
-                        ImageData video_image_data;
+    // Log BGR image info after conversion
+    LOG_INFO("CameraCapture: BGR image after cvtColor - Rows: " + std::to_string(bgr_image.rows) + 
+             ", Cols: " + std::to_string(bgr_image.cols) + 
+             ", Type: " + std::to_string(bgr_image.type()) + 
+             ", Channels: " + std::to_string(bgr_image.channels()) +
+             ", Data Ptr: " + std::to_string(reinterpret_cast<uintptr_t>(bgr_image.data)));
+
+    // Acquire a new buffer for the BGR image
+    auto bgr_pooled_buffer = image_buffer_pool_->acquire();
+    if (!bgr_pooled_buffer) {
+        LOG_WARNING("CameraCapture: Failed to acquire BGR buffer for main stream. Dropping frame.");
+        if (munmap(video_mmap_ptr, video_plane.length) == -1) {
+            LOG_ERROR("CameraCapture: Failed to munmap video stream frame buffer after BGR buffer acquisition failure: " + std::string(strerror(errno)));
+        }
+        return;
+    }
+
+    size_t bgr_size = bgr_image.total() * bgr_image.elemSize();
+    LOG_INFO("CameraCapture: Copying BGR image data - Source Ptr: " + std::to_string(reinterpret_cast<uintptr_t>(bgr_image.data)) +
+             ", Source Size: " + std::to_string(bgr_size) +
+             ", Dest Ptr: " + std::to_string(reinterpret_cast<uintptr_t>(bgr_pooled_buffer->data.data())) +
+             ", Dest Capacity: " + std::to_string(bgr_pooled_buffer->data.size()));
+    std::memcpy(bgr_pooled_buffer->data.data(), bgr_image.data, bgr_size);
+
+                        ImageData video_image_data(hardware_capture_timestamp); // Use the hardware timestamp
                         video_image_data.width = video_cfg.size.width;
                         video_image_data.height = video_cfg.size.height;
                         video_image_data.buffer = std::move(bgr_pooled_buffer);
-                        video_image_data.timestamp = std::chrono::high_resolution_clock::now();
                         
                         // Output to all main queues
                         for (auto& queue_ref : main_output_queues_) {
-                            queue_ref.get().push_and_drop_if_full(std::move(video_image_data));
+                            queue_ref.get().push(std::move(video_image_data));
                         }
                     } // End of if(!bgr_pooled_buffer) else block
                 } // End of if(!pooled_yuv_buffer) else block
@@ -558,24 +585,21 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
         
         // Use helper for TPU stream, passing the buffer pool
-        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_);
+        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, hardware_capture_timestamp);
 
     } else {
         LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
     }
     
-    // --- FPS Calculation ---
-    frame_count_++;
-    if (frame_count_ % kFpsReportInterval == 0) {
-        auto now = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = now - last_frame_time_;
-        double fps = (double)kFpsReportInterval / elapsed.count();
-        LOG_INFO("--- FPS Report (Callback): " + std::to_string(fps) + " ---");
-        last_frame_time_ = now;
+    // --- PERFORMANCE METRICS ---
+    auto processing_end_time = std::chrono::high_resolution_clock::now();
+    long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(processing_end_time - processing_start_time).count();
+    {
+        std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
+        frame_latencies_ms_.push_back(duration_ms);
+        total_frames_processed_++;
     }
-
-    // --- PROCESSING END ---
-
+    
     // --- REQUEUE ---
     // CRITICAL FIX: Use ReuseBuffers flag for efficient buffer recycling.
     // This preserves the buffers attached to the request, avoiding the need to
@@ -590,6 +614,51 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         }
     }
 }
+
+void CameraCapture::get_performance_metrics() {
+    std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
+
+    if (total_frames_processed_ == 0) {
+        LOG_INFO("CameraCapture: No frames processed for performance metrics.");
+        return;
+    }
+
+    double average_latency_ms = 0;
+    for (long long latency : frame_latencies_ms_) {
+        average_latency_ms += latency;
+    }
+    average_latency_ms /= total_frames_processed_;
+    double average_fps = 1000.0 / average_latency_ms; // Inverse of average latency to get average FPS
+
+    double sum_sq_diff = 0;
+    for (long long latency : frame_latencies_ms_) {
+        sum_sq_diff += (latency - average_latency_ms) * (latency - average_latency_ms);
+    }
+    double std_dev_ms = std::sqrt(sum_sq_diff / total_frames_processed_);
+
+    std::sort(frame_latencies_ms_.begin(), frame_latencies_ms_.end());
+    size_t percentile_99_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.99));
+    size_t percentile_95_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.95));
+    size_t percentile_50_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.50));
+
+    long long p99_latency_ms = frame_latencies_ms_[std::min(percentile_99_index, static_cast<size_t>(total_frames_processed_ - 1))];
+    long long p95_latency_ms = frame_latencies_ms_[std::min(percentile_95_index, static_cast<size_t>(total_frames_processed_ - 1))];
+    long long p50_latency_ms = frame_latencies_ms_[std::min(percentile_50_index, static_cast<size_t>(total_frames_processed_ - 1))];
+
+    LOG_CSV("CameraCapture", "FrameCapture", p50_latency_ms, p95_latency_ms, p99_latency_ms, 0.0, average_fps);
+    LOG_INFO("--- CameraCapture Performance Metrics (Frame Latency) ---");
+    LOG_INFO("  Total Frames Processed: " + std::to_string(total_frames_processed_));
+    LOG_INFO("  Average FPS: " + std::to_string(average_fps));
+    LOG_INFO("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
+    LOG_INFO("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
+    LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    LOG_INFO("---------------------------------------------------------");
+
+    frame_latencies_ms_.clear();
+    total_frames_processed_ = 0;
+} // Correct closing brace for request_complete_callback
 
 void CameraCapture::get_state() const {
     LOG_INFO("--- CameraCapture State ---");

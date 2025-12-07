@@ -25,9 +25,6 @@ bool VideoOverlayProcessor::start() {
         return false;
     }
     running_ = true;
-    input_video_queue_.set_running(true);
-    input_detection_queue_.set_running(true); 
-    output_queue_.set_running(true);
     worker_thread_ = std::thread(&VideoOverlayProcessor::worker_thread_func, this);
     LOG_INFO("VideoOverlayProcessor started.");
     return true;
@@ -36,9 +33,6 @@ bool VideoOverlayProcessor::start() {
 void VideoOverlayProcessor::stop() {
     if (running_.exchange(false)) {
         LOG_INFO("Stopping VideoOverlayProcessor...");
-        input_video_queue_.set_running(false);
-        input_detection_queue_.set_running(false); // Also set running for the new queue
-        output_queue_.set_running(false);
         if (worker_thread_.joinable()) {
             worker_thread_.join();
         }
@@ -48,23 +42,26 @@ void VideoOverlayProcessor::stop() {
 
 void VideoOverlayProcessor::worker_thread_func() {
     ImageData image_data;
-    std::vector<DetectionResult> latest_detections;
+    std::shared_ptr<DetectionResultBuffer> detections_buffer;
 
     while (running_) {
         if (input_video_queue_.pop(image_data)) {
-            // Use the new peek_latest with a lambda to copy the data from the pooled buffer.
-            latest_detections.clear();
-            input_detection_queue_.peek_latest([&latest_detections](const std::shared_ptr<DetectionResultBuffer>& detections_buffer) {
+            // Attempt to get the latest detection results. If none available, latest_detections_ will remain empty.
+            if (input_detection_queue_.pop(detections_buffer)) {
                 if (detections_buffer && detections_buffer->size > 0) {
-                    latest_detections.assign(detections_buffer->data.begin(), detections_buffer->data.begin() + detections_buffer->size);
+                    latest_detections_.assign(detections_buffer->data.begin(), detections_buffer->data.begin() + detections_buffer->size);
+                } else {
+                    latest_detections_.clear(); // No detections or empty buffer
                 }
-            });
+            } else {
+                latest_detections_.clear(); // No new detections popped
+            }
 
             // Convert ImageData to cv::Mat, wrapping the data from the pooled buffer
             cv::Mat frame(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
 
             // Draw bounding boxes and labels
-            for (const auto& detection : latest_detections) {
+            for (const auto& detection : latest_detections_) {
                 // Coordinates are now absolute pixels from the inference engine
                 int xmin = static_cast<int>(detection.xmin);
                 int ymin = static_cast<int>(detection.ymin);
