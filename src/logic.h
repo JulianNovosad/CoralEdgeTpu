@@ -37,7 +37,7 @@ struct TrackedObject {
 };
 
 // Forward declaration for IMUSensor
-class IMUSensor;
+class OrientationSensor;
 
 enum SafetyStatus {
     SAFETY_OK,
@@ -56,7 +56,7 @@ enum FallbackMode {
 
 class LogicModule {
 public:
-    LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<IMUSensor> imu_sensor);
+    LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor);
     ~LogicModule();
 
     bool start();
@@ -69,12 +69,12 @@ private:
     void worker_thread_func();
 
     // The main function for the centralized logic module
-    void process(const std::vector<DetectionResult>& detections, const IMUData& imu_data);
+    void process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data);
 
     DetectionResultsQueue& detection_input_queue_;
     std::atomic<bool> running_ = false;
     std::thread worker_thread_;
-    std::shared_ptr<IMUSensor> imu_sensor_;
+    std::shared_ptr<OrientationSensor> orientation_sensor_;
 
     std::vector<TrackedObject> active_tracks_; ///< Currently active tracked objects.
     static long next_track_id_;                ///< Counter for generating unique track IDs.
@@ -83,7 +83,7 @@ private:
 
     // Helper method for hit-scan/predicted impact point calculation
     // Returns true if an impact point can be predicted, false otherwise
-    bool predict_impact_point(const TrackedObject& target, const IMUData& current_imu_data, float& out_x, float& out_y, float& out_z);
+    bool predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, float& out_x, float& out_y, float& out_z);
 
     // Helper method for safety and uncertainty propagation
     SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, float predicted_impact_uncertainty, std::string& safety_status_message);
@@ -97,6 +97,13 @@ private:
     long long total_predictions_ = 0;
     std::chrono::time_point<std::chrono::high_resolution_clock> performance_start_time_;
     FallbackMode current_fallback_mode_;
+
+    // Private helper methods for refactoring the process function
+    void perform_sensor_fusion(const OrientationData& imu_data);
+    void update_object_tracks(const std::vector<DetectionResult>& detections);
+    void calculate_ballistics_for_tracks(const OrientationData& imu_data);
+    void perform_safety_and_actuation(const OrientationData& imu_data);
+    void update_process_metrics(std::chrono::high_resolution_clock::time_point processing_start_time, std::chrono::high_resolution_clock::time_point processing_end_time);
 };
 
 #endif // LOGIC_H

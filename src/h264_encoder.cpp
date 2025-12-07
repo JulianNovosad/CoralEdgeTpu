@@ -63,9 +63,7 @@ void H264Encoder::stop() {
         }
         x264_encoder_close(encoder_);
         encoder_ = nullptr;
-        // Clean up pictures only if encoder was successfully opened and thus pictures were allocated
         x264_picture_clean(&picture_in_);
-        // picture_out_ doesn't need explicit clean if it was only initialized, not allocated.
     }
     LOG_INFO("H264Encoder stopped.");
 }
@@ -173,9 +171,9 @@ void H264Encoder::worker_thread_func() {
 
         // Allocate pictures
 
-        x264_picture_alloc(&picture_in_, param.i_csp, param.i_width, param.i_height); 
+                        x264_picture_alloc(&picture_in_, param.i_csp, param.i_width, param.i_height); 
 
-        LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
+                        LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
 
     picture_in_.i_pts = 0; // Initialize presentation timestamp
 

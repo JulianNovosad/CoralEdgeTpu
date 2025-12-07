@@ -6,6 +6,8 @@
 
 SystemMonitor::SystemMonitor(std::chrono::seconds interval_s)
     : interval_s_(interval_s) {
+    // Initialize CPU usage stats by calling it once
+    read_cpu_usage(); 
     LOG_INFO("SystemMonitor created with interval: " + std::to_string(interval_s_.count()) + " seconds.");
 }
 
@@ -39,11 +41,12 @@ void SystemMonitor::worker_thread_func() {
     while (running_) {
         float cpu_temp = read_cpu_temperature();
         float memory_usage_percent = read_memory_usage();
+        float cpu_usage = read_cpu_usage();
 
         // LOG_CSV(module, stage, p50, p95, p99, temp, fps)
-        // For SystemMonitor, p50, p95, p99, fps are not directly applicable or meaningful in the same way.
-        // We'll use 0 for these for now, and rely on the 'temp' field for CPU temp and 'fps' field for memory usage.
-        LOG_CSV("SystemMonitor", "Metrics", 0.0, 0.0, 0.0, cpu_temp, memory_usage_percent);
+        // For SystemMonitor, p95, p99, fps are not directly applicable or meaningful in the same way.
+        // We'll use cpu_usage for p50, and 0 for p95, p99. temp for CPU temp and fps for memory usage.
+        LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
 
         std::this_thread::sleep_for(interval_s_);
     }
@@ -62,6 +65,44 @@ float SystemMonitor::read_cpu_temperature() {
         LOG_WARNING("SystemMonitor: Could not open /sys/class/thermal/thermal_zone0/temp to read CPU temperature.");
     }
     return temp;
+}
+
+float SystemMonitor::read_cpu_usage() {
+    std::ifstream stat_file("/proc/stat");
+    std::string line;
+    float cpu_usage = 0.0f;
+
+    if (stat_file.is_open()) {
+        std::getline(stat_file, line);
+        stat_file.close();
+
+        std::stringstream ss(line);
+        std::string cpu_label;
+        long user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
+
+        ss >> cpu_label >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal >> guest >> guest_nice;
+
+        if (cpu_label == "cpu") {
+            long current_idle_cpu_time = idle + iowait;
+            long current_total_cpu_time = user + nice + system + idle + iowait + irq + softirq + steal;
+
+            // Only calculate if previous values exist (not the first call)
+            if (prev_total_cpu_time_ != 0 && prev_idle_cpu_time_ != 0) {
+                long total_cpu_time_diff = current_total_cpu_time - prev_total_cpu_time_;
+                long idle_cpu_time_diff = current_idle_cpu_time - prev_idle_cpu_time_;
+
+                if (total_cpu_time_diff > 0) {
+                    cpu_usage = 100.0f * (1.0f - static_cast<float>(idle_cpu_time_diff) / static_cast<float>(total_cpu_time_diff));
+                }
+            }
+            // Update previous values for the next calculation
+            prev_total_cpu_time_ = current_total_cpu_time;
+            prev_idle_cpu_time_ = current_idle_cpu_time;
+        }
+    } else {
+        LOG_WARNING("SystemMonitor: Could not open /proc/stat to read CPU usage.");
+    }
+    return cpu_usage;
 }
 
 float SystemMonitor::read_memory_usage() {

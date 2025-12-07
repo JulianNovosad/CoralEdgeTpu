@@ -1,6 +1,6 @@
 #include "logic.h"
 #include "util_logging.h"
-#include "imu_sensor.h" // Include for full definition of IMUSensor
+#include "orientation_sensor.h" // Include for full definition of OrientationSensor
 #include <algorithm> // For std::find_if, std::min, std::max
 #include <cmath> // For M_PI, atan2, sqrt
 
@@ -31,8 +31,8 @@ float LogicModule::calculate_iou(const DetectionResult& det1, const DetectionRes
     return intersection_area / union_area;
 }
 
-LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<IMUSensor> imu_sensor)
-    : detection_input_queue_(detection_input_queue), imu_sensor_(imu_sensor),
+LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor)
+    : detection_input_queue_(detection_input_queue), orientation_sensor_(orientation_sensor),
       current_fallback_mode_(NORMAL_OPERATION) {
     LOG_INFO("LogicModule created. This module centralizes ballistics, object tracking, and safety logic.");
     performance_start_time_ = std::chrono::high_resolution_clock::now();
@@ -71,7 +71,7 @@ void LogicModule::worker_thread_func() {
         if (detection_input_queue_.pop(detections_buffer)) {
             if (detections_buffer && detections_buffer->size > 0) {
                 // Get the latest IMU data from the sensor module
-                IMUData current_imu_data = imu_sensor_->get_latest_imu_data();
+                OrientationData current_imu_data = orientation_sensor_->get_latest_orientation_data();
 
                 // Call the actual processing logic
                 process(detections_buffer->data, current_imu_data);
@@ -80,137 +80,16 @@ void LogicModule::worker_thread_func() {
     }
 }
 
-void LogicModule::process(const std::vector<DetectionResult>& detections, const IMUData& imu_data) {
+void LogicModule::process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data) {
     auto process_start_time = std::chrono::high_resolution_clock::now();
     
-    char log_buffer[256];
-    
-    // --- 1. Sensor Fusion (Basic Placeholder) ---
-    // Use IMU data to potentially refine device orientation or movement estimates.
-    snprintf(log_buffer, sizeof(log_buffer), "IMU Data: Accel(%.2f, %.2f, %.2f), Gyro(%.2f, %.2f, %.2f)",
-             imu_data.accel_x, imu_data.accel_y, imu_data.accel_z,
-             imu_data.gyro_x, imu_data.gyro_y, imu_data.gyro_z);
-    LOG_INFO(log_buffer);
+    this->perform_sensor_fusion(imu_data);
 
-    // --- 2. Object Tracking ---
-    // A. Mark all existing tracks as unassociated for the current frame
-    for (auto& track : active_tracks_) {
-        track.associated_this_frame = false;
-    }
+    this->update_object_tracks(detections);
 
-    // B. Associate new detections with existing tracks (IoU-based)
-    for (const auto& new_detection : detections) {
-        float best_iou = 0.0f;
-        TrackedObject* best_match_track = nullptr;
+    this->calculate_ballistics_for_tracks(imu_data);
 
-        for (auto& track : active_tracks_) {
-            // Only consider tracks not yet associated in this frame
-            if (!track.associated_this_frame) {
-                float iou = calculate_iou(new_detection, track.last_detection);
-                if (iou > best_iou && iou >= 0.3f) { // IoU threshold
-                    best_iou = iou;
-                    best_match_track = &track;
-                }
-            }
-        }
-
-        if (best_match_track) {
-            // Update existing track
-            best_match_track->last_detection = new_detection;
-            // Mock a distance for now, actual distance will come from other sensors
-            best_match_track->pos_z = 5.0f; // Placeholder distance
-            // Update pos_x, pos_y based on new detection and distance - requires camera intrinsics
-            best_match_track->last_update_time = new_detection.timestamp;
-            best_match_track->hit_streak++;
-            best_match_track->missed_frames = 0;
-            best_match_track->associated_this_frame = true;
-            snprintf(log_buffer, sizeof(log_buffer), "Track ID %ld updated (IoU: %.2f). Hit streak: %d", best_match_track->id, best_iou, best_match_track->hit_streak);
-            LOG_INFO(log_buffer);
-        } else {
-            // Create new track
-            // Mock a distance for now
-            active_tracks_.emplace_back(++next_track_id_, new_detection, 5.0f); // Placeholder distance
-            snprintf(log_buffer, sizeof(log_buffer), "New track ID %ld created.", active_tracks_.back().id);
-            LOG_INFO(log_buffer);
-        }
-    }
-
-    // C. Manage missed tracks and remove old tracks
-    // Iterate in reverse to allow safe removal
-    for (auto it = active_tracks_.rbegin(); it != active_tracks_.rend(); ++it) {
-        if (!it->associated_this_frame) {
-            it->missed_frames++;
-            snprintf(log_buffer, sizeof(log_buffer), "Track ID %ld missed. Missed frames: %d", it->id, it->missed_frames);
-            LOG_INFO(log_buffer);
-
-            if (it->missed_frames > 5) { // Threshold for track removal
-                snprintf(log_buffer, sizeof(log_buffer), "Track ID %ld removed due to excessive missed frames.", it->id);
-                LOG_INFO(log_buffer);
-                active_tracks_.erase(std::next(it).base()); // Erase from the original vector
-            }
-        }
-    }
-
-    // --- 3. Ballistics Calculation (using tracked object's estimated state) ---
-    // Iterate through active tracks and try to predict an impact point.
-    for (auto& track : active_tracks_) {
-        float impact_x, impact_y, impact_z;
-        // Use the actual imu_data for prediction
-        if (predict_impact_point(track, imu_data, impact_x, impact_y, impact_z)) {
-            snprintf(log_buffer, sizeof(log_buffer), "Predicted Impact Point for Track ID %ld: (%.2f, %.2f, %.2f)",
-                     track.id, impact_x, impact_y, impact_z);
-            LOG_INFO(log_buffer);
-        } else {
-            snprintf(log_buffer, sizeof(log_buffer), "No Impact Point Predicted for Track ID %ld.", track.id);
-            LOG_INFO(log_buffer);
-        }
-    }
-
-    // --- 4. Uncertainty Propagation & Safety Checks ---
-    float predicted_impact_uncertainty = 0.5f; // Placeholder value
-    std::string safety_message;
-    
-    // Iterate through active tracks and perform safety checks
-    for (auto& track : active_tracks_) {
-        SafetyStatus safety_status = perform_safety_and_uncertainty_checks(track, predicted_impact_uncertainty, safety_message);
-        
-        switch (safety_status) {
-            case SAFETY_OK:
-                if (current_fallback_mode_ != NORMAL_OPERATION) {
-                    LOG_INFO("Returning to NORMAL_OPERATION.");
-                    current_fallback_mode_ = NORMAL_OPERATION;
-                }
-                snprintf(log_buffer, sizeof(log_buffer), "Safety check PASSED for Track ID %ld: %s", track.id, safety_message.c_str());
-                LOG_INFO(log_buffer);
-                // Proceed with servo actuation if needed
-                float impact_x, impact_y, impact_z;
-                if (predict_impact_point(track, imu_data, impact_x, impact_y, impact_z)) {
-                    issue_servo_commands(impact_x, impact_y, impact_z); // Issue commands if safe
-                }
-                break;
-            case SAFETY_WARNING_UNCERTAINTY:
-            case SAFETY_WARNING_TRACK_UNSTABLE:
-                if (current_fallback_mode_ != FALLBACK_A_REDUCED_PERFORMANCE) {
-                    LOG_WARNING("Activating FALLBACK_A_REDUCED_PERFORMANCE due to warning: " + safety_message);
-                    current_fallback_mode_ = FALLBACK_A_REDUCED_PERFORMANCE;
-                }
-                snprintf(log_buffer, sizeof(log_buffer), "Safety check WARNING for Track ID %ld: %s", track.id, safety_message.c_str());
-                LOG_WARNING(log_buffer);
-                // Reduced performance action: e.g., only log, do not issue commands
-                break;
-            case SAFETY_CRITICAL_UNCERTAINTY:
-            case SAFETY_CRITICAL_OTHER:
-                if (current_fallback_mode_ < FALLBACK_B_WARNING_STATE) { // Promote to higher fallback if less severe mode
-                    LOG_ERROR("Activating FALLBACK_B_WARNING_STATE due to critical issue: " + safety_message);
-                    current_fallback_mode_ = FALLBACK_B_WARNING_STATE;
-                }
-                snprintf(log_buffer, sizeof(log_buffer), "Safety check CRITICAL for Track ID %ld: %s", track.id, safety_message.c_str());
-                LOG_ERROR(log_buffer);
-                // Critical action: e.g., halt all operations, wait for manual override
-                break;
-            // Add other cases for FALLBACK_C if specific conditions lead directly to it
-        }
-    }
+    this->perform_safety_and_actuation(imu_data);
     
     auto process_end_time = std::chrono::high_resolution_clock::now();
     long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(process_end_time - process_start_time).count();
@@ -225,7 +104,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
 const float GRAVITY = 9.81f; // m/s^2
 const float MUZZLE_VELOCITY = 100.0f; // m/s (placeholder)
 
-bool LogicModule::predict_impact_point(const TrackedObject& target, const IMUData& current_imu_data, float& out_x, float& out_y, float& out_z) {
+bool LogicModule::predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, float& out_x, float& out_y, float& out_z) {
     // This is a simplified 2D projectile motion model (vertical plane only for y, z)
     // assuming target is stationary in X-axis (for simplicity of baseline)
     // We will consider the target's current estimated Z (distance) as the range.
@@ -369,4 +248,143 @@ void LogicModule::get_performance_metrics() {
 
     prediction_times_ms_.clear();
     total_predictions_ = 0;
+}
+
+void LogicModule::perform_sensor_fusion(const OrientationData& imu_data) {
+    char log_buffer[256];
+    // --- 1. Sensor Fusion (Basic Placeholder) ---
+    // Use IMU data to potentially refine device orientation or movement estimates.
+    snprintf(log_buffer, sizeof(log_buffer), "IMU Data: Yaw(%.2f), Pitch(%.2f), Roll(%.2f)",
+             imu_data.yaw, imu_data.pitch, imu_data.roll);
+    LOG_INFO(log_buffer);
+}
+
+void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detections) {
+    char log_buffer[256];
+
+    // --- 2. Object Tracking ---
+    // A. Mark all existing tracks as unassociated for the current frame
+    for (auto& track : active_tracks_) {
+        track.associated_this_frame = false;
+    }
+
+    // B. Associate new detections with existing tracks (IoU-based)
+    for (const auto& new_detection : detections) {
+        float best_iou = 0.0f;
+        TrackedObject* best_match_track = nullptr;
+
+        for (auto& track : active_tracks_) {
+            // Only consider tracks not yet associated in this frame
+            if (!track.associated_this_frame) {
+                float iou = calculate_iou(new_detection, track.last_detection);
+                if (iou > best_iou && iou >= 0.3f) { // IoU threshold
+                    best_iou = iou;
+                    best_match_track = &track;
+                }
+            }
+        }
+
+        if (best_match_track) {
+            // Update existing track
+            best_match_track->last_detection = new_detection;
+            // Mock a distance for now, actual distance will come from other sensors
+            best_match_track->pos_z = 5.0f; // Placeholder distance
+            // Update pos_x, pos_y based on new detection and distance - requires camera intrinsics
+            best_match_track->last_update_time = new_detection.timestamp;
+            best_match_track->hit_streak++;
+            best_match_track->missed_frames = 0;
+            best_match_track->associated_this_frame = true;
+            snprintf(log_buffer, sizeof(log_buffer), "Track ID %ld updated (IoU: %.2f). Hit streak: %d", best_match_track->id, best_iou, best_match_track->hit_streak);
+            LOG_INFO(log_buffer);
+        } else {
+            // Create new track
+            // Mock a distance for now
+            active_tracks_.emplace_back(++next_track_id_, new_detection, 5.0f); // Placeholder distance
+            snprintf(log_buffer, sizeof(log_buffer), "New track ID %ld created.", active_tracks_.back().id);
+            LOG_INFO(log_buffer);
+        }
+    }
+
+    // C. Manage missed tracks and remove old tracks
+    // Iterate in reverse to allow safe removal
+    for (auto it = active_tracks_.rbegin(); it != active_tracks_.rend(); ++it) {
+        if (!it->associated_this_frame) {
+            it->missed_frames++;
+            snprintf(log_buffer, sizeof(log_buffer), "Track ID %ld missed. Missed frames: %d", it->id, it->missed_frames);
+            LOG_INFO(log_buffer);
+
+            if (it->missed_frames > 5) { // Threshold for track removal
+                snprintf(log_buffer, sizeof(log_buffer), "Track ID %ld removed due to excessive missed frames.", it->id);
+                LOG_INFO(log_buffer);
+                active_tracks_.erase(std::next(it).base()); // Erase from the original vector
+            }
+        }
+    }
+}
+
+void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_data) {
+    char log_buffer[256];
+    // --- 3. Ballistics Calculation (using tracked object's estimated state) ---
+    // Iterate through active tracks and try to predict an impact point.
+    for (auto& track : active_tracks_) {
+        float impact_x, impact_y, impact_z;
+        // Use the actual imu_data for prediction
+        if (predict_impact_point(track, imu_data, impact_x, impact_y, impact_z)) {
+            snprintf(log_buffer, sizeof(log_buffer), "Predicted Impact Point for Track ID %ld: (%.2f, %.2f, %.2f)",
+                     track.id, impact_x, impact_y, impact_z);
+            LOG_INFO(log_buffer);
+        } else {
+            snprintf(log_buffer, sizeof(log_buffer), "No Impact Point Predicted for Track ID %ld.", track.id);
+            LOG_INFO(log_buffer);
+        }
+    }
+}
+
+void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) {
+    char log_buffer[256];
+    // --- 4. Uncertainty Propagation & Safety Checks ---
+    float predicted_impact_uncertainty = 0.5f; // Placeholder value
+    std::string safety_message;
+    
+    // Iterate through active tracks and perform safety checks
+    for (auto& track : active_tracks_) {
+        SafetyStatus safety_status = perform_safety_and_uncertainty_checks(track, predicted_impact_uncertainty, safety_message);
+        
+        switch (safety_status) {
+            case SAFETY_OK:
+                if (current_fallback_mode_ != NORMAL_OPERATION) {
+                    LOG_INFO("Returning to NORMAL_OPERATION.");
+                    current_fallback_mode_ = NORMAL_OPERATION;
+                }
+                snprintf(log_buffer, sizeof(log_buffer), "Safety check PASSED for Track ID %ld: %s", track.id, safety_message.c_str());
+                LOG_INFO(log_buffer);
+                // Proceed with servo actuation if needed
+                float impact_x, impact_y, impact_z;
+                if (predict_impact_point(track, imu_data, impact_x, impact_y, impact_z)) {
+                    issue_servo_commands(impact_x, impact_y, impact_z); // Issue commands if safe
+                }
+                break;
+            case SAFETY_WARNING_UNCERTAINTY:
+            case SAFETY_WARNING_TRACK_UNSTABLE:
+                if (current_fallback_mode_ != FALLBACK_A_REDUCED_PERFORMANCE) {
+                    LOG_WARNING("Activating FALLBACK_A_REDUCED_PERFORMANCE due to warning: " + safety_message);
+                    current_fallback_mode_ = FALLBACK_A_REDUCED_PERFORMANCE;
+                }
+                snprintf(log_buffer, sizeof(log_buffer), "Safety check WARNING for Track ID %ld: %s", track.id, safety_message.c_str());
+                LOG_WARNING(log_buffer);
+                // Reduced performance action: e.g., only log, do not issue commands
+                break;
+            case SAFETY_CRITICAL_UNCERTAINTY:
+            case SAFETY_CRITICAL_OTHER:
+                if (current_fallback_mode_ < FALLBACK_B_WARNING_STATE) { // Promote to higher fallback if less severe mode
+                    LOG_ERROR("Activating FALLBACK_B_WARNING_STATE due to critical issue: " + safety_message);
+                    current_fallback_mode_ = FALLBACK_B_WARNING_STATE;
+                }
+                snprintf(log_buffer, sizeof(log_buffer), "Safety check CRITICAL for Track ID %ld: %s", track.id, safety_message.c_str());
+                LOG_ERROR(log_buffer);
+                // Critical action: e.g., halt all operations, wait for manual override
+                break;
+            // Add other cases for FALLBACK_C if specific conditions lead directly to it
+        }
+    }
 }

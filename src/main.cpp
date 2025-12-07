@@ -18,7 +18,7 @@
 #include "h264_encoder.h" // New include for H264Encoder
 #include "buffer_pool.h" // For BufferPool
 #include "logic.h" // Include for the new LogicModule
-#include "imu_sensor.h" // Include for IMUSensor
+#include "orientation_sensor.h" // Include for OrientationSensor
 #include "application_supervisor.h" // Include for ApplicationSupervisor
 #include "system_monitor.h" // Include for SystemMonitor
 
@@ -38,6 +38,7 @@ std::vector<std::string> load_labels(const std::string& path) {
 
 int main(int argc, char** argv) {
     Logger& logger = Logger::getInstance("run", "/home/pi/CoralEdgeTpu/logs");
+    logger.start_writer_thread();
     LOG_INFO("CoralEdgeTpu Detector Starting...");
 
     ConfigLoader config_loader;
@@ -121,13 +122,13 @@ int main(int argc, char** argv) {
     LOG_INFO("Main: HttpServer initialized.");
     
     // --- Initializing IMUSensor ---
-    LOG_INFO("Main: Initializing IMUSensor...");
-    auto imu_sensor = std::make_shared<IMUSensor>();
-    LOG_INFO("Main: IMUSensor initialized.");
+    LOG_INFO("Main: Initializing OrientationSensor...");
+    auto orientation_sensor = std::make_shared<OrientationSensor>();
+    LOG_INFO("Main: OrientationSensor initialized.");
 
     // --- Initializing LogicModule ---
     LOG_INFO("Main: Initializing LogicModule (centralized ballistics, object tracking, safety).");
-    LogicModule logic_module(detection_results_for_logic_queue, imu_sensor);
+    LogicModule logic_module(detection_results_for_logic_queue, orientation_sensor);
     LOG_INFO("Main: LogicModule initialized.");
 
     // --- Initializing SystemMonitor ---
@@ -135,14 +136,14 @@ int main(int argc, char** argv) {
     SystemMonitor system_monitor;
     LOG_INFO("Main: SystemMonitor initialized.");
 
-    LOG_INFO("Main: Starting CameraCapture, InferenceEngine, VideoOverlayProcessor, H264Encoder, HttpServer, IMUSensor, LogicModule and SystemMonitor...");
+    LOG_INFO("Main: Starting CameraCapture, InferenceEngine, VideoOverlayProcessor, H264Encoder, HttpServer, OrientationSensor, LogicModule and SystemMonitor...");
     bool start_ok = true;
     start_ok &= inference_engine->start();
     start_ok &= primary_camera.start();
     start_ok &= overlay_processor.start();
     start_ok &= h264_encoder.start();
     start_ok &= http_server.start();
-    start_ok &= imu_sensor->start();
+    start_ok &= orientation_sensor->start();
     start_ok &= logic_module.start();
     start_ok &= system_monitor.start();
 
@@ -151,7 +152,7 @@ int main(int argc, char** argv) {
         // Register modules that successfully started for proper shutdown
         if (system_monitor.is_running()) supervisor.register_module_stop("SystemMonitor", [&]() { system_monitor.stop(); });
         if (logic_module.is_running()) supervisor.register_module_stop("LogicModule", [&]() { logic_module.stop(); });
-        if (imu_sensor->is_running()) supervisor.register_module_stop("IMUSensor", [&]() { imu_sensor->stop(); });
+        if (orientation_sensor->is_running()) supervisor.register_module_stop("OrientationSensor", [&]() { orientation_sensor->stop(); });
         if (http_server.is_running()) supervisor.register_module_stop("HttpServer", [&]() { http_server.stop(); });
         if (h264_encoder.is_running()) supervisor.register_module_stop("H264Encoder", [&]() { h264_encoder.stop(); });
         if (overlay_processor.is_running()) supervisor.register_module_stop("VideoOverlayProcessor", [&]() { overlay_processor.stop(); });
@@ -165,7 +166,7 @@ int main(int argc, char** argv) {
     // Register all modules for graceful shutdown
     supervisor.register_module_stop("SystemMonitor", [&]() { system_monitor.stop(); });
     supervisor.register_module_stop("LogicModule", [&]() { logic_module.stop(); });
-    supervisor.register_module_stop("IMUSensor", [&]() { imu_sensor->stop(); });
+    supervisor.register_module_stop("OrientationSensor", [&]() { orientation_sensor->stop(); });
     supervisor.register_module_stop("HttpServer", [&]() { http_server.stop(); });
     supervisor.register_module_stop("H264Encoder", [&]() { h264_encoder.stop(); });
     supervisor.register_module_stop("VideoOverlayProcessor", [&]() { overlay_processor.stop(); });

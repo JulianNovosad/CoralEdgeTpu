@@ -90,6 +90,19 @@ public:
     std::mutex frame_latencies_mutex_;
     long long total_frames_processed_ = 0;
 
+private:
+    void process_main_video_stream(libcamera::Request* request, std::chrono::high_resolution_clock::time_point capture_timestamp);
+    void process_tpu_inference_stream(libcamera::Request* request, std::chrono::high_resolution_clock::time_point capture_timestamp);
+    void update_frame_metrics(std::chrono::high_resolution_clock::time_point processing_start_time, std::chrono::high_resolution_clock::time_point processing_end_time);
+    void requeue_camera_request(libcamera::Request* request);
+    bool process_frame_buffer_helper(const libcamera::FrameBuffer* fb,
+                                     const libcamera::StreamConfiguration& cfg,
+                                     ImageQueue& queue,
+                                     const char* stream_name,
+                                     unsigned int target_width,
+                                     unsigned int target_height,
+                                     std::chrono::high_resolution_clock::time_point capture_timestamp);
+
 };
 
 #endif // CAMERA_CAPTURE_H
