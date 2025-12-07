@@ -1,0 +1,15 @@
+fix: Resolve double free and std::bad_weak_ptr during shutdown
+
+This commit addresses critical memory management issues leading to 'double free or corruption' and 'std::bad_weak_ptr' errors during application shutdown.
+
+What worked:
+- Refactored `BufferPool` to internally manage buffers with `std::shared_ptr` and inherit from `std::enable_shared_from_this` to ensure proper lifetime management when `shared_from_this()` is called.
+- Updated `ImageData::buffer` to explicitly use `BufferPool<uint8_t>::PooledPtr`, which is now a `std::shared_ptr`, ensuring consistent shared ownership.
+- Implemented and utilized a `clear()` method in `ThreadSafeQueue` in `pipeline_structs.h` to explicitly empty queues during the shutdown sequence, preventing potential access to deallocated resources.
+- Modified `main.cpp` and relevant class constructors (e.g., `CameraCapture`) to instantiate and pass `BufferPool` instances as `std::shared_ptr`, ensuring that `BufferPool` objects themselves are shared-pointer managed.
+
+What didn't work (initial attempts/misconceptions):
+- Initially, stack-allocating `BufferPool` instances and then attempting to use `shared_from_this()` within their methods resulted in `std::bad_weak_ptr` errors, as the object was not managed by a `std::shared_ptr`.
+- An earlier attempt to use `std::unique_ptr` for `BufferPool::PooledPtr` while `ImageData` used `std::shared_ptr` led to 'munmap_chunk()' errors due to conflicting memory ownership semantics. This highlighted the need for consistent shared ownership throughout the buffer lifecycle.
+
+The application now shuts down cleanly without memory-related crashes.
