@@ -331,6 +331,84 @@ Dit document bevat het bijgewerkte, beknopte en actionabele Stage‑Gate plan vo
 
 ---
 
-## ✉️ Contact
+## Opslag van voorkennis en artefacten
 
-Project door: **Julian Novosad**
+*   **Servo latency:** `servo_latency.csv` (pre‑measured), wordt gebruikt als input voor analyses maar **niet** voor runtime onzekerheidspropagatie.
+*   **Meetdata & logs:** `/home/pi/CoralEdgeTpu/logs/` met per‑module subdirectory en rotatie (3 bestandshistorie).
+*   **Release snapshots:** bewaar git‑tags of commit‑hashes die gebruikt zijn voor reproduceerbaarheid.
+
+---
+
+## Notities & richtlijnen
+
+* Nooit harde paden coderen; gebruik `find`/`grep` voor discovery in scripts en CI.
+* Na 2–3 codewijzigingen: run `./build.sh` en valideer build logs.
+* Debugging: gebruik `gdb`/`valgrind`/`perf` voor concurrency/latency analysis.
+* Structureer `src/logic.*` zodat alle veiligheidskritieke routines (uncertainty propagation, safety checks) duidelijk gemarkeerd en testbaar zijn.
+
+---
+
+## Core Data Structures and Threading Model
+
+This section documents critical data structures (`struct`s and `union`s) used in the pipeline, detailing their estimated size, memory alignment, and typical thread ownership/access patterns. This information is vital for understanding memory layout, potential cache efficiency, and thread-safety considerations.
+
+### `ImageData` (`pipeline_structs.h`)
+*   **Purpose:** Represents a raw image frame, typically consumed by `InferenceEngine` and `VideoOverlayProcessor`.
+*   **Estimated Size (64-bit ARM64):** ~32 bytes
+    *   `BufferPool<uint8_t>::PooledPtr buffer` (std::shared_ptr): 8 bytes
+    *   `size_t width, height`: 8 bytes each (16 bytes total)
+    *   `std::chrono::steady_clock::time_point timestamp`: 8 bytes
+*   **Estimated Alignment:** 8 bytes (due to `std::shared_ptr` and `std::chrono::steady_clock::time_point`)
+*   **Thread Ownership/Access:**
+    *   **Producer:** `CameraCapture` (writes all members, owns `buffer`'s `PooledPtr` temporarily).
+    *   **Consumer:** `InferenceEngine`, `VideoOverlayProcessor` (reads all members).
+    *   **Shared:** The underlying raw `uint8_t` buffer pointed to by `PooledPtr` is shared and managed by `BufferPool`. Access to the buffer itself is assumed to be read-only by consumers once pushed into a queue.
+
+### `IMUData` (`pipeline_structs.h`)
+*   **Purpose:** Stores Inertial Measurement Unit readings (accelerometer, gyroscope, magnetometer) and a timestamp.
+*   **Estimated Size (64-bit ARM64):** ~44 bytes
+    *   `float accel_x, accel_y, accel_z`: 4 bytes each (12 bytes total)
+    *   `float gyro_x, gyro_y, gyro_z`: 4 bytes each (12 bytes total)
+    *   `float mag_x, mag_y, mag_z`: 4 bytes each (12 bytes total)
+    *   `std::chrono::steady_clock::time_point timestamp`: 8 bytes
+*   **Estimated Alignment:** 8 bytes (due to `std::chrono::steady_clock::time_point`)
+*   **Thread Ownership/Access:**
+    *   **Producer:** Dedicated IMU reader thread (writes all members).
+    *   **Consumer:** `LogicModule` (reads all members).
+
+### `DetectionResult` (`pipeline_structs.h`)
+*   **Purpose:** Represents a single object detection, including class, score, bounding box, and detection timestamp.
+*   **Estimated Size (64-bit ARM64):** ~32 bytes
+    *   `int class_id`: 4 bytes
+    *   `float score`: 4 bytes
+    *   `float xmin, ymin, xmax, ymax`: 4 bytes each (16 bytes total)
+    *   `std::chrono::high_resolution_clock::time_point timestamp`: 8 bytes
+*   **Estimated Alignment:** 8 bytes (due to `std::chrono::high_resolution_clock::time_point`)
+*   **Thread Ownership/Access:**
+    *   **Producer:** `InferenceEngine` (writes all members).
+    *   **Consumer:** `VideoOverlayProcessor`, `LogicModule` (reads all members).
+
+### `TargetStateForBallistics` (`src/logic.h`)
+*   **Purpose:** Encapsulates the state of a detected target relevant for ballistics, including detection details, estimated distance, and IMU data from the device.
+*   **Estimated Size (64-bit ARM64):** ~84 bytes
+    *   `DetectionResult detection`: ~32 bytes
+    *   `double distance`: 8 bytes
+    *   `IMUData imu_data`: ~44 bytes
+*   **Estimated Alignment:** 8 bytes
+*   **Thread Ownership/Access:**
+    *   **Producer:** `main` loop (constructs from `DetectionResult` and mock `IMUData` for now). Will eventually be an orchestrator combining different data sources.
+    *   **Consumer:** `LogicModule` (reads all members in `process` method).
+
+### `TrackedObject` (`src/logic.h`)
+*   **Purpose:** Represents a single object being tracked over time, maintaining its estimated 3D position, velocity, and tracking metadata.
+*   **Estimated Size (64-bit ARM64):** ~80 bytes
+    *   `long id`: 8 bytes
+    *   `DetectionResult last_detection`: ~32 bytes
+    *   `float pos_x, pos_y, pos_z`: 4 bytes each (12 bytes total)
+    *   `float vel_x, vel_y, vel_z`: 4 bytes each (12 bytes total)
+    *   `std::chrono::high_resolution_clock::time_point last_update_time`: 8 bytes
+    *   `int hit_streak, missed_frames`: 4 bytes each (8 bytes total)
+*   **Estimated Alignment:** 8 bytes
+*   **Thread Ownership/Access:**
+    *   **Producer:** `LogicModule` (creates and updates `TrackedObject` instances based on new detections).
+    *   **Consumer:** `LogicModule` (reads for tracking, ballistics, safety checks). `active_tracks_` vector is owned by `LogicModule`.

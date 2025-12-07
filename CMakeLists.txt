@@ -45,10 +45,13 @@ add_executable(detector
     src/inference.cpp
     src/util_logging.cpp
     src/config_loader.cpp # Added ConfigLoader source file
-    src/ballistics.cpp
+    src/logic.cpp
     src/video_overlay_processor.cpp
     src/http_server.cpp
     src/h264_encoder.cpp
+    src/imu_sensor.cpp
+    src/application_supervisor.cpp
+    src/system_monitor.cpp
     civetweb/src/civetweb.c
 )
 set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS USE_WEBSOCKET)

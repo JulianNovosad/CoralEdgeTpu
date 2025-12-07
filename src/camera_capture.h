@@ -39,6 +39,7 @@ public:
     void stop();
     bool is_running() const { return running_; }
     void get_state() const;
+    void get_performance_metrics();
     bool setup_camera();
     void request_complete_callback(libcamera::Request* request);
 
@@ -83,6 +84,12 @@ public:
 
     std::unique_ptr<cv::VideoWriter> video_writer_;  // H.264 encoder
     std::function<void(cv::Mat& frame)> overlay_callback_;  // Overlay callback
+
+    // Performance measurement members
+    std::vector<long long> frame_latencies_ms_;
+    std::mutex frame_latencies_mutex_;
+    long long total_frames_processed_ = 0;
+
 };
 
 #endif // CAMERA_CAPTURE_H

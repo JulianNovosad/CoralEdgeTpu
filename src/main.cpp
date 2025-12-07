@@ -3,7 +3,6 @@
 #include <memory>
 #include <string>
 #include <csignal>
-#include <atomic>
 #include <thread>
 #include <chrono>
 #include <fstream>
@@ -18,8 +17,12 @@
 #include "http_server.h" // New include
 #include "h264_encoder.h" // New include for H264Encoder
 #include "buffer_pool.h" // For BufferPool
+#include "logic.h" // Include for the new LogicModule
+#include "imu_sensor.h" // Include for IMUSensor
+#include "application_supervisor.h" // Include for ApplicationSupervisor
+#include "system_monitor.h" // Include for SystemMonitor
 
-std::atomic<bool> shutdown_requested(false);
+// std::atomic<bool> shutdown_requested(false); // Now managed by ApplicationSupervisor
 
 std::vector<std::string> load_labels(const std::string& path) {
     std::vector<std::string> labels;
@@ -34,7 +37,7 @@ std::vector<std::string> load_labels(const std::string& path) {
 }
 
 int main(int argc, char** argv) {
-    Logger& logger = Logger::getInstance();
+    Logger& logger = Logger::getInstance("run", "/home/pi/CoralEdgeTpu/logs");
     LOG_INFO("CoralEdgeTpu Detector Starting...");
 
     ConfigLoader config_loader;
@@ -47,6 +50,10 @@ int main(int argc, char** argv) {
 
     signal(SIGPIPE, SIG_IGN);
 
+    // --- Application Supervisor ---
+    ApplicationSupervisor supervisor;
+    supervisor.setup_signal_handlers();
+
     const std::string model_path = (config_path.parent_path() / config_loader.get_model_path()).string();
     const std::string labels_path = (config_path.parent_path() / config_loader.get_labels_path()).string();
     const unsigned int cam_w = config_loader.get_high_res_width();
@@ -57,17 +64,18 @@ int main(int argc, char** argv) {
     // --- Buffer Pools ---
     // Create a pool for image buffers. Size should be enough for a full frame.
     size_t image_buffer_size = cam_w * cam_h * 3; // e.g., 1920*1080*3
-    BufferPool<uint8_t> image_pool(20, image_buffer_size, "ImagePool");
+    auto image_pool = std::make_shared<BufferPool<uint8_t>>(20, image_buffer_size, "ImagePool");
     // Create a pool for detection results. Size for max possible detections.
-    BufferPool<DetectionResult> detection_pool(20, 100, "DetectionPool");
+    auto detection_pool = std::make_shared<BufferPool<DetectionResult>>(20, 100, "DetectionPool");
     // Create a pool for H.264 encoded packets. Size for a compressed frame.
-    BufferPool<uint8_t> h264_pool(50, 256 * 1024, "H264Pool");
+    auto h264_pool = std::make_shared<BufferPool<uint8_t>>(50, 1024 * 1024, "H264Pool");
 
 
     // --- Queues for inference ---
     ImageQueue tpu_inference_queue;
     ImageQueue main_camera_output_queue; // Separate queue for main camera output
-    DetectionResultsQueue detection_results_for_overlay_queue; // Queue for detection results to overlay
+    DetectionResultsQueue detection_results_for_overlay_queue; // Queue for detection results to VideoOverlayProcessor
+    DetectionResultsQueue detection_results_for_logic_queue; // Queue for detection results to LogicModule
     ImageQueue overlaid_video_queue; // Queue for video frames with overlays for H264Encoder
     H264Queue h264_output_queue; // Queue for H.264 packets for HTTP server
 
@@ -85,7 +93,7 @@ int main(int argc, char** argv) {
     // --- Inference engine initialiseren ---
     std::unique_ptr<InferenceEngine> inference_engine;
     try {
-        inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, detection_results_for_overlay_queue, detection_pool, config_loader.get_inference_worker_threads());
+        inference_engine = std::make_unique<InferenceEngine>(model_path, tpu_inference_queue, detection_results_for_overlay_queue, detection_results_for_logic_queue, detection_pool, config_loader.get_inference_worker_threads());
     } catch (const std::runtime_error& e) {
         LOG_ERROR("Failed to initialize Inference Engine: " + std::string(e.what()));
         return 1;
@@ -111,52 +119,73 @@ int main(int argc, char** argv) {
     LOG_INFO("Main: Initializing HttpServer...");
     HttpServer http_server("0.0.0.0:" + std::to_string(config_loader.get_http_overlaid_video_port()), h264_output_queue);
     LOG_INFO("Main: HttpServer initialized.");
+    
+    // --- Initializing IMUSensor ---
+    LOG_INFO("Main: Initializing IMUSensor...");
+    auto imu_sensor = std::make_shared<IMUSensor>();
+    LOG_INFO("Main: IMUSensor initialized.");
 
-    LOG_INFO("Main: Starting CameraCapture, InferenceEngine, VideoOverlayProcessor, H264Encoder, and HttpServer...");
-    if (!inference_engine->start() || !primary_camera.start() || !overlay_processor.start() || !h264_encoder.start() || !http_server.start()) {
-        LOG_ERROR("Failed to start one or more modules.");
-        primary_camera.stop();
-        inference_engine->stop();
-        overlay_processor.stop();
-        h264_encoder.stop();
-        http_server.stop();
+    // --- Initializing LogicModule ---
+    LOG_INFO("Main: Initializing LogicModule (centralized ballistics, object tracking, safety).");
+    LogicModule logic_module(detection_results_for_logic_queue, imu_sensor);
+    LOG_INFO("Main: LogicModule initialized.");
+
+    // --- Initializing SystemMonitor ---
+    LOG_INFO("Main: Initializing SystemMonitor...");
+    SystemMonitor system_monitor;
+    LOG_INFO("Main: SystemMonitor initialized.");
+
+    LOG_INFO("Main: Starting CameraCapture, InferenceEngine, VideoOverlayProcessor, H264Encoder, HttpServer, IMUSensor, LogicModule and SystemMonitor...");
+    bool start_ok = true;
+    start_ok &= inference_engine->start();
+    start_ok &= primary_camera.start();
+    start_ok &= overlay_processor.start();
+    start_ok &= h264_encoder.start();
+    start_ok &= http_server.start();
+    start_ok &= imu_sensor->start();
+    start_ok &= logic_module.start();
+    start_ok &= system_monitor.start();
+
+    if (!start_ok) {
+        LOG_ERROR("Failed to start one or more modules. Initiating shutdown.");
+        // Register modules that successfully started for proper shutdown
+        if (system_monitor.is_running()) supervisor.register_module_stop("SystemMonitor", [&]() { system_monitor.stop(); });
+        if (logic_module.is_running()) supervisor.register_module_stop("LogicModule", [&]() { logic_module.stop(); });
+        if (imu_sensor->is_running()) supervisor.register_module_stop("IMUSensor", [&]() { imu_sensor->stop(); });
+        if (http_server.is_running()) supervisor.register_module_stop("HttpServer", [&]() { http_server.stop(); });
+        if (h264_encoder.is_running()) supervisor.register_module_stop("H264Encoder", [&]() { h264_encoder.stop(); });
+        if (overlay_processor.is_running()) supervisor.register_module_stop("VideoOverlayProcessor", [&]() { overlay_processor.stop(); });
+        if (primary_camera.is_running()) supervisor.register_module_stop("CameraCapture", [&]() { primary_camera.stop(); });
+        if (inference_engine->is_running()) supervisor.register_module_stop("InferenceEngine", [&]() { inference_engine->stop(); });
+        supervisor.initiate_shutdown();
         return 1;
     }
     LOG_INFO("Main: All modules started successfully.");
 
-    std::thread input_thread([]() {
-        char c;
-        while (std::cin.get(c)) {
-            if (c == 'o') {
-                shutdown_requested = true;
-                LOG_INFO("Shutdown requested...");
-                break;
-            }
-        }
-    });
-
-    LOG_INFO("Running inference. Press 'o' + Enter to quit.");
+    // Register all modules for graceful shutdown
+    supervisor.register_module_stop("SystemMonitor", [&]() { system_monitor.stop(); });
+    supervisor.register_module_stop("LogicModule", [&]() { logic_module.stop(); });
+    supervisor.register_module_stop("IMUSensor", [&]() { imu_sensor->stop(); });
+    supervisor.register_module_stop("HttpServer", [&]() { http_server.stop(); });
+    supervisor.register_module_stop("H264Encoder", [&]() { h264_encoder.stop(); });
+    supervisor.register_module_stop("VideoOverlayProcessor", [&]() { overlay_processor.stop(); });
+    supervisor.register_module_stop("CameraCapture", [&]() { primary_camera.stop(); });
+    supervisor.register_module_stop("InferenceEngine", [&]() { inference_engine->stop(); });
+    
+    LOG_INFO("Running application. Press Ctrl+C to quit.");
 
     while (!shutdown_requested) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        
         inference_engine->get_performance_metrics(); // Optioneel: periodieke metrics
+        logic_module.get_performance_metrics(); // Periodieke metrics for LogicModule
+        primary_camera.get_performance_metrics(); // Periodieke metrics for CameraCapture
     }
 
-    input_thread.join();
-    primary_camera.stop();
-    inference_engine->stop();
-    overlay_processor.stop();
-    h264_encoder.stop(); // Stop the H264Encoder
-    http_server.stop();
+    supervisor.initiate_shutdown();
 
-    // Explicitly clear queues to ensure PooledPtrs are destructed before BufferPools
-    tpu_inference_queue.clear();
-    main_camera_output_queue.clear();
-    detection_results_for_overlay_queue.clear();
-    overlaid_video_queue.clear();
-    h264_output_queue.clear();
-    
     logger.stop_writer_thread();
 
     LOG_INFO("Shutdown complete.");
+    return 0;
 }

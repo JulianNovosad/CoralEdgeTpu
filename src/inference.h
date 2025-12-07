@@ -56,8 +56,9 @@ public:
      */
     InferenceEngine(const std::string& model_path, 
                     ImageQueue& input_queue, 
-                    DetectionResultsQueue& detection_results_output_queue, 
-                    BufferPool<DetectionResult>& detection_result_pool,
+                    DetectionResultsQueue& detection_results_for_overlay_queue, 
+                    DetectionResultsQueue& detection_results_for_logic_queue, 
+                    std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool,
                     int num_threads = 1);
 
     /**
@@ -150,8 +151,9 @@ private:
 
     std::string model_path_; ///< Path to the TensorFlow Lite model file.
     ImageQueue& input_queue_; ///< Reference to the input queue for image data.
-    DetectionResultsQueue& detection_results_output_queue_; ///< Reference to the output queue for detection results.
-    BufferPool<DetectionResult>& detection_result_pool_; ///< Pool for detection result buffers.
+    DetectionResultsQueue& detection_results_for_overlay_queue_; ///< Reference to the output queue for detection results to overlay.
+    DetectionResultsQueue& detection_results_for_logic_queue_; ///< Reference to the output queue for detection results to the logic module.
+    std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool_; ///< Pool for detection result buffers.
     int num_threads_; ///< Number of inference worker threads.
 
     int input_width_ = 0; ///< Input width required by the loaded model.
