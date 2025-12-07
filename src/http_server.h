@@ -22,6 +22,7 @@ public:
 
     bool start();
     void stop();
+    bool is_running() const { return running_; }
 
     void broadcast_packet(std::shared_ptr<H264Buffer> buffer);
 
@@ -32,7 +33,7 @@ private:
         std::thread writer_thread;
         std::atomic<bool> is_active;
 
-        Client() : queue(std::make_unique<H264Queue>(50)), is_active(true) {}
+        Client() : queue(std::make_unique<H264Queue>()), is_active(true) {}
     };
 
     // WebSocket event handlers

@@ -78,7 +78,6 @@ void HttpServer::stop() {
     }
     LOG_INFO("Stopping HttpServer...");
     
-    h264_input_queue_.set_running(false); // Unblock distributor thread
     if (distributor_thread_.joinable()) {
         distributor_thread_.join();
     }
@@ -88,7 +87,6 @@ void HttpServer::stop() {
         std::lock_guard<std::mutex> lock(clients_mutex_);
         for (auto const& [conn, client] : clients_) {
             client->is_active = false;
-            client->queue->set_running(false);
             if(client->writer_thread.joinable()) {
                 client->writer_thread.join();
             }
@@ -168,7 +166,6 @@ void HttpServer::remove_client(struct mg_connection* c) {
 
     if (client) {
         client->is_active = false;
-        client->queue->set_running(false);
         if (client->writer_thread.joinable()) {
             client->writer_thread.join();
         }

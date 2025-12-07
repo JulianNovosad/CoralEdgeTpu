@@ -14,6 +14,7 @@ public:
 
     bool start();
     void stop();
+    bool is_running() const { return running_; }
 
 private:
     void worker_thread_func();
@@ -24,6 +25,7 @@ private:
     const std::vector<std::string>& labels_;
     std::atomic<bool> running_;
     std::thread worker_thread_;
+    std::vector<DetectionResult> latest_detections_;
 };
 
 #endif // VIDEO_OVERLAY_PROCESSOR_H
