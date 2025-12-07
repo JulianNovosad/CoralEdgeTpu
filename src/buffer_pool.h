@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <queue>
 #include <stdexcept>
+#include <functional> // For std::function
 
 // A generic buffer object that can be pooled.
 template <typename T>
@@ -21,15 +22,15 @@ struct PooledBuffer {
  *
  * This class pre-allocates a fixed number of buffers of a specific size
  * and allows threads to acquire and release them safely. Buffers are
- * returned to the pool automatically using a custom deleter with std::unique_ptr.
+ * returned to the pool automatically using a custom deleter with std::shared_ptr.
  *
  * @tparam T The type of data stored in the buffer's vector (e.g., uint8_t).
  */
 template <typename T>
-class BufferPool {
+class BufferPool : public std::enable_shared_from_this<BufferPool<T>> {
 public:
-    // Defines a unique_ptr that will automatically return the buffer to the pool.
-    using PooledPtr = std::unique_ptr<PooledBuffer<T>, std::function<void(PooledBuffer<T>*)>>;
+    // Defines a shared_ptr that will automatically return the buffer to the pool.
+    using PooledPtr = std::shared_ptr<PooledBuffer<T>>;
 
     /**
      * @brief Constructs a BufferPool.
@@ -45,9 +46,9 @@ public:
         }
         
         for (size_t i = 0; i < num_buffers; ++i) {
-            auto buffer = std::make_unique<PooledBuffer<T>>();
+            auto buffer = std::make_shared<PooledBuffer<T>>(); // Use std::make_shared
             buffer->data.resize(buffer_size); // Pre-allocate memory
-            pool_.push(std::move(buffer));
+            pool_.push(buffer); // Store shared_ptr directly
         }
     }
 
@@ -59,16 +60,18 @@ public:
      * @brief Acquires a buffer from the pool, waiting if none are available.
      *
      * @param timeout The maximum duration to wait for a buffer.
-     * @return A PooledPtr (a unique_ptr with a custom deleter) to a buffer.
-     *         If a timeout occurs, the unique_ptr will be null.
+     * @return A PooledPtr (a shared_ptr with a custom deleter) to a buffer.
+     *         If a timeout occurs, the shared_ptr will be null.
      */
     PooledPtr acquire(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000)) {
         std::unique_lock<std::mutex> lock(mutex_);
         if (cond_var_.wait_for(lock, timeout, [this] { return !pool_.empty(); })) {
-            auto buffer = std::move(pool_.front());
+            PooledPtr buffer = pool_.front();
             pool_.pop();
-            return PooledPtr(buffer.release(), [this](PooledBuffer<T>* ptr) {
-                this->release(std::unique_ptr<PooledBuffer<T>>(ptr));
+            // Create a new shared_ptr with a custom deleter that captures a shared_ptr to this BufferPool
+            return PooledPtr(buffer.get(), [pool_ptr = this->shared_from_this()](PooledBuffer<T>* ptr) {
+                // The deleter now safely captures a shared_ptr to the pool, ensuring it stays alive
+                pool_ptr->release(PooledPtr(ptr)); // Reconstruct SharedPtr for release
             });
         }
         // Timeout occurred
@@ -89,9 +92,9 @@ private:
      *
      * This method is called automatically by the custom deleter of the PooledPtr.
      *
-     * @param buffer The unique_ptr to the buffer to be returned.
+     * @param buffer The shared_ptr to the buffer to be returned.
      */
-    void release(std::unique_ptr<PooledBuffer<T>> buffer) {
+    void release(PooledPtr buffer) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             pool_.push(std::move(buffer));
@@ -102,7 +105,7 @@ private:
     std::string name_;
     std::mutex mutex_;
     std::condition_variable cond_var_;
-    std::queue<std::unique_ptr<PooledBuffer<T>>> pool_;
+    std::queue<PooledPtr> pool_; // Store shared_ptr directly in the queue
 };
 
 #endif // BUFFER_POOL_H

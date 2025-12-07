@@ -84,4 +84,11 @@ target_include_directories(detector PRIVATE
     /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
     civetweb/include
     src # Include the src directory for h264_encoder.h, etc.
+    tensorflow_2.5.0
 )
+
+
+
+add_executable(dlopen_test src/dlopen_test.cpp)
+target_link_libraries(dlopen_test PRIVATE dl)
+

@@ -37,29 +37,31 @@ cp -r ../flatbuffers-src/include ../flatbuffers/
 cp -r build/lib* ../flatbuffers/lib || true
 cd ..
 
+# 3.5. CivetWeb (clone and copy)
+echo "3.5. Cloning and copying CivetWeb..."
+if [ ! -d "civetweb_temp" ]; then
+    echo "Cloning CivetWeb for the first time..."
+    git clone https://github.com/civetweb/civetweb.git civetweb_temp
+else
+    echo "CivetWeb already cloned."
+fi
+# Ensure the target civetweb directory is clean before copying
+rm -rf civetweb/*
+mkdir -p civetweb/src
+mkdir -p civetweb/include # Ensure include directory exists
+cp civetweb_temp/src/civetweb.c civetweb/src/
+cp civetweb_temp/src/*.inl civetweb/src/ # Copy all .inl files
+cp -r civetweb_temp/include civetweb/
+
 
 # 4. TensorFlow v2.5.0 checkout, patch, and build TFLite shared lib
 echo "4. Building TensorFlow Lite v2.5.0 shared library..."
-if [ ! -f "lib/libtensorflowlite.so" ]; then
-    if [ ! -d "tensorflow_2.5.0" ]; then
-        git clone https://github.com/tensorflow/tensorflow.git tensorflow_2.5.0
-        cd tensorflow_2.5.0
-        git checkout v2.5.0
-        cd ..
-    fi
-    echo "Building libtensorflow-lite.so using build_rpi_lib.sh..."
-    (cd tensorflow_2.5.0/tensorflow/lite/tools/make && ./build_rpi_lib.sh)
-    # The build_rpi_lib.sh produces a static library (.a).
-    # To get a shared library (.so), we'd typically need to modify the TFLite Makefile
-    # or link the static library into a shared library.
-    # For now, we'll try to convert the static library to a shared one if it exists.
-    if [ -f "tensorflow_2.5.0/tensorflow/lite/tools/make/gen/lib/libtensorflow-lite.a" ]; then
-        echo "Converting static libtensorflow-lite.a to shared libtensorflow-lite.so..."
-        g++ -shared -o lib/libtensorflowlite.so -Wl,--whole-archive tensorflow_2.5.0/tensorflow/lite/tools/make/gen/lib/libtensorflow-lite.a -Wl,--no-whole-archive -lm -latomic -pthread -ldl
-    else
-        echo "WARNING: libtensorflow-lite.a not found. libtensorflowlite.so cannot be built."
-    fi
-fi
+rm -rf tensorflow_2.5.0 # Explicitly remove to ensure fresh clone
+git clone https://github.com/tensorflow/tensorflow.git tensorflow_2.5.0
+cd tensorflow_2.5.0
+git checkout v2.5.0
+cd ..
+
 
 
 # 5. Build final C++ app with CMake

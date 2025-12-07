@@ -1,21 +1,10 @@
-/**
- * @file inference.cpp
- * @brief Implements the InferenceEngine class for running TensorFlow Lite models
- *        with Edge TPU acceleration on captured image data.
- *
- * This module handles model loading, interpreter creation, Edge TPU delegate
- * integration, input tensor preparation (including color space conversion),
- * model invocation, and parsing of output tensors for object detection results.
- * It operates in a multi-threaded environment, with worker threads performing
- * inference on frames from a queue and pushing results to another queue.
- */
-
 #include "inference.h"
 #include "util_logging.h"
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 // Edge TPU delegate C API functions
 extern "C" {
@@ -24,6 +13,11 @@ extern "C" {
                                                   size_t num_options,
                                                   void (*report_error)(const char*));
     void tflite_plugin_destroy_delegate(TfLiteDelegate* delegate);
+}
+
+// Custom error reporting function for the Edge TPU delegate
+void edgetpu_error_reporter(const char* msg) {
+    LOG_ERROR("Edge TPU Delegate: " + std::string(msg));
 }
 
 InferenceEngine::InferenceEngine(const std::string& model_path, 
@@ -50,13 +44,6 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
         throw std::runtime_error("Failed to create temporary interpreter for model inspection.");
     }
     
-    // Pre-check for Edge TPU delegate creation during initialization.
-    TfLiteDelegate* test_delegate = tflite_plugin_create_delegate(nullptr, nullptr, 0, nullptr);
-    if (!test_delegate) {
-        throw std::runtime_error("Failed to create Edge TPU delegate during initialization. Ensure Edge TPU drivers are installed and device is connected.");
-    }
-    tflite_plugin_destroy_delegate(test_delegate);
-
     // Extract input tensor dimensions from the model.
     int input_tensor_idx = interpreter->inputs()[0];
     TfLiteTensor* input_tensor = interpreter->tensor(input_tensor_idx);
@@ -125,7 +112,7 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
         return nullptr;
     }
 
-    TfLiteDelegate* delegate = tflite_plugin_create_delegate(nullptr, nullptr, 0, nullptr);
+    TfLiteDelegate* delegate = tflite_plugin_create_delegate(nullptr, nullptr, 0, edgetpu_error_reporter);
     if (!delegate) {
         LOG_ERROR("Failed to create EdgeTPU delegate. Ensure libedgetpu1-std is installed and device is connected.");
         return nullptr;
