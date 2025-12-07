@@ -27,18 +27,11 @@ struct PooledBuffer {
  * @tparam T The type of data stored in the buffer's vector (e.g., uint8_t).
  */
 template <typename T>
-class BufferPool : public std::enable_shared_from_this<BufferPool<T>> {
+class BufferPool {
 public:
     // Defines a shared_ptr that will automatically return the buffer to the pool.
     using PooledPtr = std::shared_ptr<PooledBuffer<T>>;
 
-    /**
-     * @brief Constructs a BufferPool.
-     *
-     * @param num_buffers The number of buffers to pre-allocate in the pool.
-     * @param buffer_size The size of each buffer to pre-allocate.
-     * @param pool_name A name for logging/debugging purposes.
-     */
     BufferPool(size_t num_buffers, size_t buffer_size, std::string pool_name = "BufferPool")
         : name_(std::move(pool_name)) {
         if (num_buffers == 0 || buffer_size == 0) {
@@ -46,15 +39,25 @@ public:
         }
         
         for (size_t i = 0; i < num_buffers; ++i) {
-            auto buffer = std::make_shared<PooledBuffer<T>>(); // Use std::make_shared
+            PooledBuffer<T>* buffer = new PooledBuffer<T>(); // Manually allocate raw buffer
             buffer->data.resize(buffer_size); // Pre-allocate memory
-            pool_.push(buffer); // Store shared_ptr directly
+            pool_.push(buffer); // Store raw pointer in the queue
         }
     }
 
     // Disable copy and assignment
     BufferPool(const BufferPool&) = delete;
     BufferPool& operator=(const BufferPool&) = delete;
+    
+    // Destructor to ensure all allocated raw buffers are deleted if the pool is destroyed
+    ~BufferPool() {
+        std::lock_guard<std::mutex> lock(mutex_); // Ensure thread safety during destruction
+        while(!pool_.empty()) {
+            PooledBuffer<T>* buffer = pool_.front();
+            pool_.pop();
+            delete buffer; // Delete the raw buffer
+        }
+    }
 
     /**
      * @brief Acquires a buffer from the pool, waiting if none are available.
@@ -66,12 +69,12 @@ public:
     PooledPtr acquire(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000)) {
         std::unique_lock<std::mutex> lock(mutex_);
         if (cond_var_.wait_for(lock, timeout, [this] { return !pool_.empty(); })) {
-            PooledPtr buffer = pool_.front();
+            PooledBuffer<T>* raw_buffer = pool_.front();
             pool_.pop();
-            // Create a new shared_ptr with a custom deleter that captures a shared_ptr to this BufferPool
-            return PooledPtr(buffer.get(), [pool_ptr = this->shared_from_this()](PooledBuffer<T>* ptr) {
-                // The deleter now safely captures a shared_ptr to the pool, ensuring it stays alive
-                pool_ptr->release(PooledPtr(ptr)); // Reconstruct SharedPtr for release
+            
+            // Create a shared_ptr with a custom deleter that returns the raw buffer to the pool.
+            return PooledPtr(raw_buffer, [this](PooledBuffer<T>* ptr) {
+                this->release(ptr);
             });
         }
         // Timeout occurred
@@ -92,20 +95,18 @@ private:
      *
      * This method is called automatically by the custom deleter of the PooledPtr.
      *
-     * @param buffer The shared_ptr to the buffer to be returned.
+     * @param raw_buffer The raw pointer to the buffer to be returned.
      */
-    void release(PooledPtr buffer) {
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            pool_.push(std::move(buffer));
-        }
+    void release(PooledBuffer<T>* raw_buffer) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        pool_.push(raw_buffer);
         cond_var_.notify_one();
     }
 
     std::string name_;
     std::mutex mutex_;
     std::condition_variable cond_var_;
-    std::queue<PooledPtr> pool_; // Store shared_ptr directly in the queue
+    std::queue<PooledBuffer<T>*> pool_; // Store raw pointers in the queue
 };
 
 #endif // BUFFER_POOL_H

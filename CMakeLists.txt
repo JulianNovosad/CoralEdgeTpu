@@ -49,7 +49,7 @@ add_executable(detector
     src/video_overlay_processor.cpp
     src/http_server.cpp
     src/h264_encoder.cpp
-    src/imu_sensor.cpp
+    src/orientation_sensor.cpp
     src/application_supervisor.cpp
     src/system_monitor.cpp
     civetweb/src/civetweb.c
