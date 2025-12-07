@@ -110,69 +110,42 @@ This session focused on implementing all Stage 0 and Stage 1 requirements from t
 *   **`std::map` Insertion of Non-Copyable Types**: Resolved a complex C++ issue in the `Logger` where `std::map::emplace` was failing with non-copyable `CsvLogger` objects (due to `std::ofstream` and `std::mutex` members). The fix involved switching to `std::map::try_emplace` (C++17), which constructs the object in-place.
 *   **`x264` `memcpy` Crash (SPS/PPS Headers)**: Temporarily disabled the copying of SPS/PPS headers to isolate the recurring `SIGSEGV`.
 
-### Unresolved/Current Issue (Segmentation Fault during Camera Startup):
-
-*   **Persistent `Segmentation fault`**: Despite extensive debugging and fixes, the application still crashes with `SIGSEGV` (Exit Code 139) in `CameraCapture::request_complete_callback` at the `memcpy` line for the BGR image conversion.
-*   **Diagnosis**: `gdb` backtrace points to `__memcpy_generic` called from line 516 of `src/camera_capture.cpp`. The debug logs added before the crash show that the `cv::cvtColor` call, which converts YUV to BGR, is likely producing an invalid `cv::Mat` (`bgr_image`) with a corrupted `dataend` pointer. This makes the subsequent `memcpy` to the pooled buffer unsafe. The root cause is likely an issue with the `cv::cvtColor` function itself or the data being passed to it, rather than the `memcpy` destination buffer.
-
-### Next Steps:
-
-*   **Focus on `cv::cvtColor`**: Investigate why `cv::cvtColor(yuv_image, bgr_image, cv::COLOR_YUV2BGR_I420)` is producing an invalid `cv::Mat`. This could be due to:
-    *   An issue with the OpenCV build or version.
-    *   A memory alignment problem.
-    *   An underlying issue with the YUV data coming from `libcamera`.
-*   **Isolate and Test**: Create a minimal test case outside of the main application that takes a saved YUV frame from `libcamera` and attempts the `cv::cvtColor` operation to see if the issue can be reproduced in isolation.
-
----
-## Previous Debugging Session Knowledge (December 7, 2025)
-
-This session focused on resolving a persistent `Segmentation fault` during application startup/runtime.
-
 ### Resolved Issues:
 
-1.  **Memory Management (Double Free / `std::bad_weak_ptr`)**:
-    *   **Problem**: Initial implementation of `BufferPool` and `PooledPtr` led to `double free or corruption` and `std::bad_weak_ptr` errors on shutdown.
-    *   **Resolution**:
-        *   Refactored `BufferPool` to use `std::shared_ptr` internally with `std::enable_shared_from_this` for robust lifetime management of pooled buffers.
-        *   Updated `src/camera_capture.h/cpp`, `src/inference.h/cpp`, and `src/h264_encoder.h/cpp` to accept and store `std::shared_ptr<BufferPool<...>>` instead of references.
-        *   Modified `src/main.cpp` to create all `BufferPool`s using `std::make_shared` and pass them as `std::shared_ptr` to component constructors.
-        *   Implemented and called `clear()` methods on `ThreadSafeQueue`s during shutdown in `main.cpp` to ensure all `PooledPtr`s (which are `std::shared_ptr`s) are released before `BufferPool` destruction.
+*   **Numerous Compilation Errors**: Fixed a wide range of compilation errors stemming from the introduction of new modules, queue changes (`boost::lockfree::spsc_queue`), and refactoring. This included fixing missing headers, incorrect function signatures, access specifier issues, and type mismatches.
+*   **`std::map` Insertion of Non-Copyable Types**: Resolved a complex C++ issue in the `Logger` where `std::map::emplace` was failing with non-copyable `CsvLogger` objects (due to `std::ofstream` and `std::mutex` members). The fix involved switching to `std::map::try_emplace` (C++17), which constructs the object in-place.
+*   **`x264` `memcpy` Crash (SPS/PPS Headers)**: Temporarily disabled the copying of SPS/PPS headers to isolate the recurring `SIGSEGV`.
+*   **Persistent `Segmentation fault` during Camera Startup (YUV Multi-Plane Handling)**:
+    *   **Problem**: The application was crashing with `SIGSEGV` (Exit Code 139) within `CameraCapture::process_frame_buffer` during the `memcpy` of YUV data from `libcamera` buffers. `libcamera` provides YUV data in multiple planes, and the initial `mmap` and `memcpy` logic was not correctly handling these separate planes or their respective sizes.
+    *   **Resolution**: Refactored `CameraCapture::process_frame_buffer` to correctly `mmap` each `libcamera` frame buffer plane individually (using its specific `fd` and `offset`) and copy its data into the appropriate location within a single `PooledBuffer`. This ensures that `memcpy` operations access valid memory regions provided by `libcamera` for each plane.
+*   **`std::bad_weak_ptr` Exception (BufferPool Lifetime Management)**:
+    *   **Problem**: The application was terminating with a `std::bad_weak_ptr` exception, indicating incorrect usage of `std::shared_ptr` and `std::weak_ptr` within the `BufferPool` class, specifically when `this->shared_from_this()` was called in the constructor.
+    *   **Resolution**: Refactored the `BufferPool` class to properly manage `std::shared_ptr` lifetimes. This involved ensuring that `shared_from_this()` is not called in the constructor and redesigning the `PooledPtr`'s custom deleter and the pool's `return_buffer_to_pool` method to correctly re-wrap raw buffer pointers into `PooledPtr`s, preventing double-free or invalid `shared_ptr` aliasing.
+*   **`H264Encoder` `x264_encoder_open` Crash**:
+    *   **Problem**: The application was crashing after `x264_encoder_open` in `H264Encoder::worker_thread_func`, even after `x264_picture_alloc`. This was due to a misunderstanding of `x264_picture_alloc`'s role; it *does* allocate the internal plane buffers for `x264_picture_t`. Manual `malloc` calls after `x264_picture_alloc` were redundant and causing memory corruption when `memcpy` attempted to write to these invalidly managed pointers.
+    *   **Resolution**: Removed the redundant manual `malloc` calls for `picture_in_`'s planes. Relied solely on `x264_picture_alloc` to manage the allocation of these internal buffers, ensuring that the `memcpy` operations correctly target memory managed by x264.
+*   **`config.json` Loading Failure**:
+    *   **Problem**: The application failed to load configuration, reporting "Model file not found: ./build/../model.tflite". This was because `ConfigLoader` expected configuration values under an "application" object, but `config.json` had a flat structure.
+    *   **Resolution**: Updated `config.json` to include all configuration keys nested under an "application" object, matching `ConfigLoader`'s expected structure.
+*   **Logger Not Printing Output**:
+    *   **Problem**: Log messages were not appearing on stdout or in log files at startup, making debugging difficult.
+    *   **Resolution**: Added an explicit call to `logger.start_writer_thread()` after initializing the `Logger` instance in `main.cpp`. The logger's asynchronous writer thread needs to be explicitly started to process and output log messages.
+*   **`LogicModule` Helper Function Definitions Missing/Duplicated**:
+    *   **Problem**: Compilation errors due to missing definitions for `LogicModule`'s helper methods (`perform_sensor_fusion`, `update_object_tracks`, `calculate_ballistics_for_tracks`, `perform_safety_and_actuation`) or duplicate definitions causing conflicts.
+    *   **Resolution**: Refactored `src/logic.cpp` to correctly define these helper methods by extracting their logic from the monolithic `process` function. Ensured each method had a single, correct definition, and replaced `IMUData` with `OrientationData` where appropriate.
+*   **`IMUSensor` to `OrientationSensor` Refactoring**:
+    *   **Problem**: The user requested removing all "IMU" mentions and focusing on "orientation" data.
+    *   **Resolution**: Renamed `src/imu_sensor.h` to `src/orientation_sensor.h` and `src/imu_sensor.cpp` to `src/orientation_sensor.cpp`. Updated all include directives, class names, variable names, method calls, and log messages across the project (including `src/main.cpp`, `src/logic.h`, `src/logic.cpp`) to consistently use "OrientationSensor" and "OrientationData".
 
-2.  **Camera Codec (`bgr888` / `YUV420`)**:
-    *   **Problem**: `rpicam-vid` subprocess (initially used) exited with code 255 due to "unrecognised codec bgr888".
-    *   **Resolution**: Changed `CameraCapture` to request `YUV420` from `libcamera` and perform an explicit `YUV2BGR_I420` conversion using OpenCV before passing to downstream components.
+### Current Status:
 
-3.  **H264Encoder `memcpy` Crash (SPS/PPS Headers)**:
-    *   **Problem**: `Segmentation fault` in `H264Encoder::worker_thread_func` during `memcpy` of SPS/PPS NAL units from `x264_encoder_headers`. Initial diagnosis suspected buffer overflow or `x264` multi-threading issues.
-    *   **Resolution**:
-        *   Increased `h264_pool` buffer size from 256KB to 1MB in `src/main.cpp`. (This did not resolve the issue, but ensured buffer capacity).
-        *   Fixed incorrect `memcpy` loop logic in `H264Encoder::stop()` (flush loop) to correctly iterate through all NAL units (`nal[i].p_payload`, `nal[i].i_payload`). (This resolved a separate potential `memcpy` crash in shutdown, but not the current issue).
-        *   Temporarily disabled `param.i_threads = X264_SYNC_LOOKAHEAD_AUTO` to `1`. (This did not resolve the issue, reverted).
-
-### Unresolved/Current Issue (Compilation Errors in `src/camera_capture.cpp`):
-
-The `AGRD-V2` branch's `src/camera_capture.cpp` file has repeatedly shown compilation errors related to bracing, variable declarations (`bgr_pooled_buffer`), and `buffer_pool.acquire()` syntax (`.acquire()` vs `->acquire()`). This indicates an inconsistent state in the file, making it difficult to apply targeted fixes. The current approach of `git checkout AGRD-V2 src/camera_capture.cpp src/camera_capture.h` is reliably pulling a version of the file that does not compile.
+The application now builds and runs without encountering critical startup crashes. All core modules are initialized and their worker threads are started successfully.
 
 ### Next Steps:
-*   **Prioritize getting `src/camera_capture.cpp` to compile cleanly.** This is the immediate blocker.
-*   **Strategy**: Overwrite the *entire* `src/camera_capture.cpp` with a version that has been manually reconstructed to include all known `std::shared_ptr<BufferPool>` fixes, correct `->acquire()` calls, proper bracing, and correct logic for dual streams and YUV420 processing. This ensures a consistent and compilable baseline.
 
----
-
-### Previous Unresolved/Current Issue (Segmentation Fault during Camera Startup):
-
-1.  **Persistent `Segmentation fault` during Camera Startup**:
-    *   **Problem**: The application consistently crashes with a `Segmentation fault` (Exit Code: 139) immediately after `CameraCapture: Initial requests queued.` and before any application code within `CameraCapture::request_complete_callback` is executed.
-    *   **Symptoms**:
-        *   Last `CameraCapture` log printed: `[INFO] CameraCapture: Initial requests queued.`
-        *   Often preceded by `[libpisp warning] PushEndDown: (output1) Unable to achieve mandatory alignment 32`. This warning suggests a low-level memory alignment issue in the `libpisp` driver (Raspberry Pi Image Signal Processor) when `libcamera` tries to acquire or manage buffers.
-    *   **Diagnosis**: The crash occurs within `libcamera`'s internal handling of the `requestCompleted` signal, likely when it attempts to invoke our callback with a buffer that does not meet the underlying hardware/driver's mandatory alignment requirements. Our application code is not the direct cause of this specific crash, as all processing logic within the callback was successively commented out, down to a minimal logging/requeuing stub, and the crash persisted before its entry log. The `memmove` change was an attempt to mitigate potential unaligned memory access during frame processing, but the crash occurs earlier.
-    *   **Current State**:
-        *   The compilation errors in `src/camera_capture.cpp` are currently blocking further runtime debugging of this issue.
-        *   The `libpisp` alignment warning remains the strongest lead, indicating a hardware/driver/`libcamera` configuration mismatch for buffer alignment.
-
-### Next Steps (once compilation is fixed):
-*   Investigate `libcamera` documentation/community for known solutions or workarounds regarding `libpisp` alignment issues on Raspberry Pi 5.
-*   Experiment with other `libcamera` `StreamConfiguration` options or `FrameBufferAllocator` flags if available.
-*   Consider differences in `libcamera` versions or `libpisp` driver updates.
-*   If no direct `libcamera` solution is found, a potential path could be to try an older/different `libcamera` version or to report the bug to the `libcamera` project.
+*   **Continuous Operation Testing**: Verify that the application continues to run stably over an extended period.
+*   **Functional Verification**: Confirm that all pipeline stages (camera capture, inference, video overlay, H.264 encoding, HTTP streaming) are performing as expected.
+*   **Performance Monitoring**: Utilize the implemented CSV logging to analyze performance metrics (latency, throughput, CPU/memory usage) and identify potential bottlenecks.
+*   **Edge TPU Delegate Integration**: Although not a current crash, ensure the Edge TPU delegate is being correctly utilized for inference and not falling back to CPU.
+*   **Camera Configuration**: Investigate and address the `[libpisp warning] PushEndDown: (output1) Unable to achieve mandatory alignment 32` if it leads to performance issues or unexpected behavior.
+*   **Review `x264` SPS/PPS headers**: Re-enable and properly handle the SPS/PPS headers in `H264Encoder` if client streaming requires them, ensuring they are copied to the H.264 buffer correctly.
