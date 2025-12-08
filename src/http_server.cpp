@@ -38,7 +38,7 @@ bool HttpServer::start() {
         0
     };
 
-    LOG_INFO("HttpServer: Attempting to start CivetWeb server on " + address_);
+    LOG_INFO("HttpServer: Attempting to start CivetWeb server on " + ip_address_);
     ctx_ = mg_start(NULL, 0, options);
     if (ctx_ == NULL) {
         LOG_ERROR("HttpServer: Failed to start CivetWeb server. mg_start returned NULL.");
@@ -61,7 +61,7 @@ bool HttpServer::start() {
     }
 
     if (!port_found) {
-        LOG_ERROR("HttpServer: CivetWeb server failed to bind to configured port " + configured_port_str + ". mg_get_server_ports shows no listener.");
+        LOG_ERROR("HttpServer: CivetWeb server failed to bind to configured port " + std::to_string(configured_port) + ". mg_get_server_ports shows no listener.");
         mg_stop(ctx_); // Stop CivetWeb if it failed to bind
         ctx_ = nullptr;
         return false;
