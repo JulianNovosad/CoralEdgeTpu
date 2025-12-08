@@ -173,14 +173,7 @@ private:
     long long total_inferences_ = 0;
     std::chrono::time_point<std::chrono::high_resolution_clock> performance_start_time_;
 
-    
-    // Note: The interpreter_pool_ and interpreter_pool_mutex_ are remnants from a previous
-    // design where interpreters were pooled. In the current design, each worker thread
-    // creates its own unique_ptr<tflite::Interpreter> instance via create_interpreter().
-    // These members are kept for API compatibility with main.cpp but are not actively used
-    // in the revised inference logic for sharing interpreters.
-    std::mutex interpreter_pool_mutex_; ///< Mutex for protecting access to the interpreter pool (not actively used).
-    std::queue<std::unique_ptr<tflite::Interpreter>> interpreter_pool_; ///< Queue for interpreter instances (not actively used in revised design).
+    TfLiteDelegate* edgetpu_delegate_ = nullptr; ///< The single Edge TPU delegate.
 };
 
 #endif // INFERENCE_H

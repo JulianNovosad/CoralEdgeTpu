@@ -5,7 +5,7 @@
 #include "util_logging.h"
 
 // This is a global flag checked by the main loop and set by the ApplicationSupervisor.
-std::atomic<bool> shutdown_requested(false);
+extern std::atomic<bool> shutdown_requested;
 
 std::vector<std::string> load_labels(const std::string& path) {
     std::vector<std::string> labels;

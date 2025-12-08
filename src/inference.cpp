@@ -8,10 +8,7 @@
 
 // Edge TPU delegate C API functions
 extern "C" {
-    TfLiteDelegate* tflite_plugin_create_delegate(char** options_keys,
-                                                  char** options_values,
-                                                  size_t num_options,
-                                                  void (*report_error)(const char*));
+    TfLiteDelegate* tflite_plugin_create_delegate(char** options_keys, char** options_values, size_t num_options, void (*report_error)(const char *));
     void tflite_plugin_destroy_delegate(TfLiteDelegate* delegate);
 }
 
@@ -64,10 +61,23 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
     if (input_channels_ != 3) {
         throw std::runtime_error("Model expects " + std::to_string(input_channels_) + " channels, but this application is hardcoded for 3 (RGB).");
     }
+
+    // Create the Edge TPU delegate once for the entire InferenceEngine instance.
+    LOG_INFO("Edge TPU delegate creation starting...");
+    edgetpu_delegate_ = tflite_plugin_create_delegate(nullptr, nullptr, 0, edgetpu_error_reporter);
+    if (!edgetpu_delegate_) {
+        LOG_ERROR("Edge TPU delegate creation failed (tflite_plugin_create_delegate returned nullptr).");
+        throw std::runtime_error("Failed to create EdgeTPU delegate in constructor. Ensure libedgetpu1-std is installed and device is connected.");
+    }
+    LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor.");
 }
 
 InferenceEngine::~InferenceEngine() {
     stop();
+    if (edgetpu_delegate_) {
+        tflite_plugin_destroy_delegate(edgetpu_delegate_);
+        LOG_INFO("Edge TPU delegate destroyed.");
+    }
 }
 
 bool InferenceEngine::start() {
@@ -113,21 +123,14 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
         return nullptr;
     }
 
-    TfLiteDelegate* delegate = tflite_plugin_create_delegate(nullptr, nullptr, 0, edgetpu_error_reporter);
-    if (!delegate) {
-        LOG_ERROR("Failed to create EdgeTPU delegate. Ensure libedgetpu1-std is installed and device is connected.");
-        return nullptr;
-    }
-
-    if (local_interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
+    // Apply the pre-created EdgeTPU delegate
+    if (edgetpu_delegate_ && local_interpreter->ModifyGraphWithDelegate(edgetpu_delegate_) != kTfLiteOk) {
         LOG_ERROR("Failed to apply EdgeTPU delegate. Check if the model is compatible with Edge TPU.");
-        tflite_plugin_destroy_delegate(delegate);
         return nullptr;
     }
     
     if (local_interpreter->AllocateTensors() != kTfLiteOk) {
         LOG_ERROR("Failed to allocate tensors after applying EdgeTPU delegate.");
-        tflite_plugin_destroy_delegate(delegate); 
         return nullptr;
     }
     

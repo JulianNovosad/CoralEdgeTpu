@@ -76,18 +76,6 @@ public:
     /** @return Het IP-adres waarop de server moet luisteren. Standaard: "0.0.0.0". */
     std::string get_listen_address() const;
 
-    /** @return TCP-poort voor de H.264 videostream. Standaard: 1001. */
-    unsigned short get_livestream_video_port() const;
-
-    /** @return TCP-poort voor de bounding box-stream. Standaard: 1002. */
-    unsigned short get_bounding_box_stream_port() const;
-
-    /** @return TCP-poort voor het richtpunt-coördinaat. Standaard: 1003. */
-    unsigned short get_reticle_coordinate_port() const;
-
-    /** @return TCP-poort voor de status/telemetrie-stream. Standaard: 1004. */
-    unsigned short get_status_telemetry_port() const;
-
     /** @return UDP-poort voor oriëntatie (yaw) van de telefoon. Standaard: 2001. */
     unsigned short get_phone_orientation_yaw_port() const;
 

@@ -1,151 +1,275 @@
-# GEMINI Project: CoralEdgeTpu
+# CoralEdgeTpu
 
-## Project Overview
+**C++ Edge TPU inference stack voor de Google Coral M.2 Accelerator**
 
-This repository contains a complete, modern, and stable C++-based inference stack for the Google Coral M.2 TPU, specifically designed for the Raspberry Pi 5. The project aims to provide a reproducible and high-performance solution for real-time object detection, replacing the often complex and poorly maintained default toolchain.
+Deze repository is een volledige heropbouw van de oude, slecht onderhouden Coral/TensorFlow Lite toolchain — modern, stabiel, reproduceerbaar en volledig gericht op **native C++ inferencing op de Google Coral M.2 TPU**.
 
-The core of the project is a multi-threaded C++ application that forms a complete video processing pipeline:
+Het project bevat álle bronbestanden, patches, TensorFlow-Lite headers, Flatbuffers, build-scripts en dependency-versies die nodig zijn om de Edge TPU 100% deterministisch en offline te kunnen builden. Dit elimineert versie-hell, Python-dependency chaos en ontbrekende upstream files.
 
-1.  **Camera Capture**: Captures video from a libcamera-compatible camera.
-2.  **Inference**: Performs object detection using a TensorFlow Lite model accelerated by the Edge TPU.
-3.  **Video Overlay**: Draws bounding boxes and labels on the video frames.
-4.  **H.264 Encoding**: Encodes the processed video into H.264 format.
-5.  **HTTP Streaming**: Streams the encoded video over HTTP for remote viewing.
+---
 
-The project is self-contained, including all necessary source code, patched libraries, headers, and build scripts to ensure a deterministic build process.
+## ✨ Functionaliteit
 
-## Building and Running
+* Volledige C++ applicatie die de gehele pijplijn beheert.
+* Multi-threaded architectuur voor camera capture, inferentie, encoding en streaming.
+* Gebruik van `libcamera` voor moderne en efficiënte camera-aansturing op de Raspberry Pi.
+* Edge TPU-versnelde inferentie met TensorFlow Lite.
+* H.264 video encoding en realtime streaming via **UDP/RTP of RTSP**.
+* Bounding boxes, reticle coordinates, en telemetrie via **ZeroMQ PUB/SUB**.
+* Uitgebreide configuratie via `config.json`.
+* Robuuste logging met microbenchmarks en CSV output.
+* Centrale supervisie via `system_monitor` (CPU, RAM, temperatuur, thread health, etc.)
+* Alle core realtime actie en beslissingen via `logic` module (3D ballistiek, hit-scan, servo-actuatie, veiligheids-/onzekerheidspropagatie).
 
-The project uses CMake for building and provides a comprehensive shell script to automate the entire process, including dependency installation and library compilation.
+---
 
-### Prerequisites
+## 🚀 Bouwen en Draaien
 
-*   Raspberry Pi 5
-*   Google Coral M.2 TPU (PCIe)
-*   `libedgetpu1-std`
-*   CMake ≥ 3.16
-*   g++ ≥ 10
+### Vereisten
 
-### Build Command
+* Raspberry Pi 5
+* Google Coral M.2 TPU (PCIe)
+* Systeem-dependencies: `libcamera-dev`, `libedgetpu1-std`, `libzmq3-dev`
+* CMake ≥ 3.16
+* g++ ≥ 10
 
-To build the entire project from scratch, including all dependencies:
+### Bouwen
+
+Het project wordt gebouwd met een alles-in-één script dat alle dependencies downloadt, compileert en de hoofdapplicatie bouwt.
 
 ```bash
+chmod +x build.sh
 ./build.sh
 ```
 
-This script will:
-1.  Install system dependencies (`libcamera-dev`, `libedgetpu1-std`).
-2.  Download and build the correct versions of `flatbuffers` and `tensorflow`.
-3.  Build the main `detector` executable.
+### Draaien
 
-### Running the Application
-
-After a successful build, the main executable will be located at `build/detector`.
+Na een succesvolle build staat de applicatie in `build/detector`.
 
 ```bash
 ./build/detector
 ```
 
-The application is configured via `config.json`.
-
-## Development Conventions
-
-*   **C++17**: The project is written in modern C++.
-*   **Multi-threading**: The application is heavily multi-threaded, using queues (`ImageQueue`, `DetectionResultsQueue`, etc.) to pass data between different processing stages (camera, inference, overlay, encoding, streaming).
-*   **Buffer Pooling**: The application uses buffer pools (`BufferPool`) to efficiently manage memory for large data like image frames.
-*   **Logging**: A custom logger (`Logger`) is used for structured logging.
-*   **Staged Development**: The `README.md` file contains a detailed "Stage-Gate Plan" which outlines a structured development and validation process. New development should follow this plan.
-*   **Configuration**: Application settings are managed through a `config.json` file, loaded by the `ConfigLoader` class.
-
-## Key Files and Directories
-
-*   `src/main.cpp`: The main entry point of the application, responsible for initializing and orchestrating the pipeline.
-*   `src/inference.cpp`: Contains the `InferenceEngine` class, which manages the Edge TPU and runs the TFLite model.
-*   `src/camera_capture.cpp`: Manages video capture using `libcamera`.
-*   `src/video_overlay_processor.cpp`: Handles drawing on video frames.
-*   `src/http_server.cpp`: Implements the web server for streaming video.
-*   `CMakeLists.txt`: Defines the project structure and build targets for CMake.
-*   `build.sh`: The main build script that automates the entire build process.
-*   `README.md`: Contains detailed documentation about the project, including hardware setup and development plans.
-*   `config.json`: (Not present in the repo, but expected by the application) Configuration file for the application.
+De applicatie verwacht een `config.json` bestand in de root van de repository.
 
 ---
 
-## Debugging Session Knowledge (December 8, 2025)
+## 📂 Repository Structuur
 
-This session focused on implementing all Stage 0 and Stage 1 requirements from the `README.md` and debugging the resulting application.
+```
+CoralEdgeTpu/
+├── build/                   # Build output (gegenereerd)
+├── civetweb/                # Submodule voor de webserver (optioneel)
+├── docs/                    # Documentatie
+├── flatbuffers/             # Submodule voor Flatbuffers
+├── include/                 # TFLite headers
+├── lib/                     # Gecompileerde libraries (.so files)
+├── model/                   # .tflite AI modellen
+├── src/                     # C++ broncode van de applicatie
+├── tests/                   # Losstaande test-utilities
+├── tensorflow-src/          # TensorFlow broncode (submodule)
+├── build.sh                 # Hoofd build script
+├── CMakeLists.txt           # CMake build configuratie
+├── config.json              # Applicatieconfiguratie
+└── README.md                # Dit bestand
+```
 
-### Stage-Gate Compliance Implementation:
+---
 
-*   **Stage 0: Ballistics Theory**:
-    *   **Action**: Updated `docs/ballistics_theory.md` from a placeholder to include detailed theoretical frameworks for projectile motion, uncertainty sources (sensor noise, model inaccuracy), and safety criteria, providing a solid foundation for future implementation.
+## ⚙️ Configuratie (`config.json`)
 
-*   **Stage 0/1: Performance Metrics & Logging**:
-    *   **Action**: Implemented performance metric collection (p50/p95/p99 latency, throughput) in `CameraCapture`, `InferenceEngine`, and `LogicModule`.
-    *   **Action**: Modified the `Logger` to use `CLOCK_MONOTONIC_RAW` for all CSV log timestamps, fulfilling a strict real-time requirement.
-    *   **Action**: Connected the `get_performance_metrics()` methods in all modules to the CSV logger.
-    *   **Action**: Configured the logger to use the absolute path `/home/pi/CoralEdgeTpu/logs/`.
+```json
+{
+  "application": {
+    "model_path": "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite",
+    "labels_path": "coco_labels.txt",
+    "listen_address": "0.0.0.0",
+    "high_res_width": 1920,
+    "high_res_height": 1080,
+    "camera_watchdog_timeout_seconds": 10,
+    "inference_worker_threads": 2,
+    "jpeg_quality": 90,
+    "camera_fps": 120.0,
+    "detection_score_threshold": 0.5,
+    "log_path": "/home/pi/CoralEdgeTpu/logs",
+    "video_stream": {
+      "protocol": "RTP",
+      "address": "192.168.1.100",
+      "port": 5000
+    },
+    "telemetry": {
+      "protocol": "ZeroMQ",
+      "pub_address": "tcp://*:6000"
+    }
+  }
+}
+```
 
-*   **Stage 1: Modularization and Refactoring**:
-    *   **`LogicModule` Refactoring**: Refactored `LogicModule` to run in its own dedicated worker thread, consuming detection results from a dedicated lock-free queue (`boost::lockfree::spsc_queue`). This decouples it from the main thread and improves performance.
-    *   **`IMUSensor` Module**: Created a new `IMUSensor` module (`src/imu_sensor.h/cpp`) to encapsulate IMU data reading (currently provides mock data, but is ready for hardware integration).
-    *   **`ApplicationSupervisor` Module**: Created a global `ApplicationSupervisor` (`src/application_supervisor.h/cpp`) to handle graceful shutdown. It registers all pipeline modules and stops them in the correct order upon receiving a `SIGINT` or `SIGTERM` signal.
-    *   **`SystemMonitor` Module**: Created a new `SystemMonitor` module (`src/system_monitor.h/cpp`) to periodically read CPU temperature and memory usage and log them to CSV.
+---
 
-*   **Stage 1: Baseline Algorithm Implementation**:
-    *   **Object Tracking**: Replaced the simple centroid-based tracking in `LogicModule` with a more robust Intersection over Union (IoU) based association logic.
-    *   **Ballistics Prediction**: Implemented a baseline 2D projectile motion model (considering gravity) in `predict_impact_point`.
-    *   **Safety Checks**: Enhanced `perform_safety_and_uncertainty_checks` to use configurable thresholds for track stability (`hit_streak`) and uncertainty.
+## 🔧 Stage-Gate Plan
 
-*   **Stage 1: Fallback Modes**:
-    *   **Action**: Implemented a state machine in `LogicModule` to handle different `FallbackMode`s (`NORMAL_OPERATION`, `FALLBACK_A_REDUCED_PERFORMANCE`, `FALLBACK_B_WARNING_STATE`). The system now transitions between these states based on the output of the safety checks.
+### Stage 0: Technische haalbaarheid & prestatiegrenzen
 
-*   **Build System (`CMakeLists.txt`)**:
-    *   **Action**: Updated `CMakeLists.txt` to include all newly created source files (`imu_sensor.cpp`, `application_supervisor.cpp`, `system_monitor.cpp`) and correctly link them into the final `detector` executable.
+**Doel:** Basale throughput en latentie meten van kernsubsystemen zonder volledige integratie.
 
-### Resolved Issues:
+**Subsystemen:**
 
-*   **Numerous Compilation Errors**: Fixed a wide range of compilation errors stemming from the introduction of new modules, queue changes (`boost::lockfree::spsc_queue`), and refactoring. This included fixing missing headers, incorrect function signatures, access specifier issues, and type mismatches.
-*   **`std::map` Insertion of Non-Copyable Types**: Resolved a complex C++ issue in the `Logger` where `std::map::emplace` was failing with non-copyable `CsvLogger` objects (due to `std::ofstream` and `std::mutex` members). The fix involved switching to `std::map::try_emplace` (C++17), which constructs the object in-place.
-*   **`x264` `memcpy` Crash (SPS/PPS Headers)**: Temporarily disabled the copying of SPS/PPS headers to isolate the recurring `SIGSEGV`.
+* Logic: actuation, 3D ballistiek, hit-scan, veiligheids-/onzekerheidspropagatie (tijdelijk standalone testen)
+* Camera: `src/camera_capture.*`, `src/buffer_pool.h`, `src/pipeline_structs.h`
+* TPU: `src/inference.*` + `.tflite model`
 
-### Resolved Issues:
+**Gating criteria:**
 
-*   **Numerous Compilation Errors**: Fixed a wide range of compilation errors stemming from the introduction of new modules, queue changes (`boost::lockfree::spsc_queue`), and refactoring. This included fixing missing headers, incorrect function signatures, access specifier issues, and type mismatches.
-*   **`std::map` Insertion of Non-Copyable Types**: Resolved a complex C++ issue in the `Logger` where `std::map::emplace` was failing with non-copyable `CsvLogger` objects (due to `std::ofstream` and `std::mutex` members). The fix involved switching to `std::map::try_emplace` (C++17), which constructs the object in-place.
-*   **`x264` `memcpy` Crash (SPS/PPS Headers)**: Temporarily disabled the copying of SPS/PPS headers to isolate the recurring `SIGSEGV`.
-*   **Persistent `Segmentation fault` during Camera Startup (YUV Multi-Plane Handling)**:
-    *   **Problem**: The application was crashing with `SIGSEGV` (Exit Code 139) within `CameraCapture::process_frame_buffer` during the `memcpy` of YUV data from `libcamera` buffers. `libcamera` provides YUV data in multiple planes, and the initial `mmap` and `memcpy` logic was not correctly handling these separate planes or their respective sizes.
-    *   **Resolution**: Refactored `CameraCapture::process_frame_buffer` to correctly `mmap` each `libcamera` frame buffer plane individually (using its specific `fd` and `offset`) and copy its data into the appropriate location within a single `PooledBuffer`. This ensures that `memcpy` operations access valid memory regions provided by `libcamera` for each plane.
-*   **`std::bad_weak_ptr` Exception (BufferPool Lifetime Management)**:
-    *   **Problem**: The application was terminating with a `std::bad_weak_ptr` exception, indicating incorrect usage of `std::shared_ptr` and `std::weak_ptr` within the `BufferPool` class, specifically when `this->shared_from_this()` was called in the constructor.
-    *   **Resolution**: Refactored the `BufferPool` class to properly manage `std::shared_ptr` lifetimes. This involved ensuring that `shared_from_this()` is not called in the constructor and redesigning the `PooledPtr`'s custom deleter and the pool's `return_buffer_to_pool` method to correctly re-wrap raw buffer pointers into `PooledPtr`s, preventing double-free or invalid `shared_ptr` aliasing.
-*   **`H264Encoder` `x264_encoder_open` Crash**:
-    *   **Problem**: The application was crashing after `x264_encoder_open` in `H264Encoder::worker_thread_func`, even after `x264_picture_alloc`. This was due to a misunderstanding of `x264_picture_alloc`'s role; it *does* allocate the internal plane buffers for `x264_picture_t`. Manual `malloc` calls after `x264_picture_alloc` were redundant and causing memory corruption when `memcpy` attempted to write to these invalidly managed pointers.
-    *   **Resolution**: Removed the redundant manual `malloc` calls for `picture_in_`'s planes. Relied solely on `x264_picture_alloc` to manage the allocation of these internal buffers, ensuring that the `memcpy` operations correctly target memory managed by x264.
-*   **`config.json` Loading Failure**:
-    *   **Problem**: The application failed to load configuration, reporting "Model file not found: ./build/../model.tflite". This was because `ConfigLoader` expected configuration values under an "application" object, but `config.json` had a flat structure.
-    *   **Resolution**: Updated `config.json` to include all configuration keys nested under an "application" object, matching `ConfigLoader`'s expected structure.
-*   **Logger Not Printing Output**:
-    *   **Problem**: Log messages were not appearing on stdout or in log files at startup, making debugging difficult.
-    *   **Resolution**: Added an explicit call to `logger.start_writer_thread()` after initializing the `Logger` instance in `main.cpp`. The logger's asynchronous writer thread needs to be explicitly started to process and output log messages.
-*   **`LogicModule` Helper Function Definitions Missing/Duplicated**:
-    *   **Problem**: Compilation errors due to missing definitions for `LogicModule`'s helper methods (`perform_sensor_fusion`, `update_object_tracks`, `calculate_ballistics_for_tracks`, `perform_safety_and_actuation`) or duplicate definitions causing conflicts.
-    *   **Resolution**: Refactored `src/logic.cpp` to correctly define these helper methods by extracting their logic from the monolithic `process` function. Ensured each method had a single, correct definition, and replaced `IMUData` with `OrientationData` where appropriate.
-*   **`IMUSensor` to `OrientationSensor` Refactoring**:
-    *   **Problem**: The user requested removing all "IMU" mentions and focusing on "orientation" data.
-    *   **Resolution**: Renamed `src/imu_sensor.h` to `src/orientation_sensor.h` and `src/imu_sensor.cpp` to `src/orientation_sensor.cpp`. Updated all include directives, class names, variable names, method calls, and log messages across the project (including `src/main.cpp`, `src/logic.h`, `src/logic.cpp`) to consistently use "OrientationSensor" and "OrientationData".
+* FPS, berekeningen/s en latentie per subsystem gemeten
+* Kernel-aanpassingen (PCIe, IRQ-affiniteiten, MSI-X) gedocumenteerd
 
-### Current Status:
+**Resultaat:** Subsystemale prestatiegrenzen vastgesteld → goedkeuring Stage 1
 
-The application now builds and runs without encountering critical startup crashes. All core modules are initialized and their worker threads are started successfully.
+---
 
-### Next Steps:
+### Stage 1: Systeembrede C++ implementatie & bottleneckanalyse
 
-*   **Continuous Operation Testing**: Verify that the application continues to run stably over an extended period.
-*   **Functional Verification**: Confirm that all pipeline stages (camera capture, inference, video overlay, H.264 encoding, HTTP streaming) are performing as expected.
-*   **Performance Monitoring**: Utilize the implemented CSV logging to analyze performance metrics (latency, throughput, CPU/memory usage) and identify potential bottlenecks.
-*   **Edge TPU Delegate Integration**: Although not a current crash, ensure the Edge TPU delegate is being correctly utilized for inference and not falling back to CPU.
-*   **Camera Configuration**: Investigate and address the `[libpisp warning] PushEndDown: (output1) Unable to achieve mandatory alignment 32` if it leads to performance issues or unexpected behavior.
-*   **Review `x264` SPS/PPS headers**: Re-enable and properly handle the SPS/PPS headers in `H264Encoder` if client streaming requires them, ensuring they are copied to the H.264 buffer correctly.
+**Doel:** Alle core realtime acties via **`logic` module**, mutex-gebaseerde `ThreadSafeQueue`.
+
+**Core Subsystems:**
+
+* **Logic (`logic`)**
+
+  * 3D ballistiek
+  * Hit-scan
+  * Servo-actuatie
+  * Veiligheids-/onzekerheidspropagatie (RK4 import uit `system_monitor`)
+  * Logging & microbenchmarks
+
+* **Camera & DMA:** `src/camera_capture.*`, `src/buffer_pool.h`, `src/pipeline_structs.h`
+
+* **TPU Inferentie:** `src/inference.*` + `.tflite` model
+
+* **System Monitor:** `src/system_monitor.*` — CPU, RAM, temperatuur, thread health, supervisie
+
+* **Overige non-RT modules:** `src/config_loader.*`, `src/h264_encoder.*`
+
+**Logging:** Configureerbaar via `config.json`.
+
+**Gating criteria:** Alle core realtime functies draaien zelfstandig → goedkeuring Stage 2
+
+---
+
+### Stage 2: Volledige integratie & zero-copy optimalisatie
+
+**Doel:** End-to-end pipeline met DMA-delende buffers en validatie over 100.000 frames.
+
+* Zero-copy pipeline: `src/camera_capture.*` → `logic` → `src/inference.*` → `src/video_overlay_processor.*`
+* Video stream via UDP/RTP of RTSP
+* Bounding boxes en telemetrie via ZeroMQ PUB/SUB
+* Fallback switching getest met correcte logging
+
+**Prestatie eisen:**
+
+* E2E latency < 100 ms met <5% jitter
+* TPU throughput ≥ 90 FPS per 100 FPS capture
+* Temperatuur stabiel, geen throttling
+
+**Gating criteria:** Pipeline operationeel, fallback modes getest, video & telemetry streams werkend → goedkeuring Stage 3
+
+---
+
+### Stage 3: Validatie & verificatie
+
+**Doel:** 4-uur stress test en schietzaal-validatie van alle kritieke systemen.
+
+* Continue logging van thermiek en jitter naar CSV + PNG grafieken
+* Onzekerheidspropagatie verificatie in schietzaal
+* `logic` module verificatie van 3D ballistiek, hit-scan en actuatie
+* `system_monitor` supervisie en logging testen
+
+**Stabiliteitseis:** E2E latency binnen 5% van nominale waarde over volledige testduur
+
+**Gating criteria:** Veiligheidsmarges bevestigd, thermische stabiliteit bewezen, onzekerheidsmodel gevalideerd → goedkeuring Stage 4
+
+---
+
+## 🧩 Core Data Structures and Threading Model
+
+### `ImageData` (`pipeline_structs.h`)
+
+* Producer: `CameraCapture`
+* Consumer: `logic`, `VideoOverlayProcessor`
+
+### `OrientationData` (`pipeline_structs.h`)
+
+* Producer: `OrientationSensor`
+* Consumer: `logic`
+
+### `DetectionResult` (`pipeline_structs.h`)
+
+* Producer: `logic`/`InferenceEngine`
+* Consumer: `VideoOverlayProcessor`, telemetry via ZeroMQ
+
+### `TrackedObject` (`src/logic.h`)
+
+* Represents een object dat over tijd wordt gevolgd
+* Eigentijdelijk beheerd door `logic`
+
+---
+
+## Development Principles
+- Never hardcode paths; always locate files using `find` of `grep -r`.
+- After 2-3 code changes, run `/home/pi/CoralEdgeTpu/build.sh` to validate build and integration.
+- Prefer `gdb` or `valgrind` for debugging concurrency issues.
+- Track changes with Git and include patch files in `/home/pi/CoralEdgeTpu/patches`.
+
+---
+
+## Safety-Critical Constraints (IEC 61508 / SIL2)
+- **Threads**:
+  - RT threads: IMU, Camera, Ballistics
+  - Control thread: orchestrates predictive fire & safety gate
+- **Memory**: pre-allocate in init phase; zero heap allocation in RT loops.
+- **Synchronization**: use lock-free `boost::lockfree::spsc_queue` and `std::atomic<uint64_t> frame_seq` with `memory_order_seq_cst`.
+- **Timestamps**: use `CLOCK_MONOTONIC_RAW` for all timestamps.
+- Inspect device-specific API first, then targeted web searches for kernel/TPU/ARM to avoid generic Stack Overflow copy-paste.
+
+---
+
+## Documentation & API Contracts
+- **Structs & unions**: document in README.md with size, alignment, thread ownership, invariants (e.g., `IMU::ts_us` monotonic)
+- **Latency budgets**: version-controlled in `config/latency_budgets.csv`
+- **Fault injection tests**: `/home/pi/CoralEdgeTpu/tests/FAULT_INJECTION.md`
+- **Debug mode**: `#define DEBUG_SAFETY_GATE_BYPASS 0` → bypass only for testing, never in prod.
+- **Pinout & I2C**: `hardware/pinout.md` met PCA9685 address (0x40), GPIO numbers, interrupts.
+- Kijk naar de `CMakeLists.txt` voor build- en compilerconfiguratie.
+
+---
+
+## Agent Usage Notes
+- When analyzing or generating code, reference exact paths in this GEMINI.md.
+- Follow **sequential reasoning**; show numeric calculations before code changes.
+- After each 2-3 changes:
+  1. Run the build script and validate logs.
+  2. Stage changes: `git add .`
+  3. Commit with a clear message: `git commit -m "duidelijk bericht van alle changes"`
+  4. Push to remote: `git push`
+
+## Other
+- Never use "echo" when trying to tell the user something.
+
+## Gemini Added Memories
+- The user wants to keep /agentlogs/stagegateplan.txt as their 1st most important high level plan.
+- The project's high-level plan is now solely located within the "Stage-Gate Plan" section of the README.md file. The '/agentlogs/stagegateplan.txt' file and directory no longer exist and should not be referenced.
+- The project's automated build script (build.sh) now successfully compiles the entire project, including all dependencies like FlatBuffers, CivetWeb, and TensorFlow Lite, and builds the main C++ application.
+- The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure.
+- The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure.
+- The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure.
+- The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure.
+- The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure.
+- The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure. The agent has tried multiple ways to read the file and has given up.
+- The user wants to end the current session and resume tomorrow. The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure. The agent has tried multiple ways to read the file and has given up.
+- The agent needs to resolve the Edge TPU delegate creation failure. The immediate blocking issue is the inability to read the full content of src/inference.cpp, which needs to be resolved first. Once read, the plan is to correctly integrate the Edge TPU delegate using the appropriate TensorFlow Lite external delegate mechanism.
+- The agent is currently blocked from fully analyzing and modifying 'src/inference.cpp' due to an inability to read its complete content. The user has been informed and their guidance is awaited to proceed. This is preventing the resolution of the Edge TPU delegate creation failure. The agent has tried multiple ways to read the file and has given up.
+- The agent has determined that the Edge TPU delegate creation failure is likely due to an environmental or hardware issue with libedgetpu.so, as it is failing silently. The agent is blocked and requires user intervention to provide debugging alternatives or system configuration changes.
+- The agent has determined that the Edge TPU delegate creation failure is likely due to an environmental or hardware issue with libedgetpu.so, as it is failing silently. The agent is blocked and requires user intervention to provide debugging alternatives or system configuration changes.
+- The agent has determined that the Edge TPU delegate creation failure is likely due to an environmental or hardware issue with libedgetpu.so, as it is failing silently. The agent is blocked and requires user intervention to provide debugging alternatives or system configuration changes.
+- AGENT_OBSERVATION: The top 3 critical items are: 1. Hardware/Kernel Configuration: Strict requirements for Raspberry Pi 5 kernel, PCIe settings, APEX/Gasket driver, and a mandatory DTB patch for Coral M.2 TPU functionality. 2. Edge TPU Delegate Integration: The InferenceEngine in src/inference.cpp is responsible for applying the Edge TPU delegate. 3. Build Verification: The build.sh script is crucial for setting up the environment and compiling the project.
+- AGENT_OBSERVATION: The initial assessment of "Edge TPU delegate creation failure" might be inaccurate. The `dlopen_test` successfully loaded and created a delegate. Application logs indicate that `InferenceEngine` starts up correctly and the primary issue appears to be related to camera capture (`rpicam-vid` exiting with code 255 and `bgr888` codec unrecognized). The next priority is to investigate and resolve these camera-related issues to enable proper Edge TPU inference.

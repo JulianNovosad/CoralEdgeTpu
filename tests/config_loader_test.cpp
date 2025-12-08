@@ -57,10 +57,6 @@ TEST_F(ConfigLoaderTest, LoadValidConfigFile) {
             "telemetry": {
                 "protocol": "ZeroMQ",
                 "pub_address": "tcp://*:7000"
-            },
-            "network_ports": {
-                "livestream_video": 1000,
-                "bounding_box_stream": 1001
             }
         }
     })";
@@ -90,9 +86,7 @@ TEST_F(ConfigLoaderTest, LoadValidConfigFile) {
     EXPECT_EQ(loader.get_telemetry_protocol(), "ZeroMQ");
     EXPECT_EQ(loader.get_telemetry_pub_address(), "tcp://*:7000");
 
-    // Existing network ports
-    EXPECT_EQ(loader.get_livestream_video_port(), 1000);
-    EXPECT_EQ(loader.get_bounding_box_stream_port(), 1001);
+
 }
 
 // Test case for missing config file
