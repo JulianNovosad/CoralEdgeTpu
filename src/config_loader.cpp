@@ -44,12 +44,14 @@ int ConfigLoader::get_udp_bounding_box_port() const {
     return config_data_.value("/application/udp_bounding_box_port"_json_pointer, 12346);
 }
 
-int ConfigLoader::get_http_overlaid_video_port() const {
-    return config_data_.value("/application/http_overlaid_video_port"_json_pointer, 8080);
-}
+
 
 std::string ConfigLoader::get_mobile_app_ip() const {
-    return config_data_.value("/application/mobile_app_ip"_json_pointer, "");
+    return config_data_.value("/application/mobile_app_ip"_json_pointer, "127.0.0.1");
+}
+
+std::string ConfigLoader::get_ip_address() const {
+    return get_mobile_app_ip();
 }
 
 std::chrono::seconds ConfigLoader::get_camera_watchdog_timeout() const {
@@ -66,4 +68,33 @@ int ConfigLoader::get_jpeg_quality() const {
 
 double ConfigLoader::get_camera_fps() const {
     return config_data_.value("/application/camera_fps"_json_pointer, 30.0);
+}
+
+// New Network Port Getters
+unsigned short ConfigLoader::get_livestream_video_port() const {
+    return config_data_.value("/application/network_ports/livestream_video_port/port"_json_pointer, 1001);
+}
+
+unsigned short ConfigLoader::get_bounding_box_stream_port() const {
+    return config_data_.value("/application/network_ports/bounding_box_stream_port/port"_json_pointer, 1002);
+}
+
+unsigned short ConfigLoader::get_reticle_coordinate_port() const {
+    return config_data_.value("/application/network_ports/reticle_coordinate_port/port"_json_pointer, 1003);
+}
+
+unsigned short ConfigLoader::get_status_telemetry_port() const {
+    return config_data_.value("/application/network_ports/status_telemetry_port/port"_json_pointer, 1004);
+}
+
+unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {
+    return config_data_.value("/application/network_ports/phone_orientation_yaw_port/port"_json_pointer, 2001);
+}
+
+unsigned short ConfigLoader::get_phone_orientation_pitch_port() const {
+    return config_data_.value("/application/network_ports/phone_orientation_pitch_port/port"_json_pointer, 2002);
+}
+
+unsigned short ConfigLoader::get_phone_orientation_roll_port() const {
+    return config_data_.value("/application/network_ports/phone_orientation_roll_port/port"_json_pointer, 2003);
 }

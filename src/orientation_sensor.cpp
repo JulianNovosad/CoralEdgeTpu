@@ -1,8 +1,10 @@
 #include "orientation_sensor.h"
 #include "util_logging.h"
 
-OrientationSensor::OrientationSensor() {
-    LOG_INFO("OrientationSensor created (mock data provider).");
+OrientationSensor::OrientationSensor(unsigned short yaw_port, unsigned short pitch_port, unsigned short roll_port) {
+    : yaw_port_(yaw_port), pitch_port_(pitch_port), roll_port_(roll_port) {
+    LOG_INFO("OrientationSensor created (mock data provider). Yaw Port: " + std::to_string(yaw_port) +
+               ", Pitch Port: " + std::to_string(pitch_port) + ", Roll Port: " + std::to_string(roll_port));
     // Initialize mock data
     latest_orientation_data_.yaw = 0.0f;
     latest_orientation_data_.pitch = 0.0f;
@@ -20,6 +22,12 @@ bool OrientationSensor::start() {
         LOG_ERROR("OrientationSensor is already running.");
         return false;
     }
+    // TODO: Initialize UDP sockets for yaw_port_, pitch_port_, roll_port_ here.
+    // For example:
+    // yaw_socket_ = socket(AF_INET, SOCK_DGRAM, 0);
+    // bind(yaw_socket_, ...);
+    // Add error handling for socket creation and binding.
+
     worker_thread_ = std::thread(&OrientationSensor::worker_thread_func, this);
     LOG_INFO("OrientationSensor started.");
     return true;
