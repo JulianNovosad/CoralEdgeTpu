@@ -1,0 +1,61 @@
+{
+  "application": {
+    "model_path": "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite",
+    "labels_path": "coco_labels.txt",
+    "listen_address": "0.0.0.0",
+    "high_res_width": 1536,
+    "high_res_height": 864,
+    "camera_watchdog_timeout_seconds": 10,
+    "camera_fps": 120.0,
+    "detection_score_threshold": 0.5,
+    "log_path": "/home/pi/CoralEdgeTpu/logs",
+    "video_stream": {
+      "protocol": "RTP",
+      "address": "10.17.49.122",
+      "port": 1001,
+      "module_refs": ["src/h264_encoder.*"]
+    },
+    "telemetry": {
+      "protocol": "ZeroMQ",
+      "pub_address": "tcp://*:1002",
+      "module_refs": ["src/logic.*"]
+    },
+    "network_ports": {
+      "1001": {
+        "purpose": "video_stream_1536x864_pi_to_phone",
+        "comment": "Streaming encoded 1536x864 live video feed van Pi naar telefoon",
+        "module_refs": ["src/h264_encoder.*"]
+      },
+      "1002": {
+        "purpose": "bounding_boxes_pi_to_phone",
+        "comment": "Bounding boxes stream",
+        "module_refs": ["logic"]
+      },
+      "1003": {
+        "purpose": "reticle_coordinate_pi_to_phone",
+        "comment": "Enkele reticle-coördinaat, verstuurd één keer en opgeslagen op telefoon",
+        "module_refs": ["logic"]
+      },
+      "1004": {
+        "purpose": "status_info_pi_to_phone",
+        "comment": "Status: locked/distance/speed",
+        "module_refs": ["logic"]
+      },
+      "2001": {
+        "purpose": "yaw_phone_to_pi",
+        "comment": "Orientation: yaw van telefoon naar Pi",
+        "module_refs": ["logic"]
+      },
+      "2002": {
+        "purpose": "pitch_phone_to_pi",
+        "comment": "Orientation: pitch van telefoon naar Pi",
+        "module_refs": ["logic"]
+      },
+      "2003": {
+        "purpose": "roll_phone_to_pi",
+        "comment": "Orientation: roll van telefoon naar Pi",
+        "module_refs": ["logic"]
+      }
+    }
+  }
+}
