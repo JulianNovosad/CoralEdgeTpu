@@ -17,7 +17,7 @@
  */
 class OrientationSensor {
 public:
-    OrientationSensor();
+    OrientationSensor(unsigned short yaw_port, unsigned short pitch_port, unsigned short roll_port);
     ~OrientationSensor();
 
     bool start();
@@ -32,6 +32,10 @@ public:
 
 private:
     void worker_thread_func();
+
+    unsigned short yaw_port_;
+    unsigned short pitch_port_;
+    unsigned short roll_port_;
 
     std::atomic<bool> running_ = false;
     std::thread worker_thread_;

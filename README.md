@@ -24,6 +24,39 @@ Dit elimineert versie-hell, Python-dependency chaos en ontbrekende upstream file
 
 ---
 
+## 🌐 Netwerkpoorten (TCP/UDP)
+
+Dit project maakt gebruik van de volgende netwerkpoorten voor communicatie tussen de Raspberry Pi en verbonden client-applicaties (telefoon/workstation). De configuratie van deze poorten is te vinden in `config.json` onder de `application.network_ports` sectie.
+
+### Pi → Telefoon (Output streams)
+
+*   **1001 (TCP): Livestream Video**
+    *   **Doel:** Realtime H.264 videostream van de Pi naar de client (1536x864 resolutie).
+    *   **Module:** `HttpServer` (`src/http_server.cpp`) - fungeert als een MJPEG-stream of WebSocket-server voor de H.264-data.
+*   **1002 (TCP): Bounding Box Stream**
+    *   **Doel:** Stream van detectieresultaten (bounding boxes, klassen, scores) van de Pi naar de client.
+    *   **Module:** `HttpServer` (`src/http_server.cpp`) - via een WebSocket-verbinding.
+*   **1003 (TCP): Reticle Coördinaat (eenmalig)**
+    *   **Doel:** Eenmalige verzending van het berekende richtpunt (reticle-coördinaat) voor kalibratie of feedback.
+    *   **Module:** `HttpServer` (`src/http_server.cpp`) - via een specifiek HTTP-endpoint of WebSocket-bericht.
+*   **1004 (TCP): Status/Telemetrie Stream**
+    *   **Doel:** Continue stream van systeemstatus en telemetrie ('locked', 'distance', 'speed') van de Pi naar de client.
+    *   **Module:** `HttpServer` (`src/http_server.cpp`) - via een WebSocket-verbinding.
+
+### Telefoon → Pi (Input streams)
+
+*   **2001 (UDP): Oriëntatie (Yaw)**
+    *   **Doel:** Ontvangst van 'yaw' oriëntatiedata van de telefoon naar de Pi.
+    *   **Module:** `OrientationSensor` (`src/orientation_sensor.cpp`) - luistert naar UDP-pakketten.
+*   **2002 (UDP): Oriëntatie (Pitch)**
+    *   **Doel:** Ontvangst van 'pitch' oriëntatiedata van de telefoon naar de Pi.
+    *   **Module:** `OrientationSensor` (`src/orientation_sensor.cpp`) - luistert naar UDP-pakketten.
+*   **2003 (UDP): Oriëntatie (Roll)**
+    *   **Doel:** Ontvangst van 'roll' oriëntatiedata van de telefoon naar de Pi.
+    *   **Module:** `OrientationSensor` (`src/orientation_sensor.cpp`) - luistert naar UDP-pakketten.
+
+---
+
 ## 📂 Repository structuur
 
 ```

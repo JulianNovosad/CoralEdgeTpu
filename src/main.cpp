@@ -118,12 +118,20 @@ int main(int argc, char** argv) {
     LOG_INFO("Main: H264Encoder initialized.");
 
     LOG_INFO("Main: Initializing HttpServer...");
-    HttpServer http_server("0.0.0.0:" + std::to_string(config_loader.get_http_overlaid_video_port()), h264_output_queue);
+    HttpServer http_server(config_loader.get_ip_address(),
+                           config_loader.get_livestream_video_port(),
+                           config_loader.get_bounding_box_stream_port(),
+                           config_loader.get_reticle_coordinate_port(),
+                           config_loader.get_status_telemetry_port(),
+                           h264_output_queue);
     LOG_INFO("Main: HttpServer initialized.");
     
     // --- Initializing IMUSensor ---
     LOG_INFO("Main: Initializing OrientationSensor...");
-    auto orientation_sensor = std::make_shared<OrientationSensor>();
+    auto orientation_sensor = std::make_shared<OrientationSensor>(
+        config_loader.get_phone_orientation_yaw_port(),
+        config_loader.get_phone_orientation_pitch_port(),
+        config_loader.get_phone_orientation_roll_port());
     LOG_INFO("Main: OrientationSensor initialized.");
 
     // --- Initializing LogicModule ---
