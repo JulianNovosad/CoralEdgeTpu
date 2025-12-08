@@ -173,219 +173,24 @@ void H264Encoder::worker_thread_func() {
 
         LOG_INFO("H264Encoder: Attempting to allocate x264 picture_in_...");
 
-        // Allocate pictures
+                // Allocate pictures
 
-                        x264_picture_alloc(&picture_in_, param.i_csp, param.i_width, param.i_height); 
+                if (x264_picture_alloc(&picture_in_, param.i_csp, param.i_width, param.i_height) < 0) {
 
-                        LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
+                    LOG_ERROR("H264Encoder: Failed to allocate x264 picture_in_.");
+
+                    running_.store(false); // Set running_ to false to stop the thread
+
+                    return;
+
+                }
+
+                LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
 
     picture_in_.i_pts = 0; // Initialize presentation timestamp
-
     x264_picture_init(&picture_out_); // Initialize picture_out_
 
-
-
-    // Get SPS and PPS headers (needed for stream initialization in client)
-
-    x264_nal_t *nal_sps_pps;
-
-    int i_nal_sps_pps;
-
-
-
-        // if (x264_encoder_headers(encoder_, &nal_sps_pps, &i_nal_sps_pps) < 0) {
-
-
-
-        //     LOG_ERROR("H264Encoder: Failed to get SPS/PPS headers.");
-
-
-
-        //     running_.store(false);
-
-
-
-        //     return;
-
-
-
-        // }
-
-
-
-        // // Calculate total size needed for SPS and PPS headers
-
-
-
-        // size_t total_sps_pps_size = 0;
-
-
-
-        // for (int i = 0; i < i_nal_sps_pps; ++i) {
-
-
-
-        //     total_sps_pps_size += nal_sps_pps[i].i_payload;
-
-
-
-        // }
-
-
-
-    
-
-
-
-        // // Store SPS and PPS
-
-
-
-        // // Acquire a buffer from the pool (it will have the pool's pre-defined fixed size)
-
-
-
-        // auto h264_buffer_sps_pps = h264_buffer_pool_->acquire(); // Acquire without size argument
-
-
-
-        // if (!h264_buffer_sps_pps) {
-
-
-
-        //     LOG_ERROR("H264Encoder: Failed to acquire buffer for SPS/PPS headers (timeout).");
-
-
-
-        //     running_.store(false);
-
-
-
-        //     return;
-
-
-
-        // }
-
-
-
-    
-
-
-
-        // // Explicitly check if the acquired buffer's capacity is sufficient for SPS/PPS headers
-
-
-
-        // if (total_sps_pps_size > h264_buffer_sps_pps->data.size()) {
-
-
-
-        //     LOG_ERROR("H264Encoder: Acquired buffer is too small for SPS/PPS headers. Required: " + std::to_string(total_sps_pps_size) + ", Available: " + std::to_string(h264_buffer_sps_pps->data.size()));
-
-
-
-        //     running_.store(false);
-
-
-
-        //     return;
-
-
-
-        // }
-
-
-
-    
-
-
-
-        // size_t offset = 0;
-
-
-
-        // for (int i = 0; i < i_nal_sps_pps; ++i) {
-
-
-
-        //     LOG_INFO("H264Encoder: Copying NAL unit " + std::to_string(i) + 
-
-
-
-        //              ", Source Ptr: " + std::to_string(reinterpret_cast<uintptr_t>(nal_sps_pps[i].p_payload)) + 
-
-
-
-        //              ", Size: " + std::to_string(nal_sps_pps[i].i_payload)) +
-
-
-
-        //              ", Dest Ptr: " + std::to_string(reinterpret_cast<uintptr_t>(h264_buffer_sps_pps->data.data() + offset)) +
-
-
-
-        //              ", Dest Capacity: " + std::to_string(h264_buffer_sps_pps->data.size())) +
-
-
-
-        //              ", Current Offset: " + std::to_string(offset));
-
-
-
-            
-
-
-
-        //     // This check is now redundant due to the earlier check, but harmless.
-
-
-
-        //     if (offset + nal_sps_pps[i].i_payload > h264_buffer_sps_pps->data.size()) {
-
-
-
-        //         LOG_ERROR("H264Encoder: SPS/PPS buffer unexpectedly too small during copy. This should not happen. Capacity: " + std::to_string(h264_buffer_sps_pps->data.size()) + ", Attempted write: " + std::to_string(offset + nal_sps_pps[i].i_payload));
-
-
-
-        //         running_.store(false);
-
-
-
-        //         return;
-
-
-
-        //     }
-
-
-
-        //     memcpy(h264_buffer_sps_pps->data.data() + offset, nal_sps_pps[i].p_payload, nal_sps_pps[i].i_payload);
-
-
-
-        //     offset += nal_sps_pps[i].i_payload; // Move this line inside the loop
-
-
-
-        // } // Proper closing of the for loop
-
-
-
-        // h264_buffer_sps_pps->size = offset;
-
-
-
-        // output_queue_.push(std::move(h264_buffer_sps_pps));
-
-
-
-        // LOG_INFO("H264Encoder: SPS/PPS headers enqueued. Size: " + std::to_string(offset) + " bytes");
-
-
-
-        while (running_.load()) {
+    while (running_.load()) {
         ImageData image_data;
         if (!input_queue_.pop(image_data)) {
             if (!running_.load()) break;
@@ -401,6 +206,16 @@ void H264Encoder::worker_thread_func() {
         cv::Mat frame_bgr(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
         cv::Mat frame_yuv;
         cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420); // Convert BGR to YUV420p
+
+        LOG_DEBUG("H264Encoder: frame_yuv details - Size: " + std::to_string(frame_yuv.total() * frame_yuv.elemSize()) +
+                  ", Dims: " + std::to_string(frame_yuv.cols) + "x" + std::to_string(frame_yuv.rows) +
+                  ", Channels: " + std::to_string(frame_yuv.channels()) +
+                  ", isContinuous: " + (frame_yuv.isContinuous() ? "true" : "false"));
+        
+        LOG_DEBUG("H264Encoder: picture_in_ plane info - Y Stride: " + std::to_string(picture_in_.img.i_stride[0]) +
+                  ", U Stride: " + std::to_string(picture_in_.img.i_stride[1]) +
+                  ", V Stride: " + std::to_string(picture_in_.img.i_stride[2]) +
+                  ", Y Plane Ptr: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[0])));
 
         // Copy YUV data to x264 picture_in_
         LOG_DEBUG("H264Encoder: Before memcpy to plane[0] - YUV data: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data)) + ", Plane[0]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[0])) + ", Size: " + std::to_string(width_ * height_));

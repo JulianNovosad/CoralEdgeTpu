@@ -60,7 +60,6 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 
         overlay_processor_ = std::make_unique<VideoOverlayProcessor>(main_camera_output_queue_, detection_results_for_overlay_queue_, overlaid_video_queue_, labels_);
         h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, cam_w, cam_h, fps);
-        http_server_ = std::make_unique<HttpServer>(config_loader_.get_listen_address(), config_loader_.get_livestream_video_port(), config_loader_.get_bounding_box_stream_port(), config_loader_.get_reticle_coordinate_port(), config_loader_.get_status_telemetry_port(), h264_output_queue_);
         orientation_sensor_ = std::make_shared<OrientationSensor>(config_loader_.get_phone_orientation_yaw_port(), config_loader_.get_phone_orientation_pitch_port(), config_loader_.get_phone_orientation_roll_port());
         logic_module_ = std::make_unique<LogicModule>(detection_results_for_logic_queue_, orientation_sensor_);
         system_monitor_ = std::make_unique<SystemMonitor>();
@@ -80,7 +79,6 @@ bool Application::start_modules() {
     start_ok &= primary_camera_->start();
     start_ok &= overlay_processor_->start();
     start_ok &= h264_encoder_->start();
-    start_ok &= http_server_->start();
     start_ok &= orientation_sensor_->start();
     start_ok &= logic_module_->start();
     start_ok &= system_monitor_->start();
@@ -91,7 +89,6 @@ bool Application::start_modules() {
         if (system_monitor_->is_running()) system_monitor_->stop();
         if (logic_module_->is_running()) logic_module_->stop();
         if (orientation_sensor_->is_running()) orientation_sensor_->stop();
-        if (http_server_->is_running()) http_server_->stop();
         if (h264_encoder_->is_running()) h264_encoder_->stop();
         if (overlay_processor_->is_running()) overlay_processor_->stop();
         if (primary_camera_->is_running()) primary_camera_->stop();
@@ -106,7 +103,6 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("SystemMonitor", [&]() { system_monitor_->stop(); });
     supervisor_.register_module_stop("LogicModule", [&]() { logic_module_->stop(); });
     supervisor_.register_module_stop("OrientationSensor", [&]() { orientation_sensor_->stop(); });
-    supervisor_.register_module_stop("HttpServer", [&]() { http_server_->stop(); });
     supervisor_.register_module_stop("H264Encoder", [&]() { h264_encoder_->stop(); });
     supervisor_.register_module_stop("VideoOverlayProcessor", [&]() { overlay_processor_->stop(); });
     supervisor_.register_module_stop("CameraCapture", [&]() { primary_camera_->stop(); });

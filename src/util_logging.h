@@ -238,6 +238,12 @@ private:
 #define LOG_WARNING(msg) Logger::getInstance().log("WARNING", msg)
 /// @brief Logs an error message.
 #define LOG_ERROR(msg) Logger::getInstance().log("ERROR", msg)
+#ifdef DEBUG_MODE
+/// @brief Logs a debug message.
+#define LOG_DEBUG(msg) Logger::getInstance().log("DEBUG", msg)
+#else
+#define LOG_DEBUG(msg) (void)0 // No-op in release mode
+#endif
 /// @brief Logs a structured JSON message.
 #define LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
 

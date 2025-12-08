@@ -85,22 +85,6 @@ std::string ConfigLoader::get_telemetry_pub_address() const {
 }
 
 // New Network Port Getters
-unsigned short ConfigLoader::get_livestream_video_port() const {
-    return config_data_.value("/application/network_ports/livestream_video"_json_pointer, 1001);
-}
-
-unsigned short ConfigLoader::get_bounding_box_stream_port() const {
-    return config_data_.value("/application/network_ports/bounding_box_stream"_json_pointer, 1002);
-}
-
-unsigned short ConfigLoader::get_reticle_coordinate_port() const {
-    return config_data_.value("/application/network_ports/reticle_coordinate"_json_pointer, 1003);
-}
-
-unsigned short ConfigLoader::get_status_telemetry_port() const {
-    return config_data_.value("/application/network_ports/status_telemetry"_json_pointer, 1004);
-}
-
 unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {
     return config_data_.value("/application/network_ports/phone_orientation_yaw"_json_pointer, 2001);
 }

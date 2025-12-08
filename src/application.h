@@ -5,7 +5,6 @@
 #include "camera_capture.h"
 #include "config_loader.h"
 #include "h264_encoder.h"
-#include "http_server.h"
 #include "inference.h"
 #include "logic.h"
 #include "orientation_sensor.h"
@@ -71,7 +70,6 @@ private:
     std::unique_ptr<CameraCapture> primary_camera_;
     std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
     std::unique_ptr<H264Encoder> h264_encoder_;
-    std::unique_ptr<HttpServer> http_server_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;
     std::unique_ptr<SystemMonitor> system_monitor_;

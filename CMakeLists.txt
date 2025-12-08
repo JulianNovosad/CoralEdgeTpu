@@ -7,8 +7,8 @@ set(CMAKE_BUILD_TYPE Debug)
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
-find_package(ZeroMQ REQUIRED)
-message(STATUS "Found ZeroMQ: ${ZeroMQ_LIBRARIES}")
+pkg_check_modules(ZEROMQ REQUIRED libzmq)
+message(STATUS "Found ZeroMQ: ${ZEROMQ_LIBRARIES}")
 find_package(GTest REQUIRED)
 
 pkg_check_modules(LIBCAMERA REQUIRED libcamera)
@@ -51,7 +51,6 @@ add_executable(detector
     src/config_loader.cpp # Added ConfigLoader source file
     src/logic.cpp
     src/video_overlay_processor.cpp
-    src/http_server.cpp
     src/h264_encoder.cpp
     src/orientation_sensor.cpp
     src/application_supervisor.cpp
@@ -72,7 +71,7 @@ target_link_libraries(detector PRIVATE
     camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
     camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
     Threads::Threads # For pthreads
-    ZeroMQ::ZeroMQ # For ZeroMQ library
+    ${ZEROMQ_LIBRARIES} # For ZeroMQ library
     /lib/aarch64-linux-gnu/libssl.so.3
     /lib/aarch64-linux-gnu/libcrypto.so.3
 )
@@ -89,6 +88,7 @@ target_include_directories(detector PRIVATE
     ${TFLITE_INCLUDE_DIR}
     ${FLATBUFFERS_INCLUDE_DIR}
     ${JPEG_INCLUDE_DIRS}
+    ${ZEROMQ_INCLUDE_DIRS}
     /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
     civetweb/include
     src # Include the src directory for h264_encoder.h, etc.
@@ -97,16 +97,15 @@ target_include_directories(detector PRIVATE
 
 
 
-add_executable(config_loader_test tests/config_loader_test.cpp)
+add_executable(config_loader_test tests/config_loader_test.cpp src/config_loader.cpp src/util_logging.cpp)
 target_link_libraries(config_loader_test PRIVATE
     GTest::gtest_main
     GTest::gtest
-    src/config_loader.cpp
-    src/util_logging.cpp
 )
 target_include_directories(config_loader_test PRIVATE
     src
     civetweb/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 add_executable(dlopen_test tests/dlopen_test.cpp)
