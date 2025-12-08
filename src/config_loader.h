@@ -16,12 +16,22 @@ public:
     unsigned int get_high_res_height() const;
     int get_udp_raw_video_port() const;
     int get_udp_bounding_box_port() const;
-    int get_http_overlaid_video_port() const;
+    
     std::string get_mobile_app_ip() const;
     std::chrono::seconds get_camera_watchdog_timeout() const;
     int get_inference_worker_threads() const;
     int get_jpeg_quality() const;
     double get_camera_fps() const;
+
+    // New Network Port Getters
+    std::string get_ip_address() const;
+    unsigned short get_livestream_video_port() const;
+    unsigned short get_bounding_box_stream_port() const;
+    unsigned short get_reticle_coordinate_port() const;
+    unsigned short get_status_telemetry_port() const;
+    unsigned short get_phone_orientation_yaw_port() const;
+    unsigned short get_phone_orientation_pitch_port() const;
+    unsigned short get_phone_orientation_roll_port() const;
 
 private:
     nlohmann::json config_data_;

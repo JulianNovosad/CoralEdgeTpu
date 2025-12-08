@@ -17,7 +17,12 @@ struct mg_context;
 
 class HttpServer {
 public:
-    HttpServer(const std::string& address, H264Queue& h264_input_queue);
+    HttpServer(const std::string& ip_address, 
+               unsigned short livestream_video_port,
+               unsigned short bounding_box_stream_port,
+               unsigned short reticle_coordinate_port,
+               unsigned short status_telemetry_port,
+               H264Queue& h264_input_queue);
     ~HttpServer();
 
     bool start();
@@ -49,7 +54,12 @@ private:
     void add_client(struct mg_connection* c);
     void remove_client(struct mg_connection* c);
 
-    std::string address_;
+    std::string ip_address_;
+    unsigned short livestream_video_port_;
+    unsigned short bounding_box_stream_port_;
+    unsigned short reticle_coordinate_port_;
+    unsigned short status_telemetry_port_;
+
     H264Queue& h264_input_queue_;
     std::atomic<bool> running_;
     struct mg_context* ctx_ = nullptr;

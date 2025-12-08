@@ -6,8 +6,18 @@ extern "C" {
 #include <vector>
 #include <cstring>
 
-HttpServer::HttpServer(const std::string& address, H264Queue& h264_input_queue)
-    : address_(address), h264_input_queue_(h264_input_queue), running_(false), ctx_(nullptr) {
+HttpServer::HttpServer(const std::string& ip_address, 
+               unsigned short livestream_video_port,
+               unsigned short bounding_box_stream_port,
+               unsigned short reticle_coordinate_port,
+               unsigned short status_telemetry_port,
+               H264Queue& h264_input_queue)
+    : ip_address_(ip_address), 
+      livestream_video_port_(livestream_video_port), 
+      bounding_box_stream_port_(bounding_box_stream_port), 
+      reticle_coordinate_port_(reticle_coordinate_port), 
+      status_telemetry_port_(status_telemetry_port), 
+      h264_input_queue_(h264_input_queue), running_(false), ctx_(nullptr) {
     LOG_INFO("HttpServer created for WebSocket streaming.");
 }
 
@@ -23,7 +33,7 @@ bool HttpServer::start() {
     }
     
     const char* options[] = {
-        "listening_ports", address_.c_str(),
+        "listening_ports", (ip_address_ + ":" + std::to_string(livestream_video_port_)).c_str(),
         "websocket_timeout_ms", "5000",
         0
     };
@@ -39,8 +49,7 @@ bool HttpServer::start() {
     struct mg_server_port ports[32]; // Max 32 ports
     int num_ports = mg_get_server_ports(ctx_, 32, ports);
     bool port_found = false;
-    std::string configured_port_str = address_.substr(address_.find(":") + 1);
-    int configured_port = std::stoi(configured_port_str);
+    int configured_port = livestream_video_port_;
 
     if (num_ports > 0) {
         for (int i = 0; i < num_ports; ++i) {
