@@ -25,13 +25,15 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
                                      DetectionResultsQueue& detection_results_for_overlay_queue, 
                                      DetectionResultsQueue& detection_results_for_logic_queue, 
                                      std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool,
+                                     float score_threshold,
                                      int num_threads)
     : model_path_(model_path), 
       input_queue_(input_queue), 
       detection_results_for_overlay_queue_(detection_results_for_overlay_queue), 
       detection_results_for_logic_queue_(detection_results_for_logic_queue),
       detection_result_pool_(detection_result_pool),
-      num_threads_(num_threads) {
+      num_threads_(num_threads),
+      score_threshold_(score_threshold) {
 
     // Load the TensorFlow Lite model from the file system.
     model_ = tflite::FlatBufferModel::BuildFromFile(model_path_.c_str());
@@ -216,7 +218,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     size_t result_count = 0;
 
     for (int i = 0; i < num_detections; ++i) {
-        if (detection_scores[i] > 0.5) { 
+        if (detection_scores[i] > score_threshold_) { 
             if (result_count >= results_buffer->data.size()) {
                 LOG_WARNING("More detections found than space in the result buffer. Some detections will be dropped.");
                 break;

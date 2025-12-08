@@ -7,6 +7,9 @@ set(CMAKE_BUILD_TYPE Debug)
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
+find_package(ZeroMQ REQUIRED)
+message(STATUS "Found ZeroMQ: ${ZeroMQ_LIBRARIES}")
+find_package(GTest REQUIRED)
 
 pkg_check_modules(LIBCAMERA REQUIRED libcamera)
 message(STATUS "Found libcamera: ${LIBCAMERA_LIBRARIES}")
@@ -41,6 +44,7 @@ endif()
 # --- Set up Executable Target ---
 add_executable(detector
     src/main.cpp
+    src/application.cpp
     src/camera_capture.cpp
     src/inference.cpp
     src/util_logging.cpp
@@ -68,6 +72,7 @@ target_link_libraries(detector PRIVATE
     camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
     camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
     Threads::Threads # For pthreads
+    ZeroMQ::ZeroMQ # For ZeroMQ library
     /lib/aarch64-linux-gnu/libssl.so.3
     /lib/aarch64-linux-gnu/libcrypto.so.3
 )
@@ -92,6 +97,18 @@ target_include_directories(detector PRIVATE
 
 
 
-add_executable(dlopen_test src/dlopen_test.cpp)
+add_executable(config_loader_test tests/config_loader_test.cpp)
+target_link_libraries(config_loader_test PRIVATE
+    GTest::gtest_main
+    GTest::gtest
+    src/config_loader.cpp
+    src/util_logging.cpp
+)
+target_include_directories(config_loader_test PRIVATE
+    src
+    civetweb/include
+)
+
+add_executable(dlopen_test tests/dlopen_test.cpp)
 target_link_libraries(dlopen_test PRIVATE dl)
 
