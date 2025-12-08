@@ -21,9 +21,6 @@
 #include <map>
 #include <iomanip>
 
-// Define the constant used in the callback 
-static constexpr unsigned int kFpsReportInterval = 100; 
-
 // Helper to convert libcamera PixelFormat to a string for logging
 static std::string pixelFormatToString(const libcamera::PixelFormat& format) {
     // Use fourcc directly as it's a stable identifier.
@@ -40,107 +37,75 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  unsigned int target_width,
                                  unsigned int target_height,
                                  std::chrono::high_resolution_clock::time_point capture_timestamp) {
-    if (fb->planes().empty()) { 
+    if (fb->planes().empty()) {
         LOG_ERROR(std::string(stream_name) + " FrameBuffer has no planes.");
-        return false; 
-    }
-    
-    // Calculate total size of the FrameBuffer by summing up all plane lengths and offsets
-    size_t total_fb_size = 0;
-    for (const auto& plane : fb->planes()) {
-        total_fb_size = std::max(total_fb_size, (size_t)plane.offset + plane.length);
-    }
-
-    // 1. Acquire a buffer from the pool large enough for the entire YUV data
-    auto pooled_yuv_buffer = buffer_pool->acquire(); 
-    if (!pooled_yuv_buffer) {
-        LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer from the pool for YUV data. Dropping frame.");
         return false;
     }
-    LOG_INFO(std::string(stream_name) + " - Pooled YUV Buffer Acquired: capacity=" + std::to_string(pooled_yuv_buffer->data.capacity()) + ", size=" + std::to_string(pooled_yuv_buffer->data.size()));
-    
-    // Iterate through each plane, mmap it, copy its data, and munmap it.
-    for (const auto& plane : fb->planes()) {
-        int fd = plane.fd.get();
-        size_t length = plane.length;
-        off_t offset = plane.offset; // Offset within the file descriptor
 
-        LOG_INFO(std::string(stream_name) + " - mmap plane: fd=" + std::to_string(fd) + ", length=" + std::to_string(length) + ", offset=" + std::to_string(offset));
-        void* mmap_ptr = mmap(NULL, length, PROT_READ, MAP_SHARED, fd, offset);
-        if (mmap_ptr == MAP_FAILED) {
-            LOG_ERROR(std::string(stream_name) + " Failed to mmap plane buffer: " + std::string(strerror(errno)));
-            return false;
-        }
-        LOG_INFO(std::string(stream_name) + " - mmap successful for plane: ptr=" + std::to_string(reinterpret_cast<uintptr_t>(mmap_ptr)) + ", length=" + std::to_string(length) + ", offset=" + std::to_string(offset));
+    const libcamera::FrameBuffer::Plane& plane = fb->planes()[0];
+    int fd = plane.fd.get();
+    size_t length = plane.length;
 
-        // Copy data from mmap'd plane to the corresponding offset in pooled_yuv_buffer
-        LOG_INFO(std::string(stream_name) + " - memcpy plane: dest_ptr=" + std::to_string(reinterpret_cast<uintptr_t>(pooled_yuv_buffer->data.data() + offset)) + ", src_ptr=" + std::to_string(reinterpret_cast<uintptr_t>(mmap_ptr)) + ", length=" + std::to_string(length));
-        std::memcpy(pooled_yuv_buffer->data.data() + offset, mmap_ptr, length);
-
-        // Unmap the plane
-        if (munmap(mmap_ptr, length) == -1) {
-            LOG_ERROR(std::string(stream_name) + " Failed to munmap plane buffer: " + std::string(strerror(errno)));
-        }
-    }
-
-    pooled_yuv_buffer->size = total_fb_size;
-    
-    // Convert YUV420 to BGR for processing (OpenCV default)
-    // Note: YUV420 format has image_data.height rows for Y, and image_data.height/2 rows for interleaved UV.
-    // So, total height for cv::Mat is image_data.height + image_data.height / 2.
-    cv::Mat yuv_image(cfg.size.height + cfg.size.height / 2, cfg.size.width, CV_8UC1, pooled_yuv_buffer->data.data());
-    cv::Mat bgr_image;
-    cv::cvtColor(yuv_image, bgr_image, cv::COLOR_YUV2BGR_I420);
-
-    // Release the temporary YUV buffer
-    pooled_yuv_buffer.reset();
-
-    // Acquire a new buffer from the pool for the BGR image
+    // 1. Acquire a buffer from the pool.
     auto bgr_pooled_buffer = buffer_pool->acquire();
     if (!bgr_pooled_buffer) {
-        LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer for BGR converted image. Dropping frame.");
+        LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer for BGR image. Dropping frame.");
         return false;
     }
 
-    size_t bgr_size = bgr_image.total() * bgr_image.elemSize();
-    std::memcpy(bgr_pooled_buffer->data.data(), bgr_image.data, bgr_size);
-    bgr_pooled_buffer->size = bgr_size;
+    if (length > bgr_pooled_buffer->data.capacity()) {
+        LOG_ERROR(std::string(stream_name) + " BGR frame size (" + std::to_string(length) +
+                  ") exceeds buffer pool capacity (" + std::to_string(bgr_pooled_buffer->data.capacity()) + "). Dropping frame.");
+        return false;
+    }
     
-    ImageData image_data(capture_timestamp); // Pass the capture_timestamp to the constructor
+    // 2. Mmap and copy the single BGR plane.
+    void* mmap_ptr = mmap(NULL, length, PROT_READ, MAP_SHARED, fd, 0);
+    if (mmap_ptr == MAP_FAILED) {
+        LOG_ERROR(std::string(stream_name) + " Failed to mmap plane buffer: " + std::string(strerror(errno)));
+        return false;
+    }
+    std::memcpy(bgr_pooled_buffer->data.data(), mmap_ptr, length);
+    munmap(mmap_ptr, length);
+    bgr_pooled_buffer->size = length;
+
+    ImageData image_data(capture_timestamp);
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
-    image_data.buffer = std::move(bgr_pooled_buffer); // Use the BGR buffer
+    image_data.buffer = std::move(bgr_pooled_buffer);
 
-    // 5. Resize if necessary (now using BGR image_data.buffer)
+    // 3. Resize if necessary.
     if (image_data.width != target_width || image_data.height != target_height) {
-        LOG_INFO("Resizing " + std::string(stream_name) + " from " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) +
-                 " to " + std::to_string(target_width) + "x" + std::to_string(target_height));
-
+        // This part remains the same as it already handles BGR images.
         cv::Mat original_image_bgr(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
         cv::Mat resized_image_bgr;
         cv::resize(original_image_bgr, resized_image_bgr, cv::Size(target_width, target_height), 0, 0, cv::INTER_LINEAR);
 
-        // Acquire a new buffer for the resized image
         auto resized_bgr_pooled_buffer = buffer_pool->acquire();
         if (!resized_bgr_pooled_buffer) {
             LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer for resized image. Dropping frame.");
             return false;
         }
-        
+
         size_t resized_bgr_size = resized_image_bgr.total() * resized_image_bgr.elemSize();
+        if (resized_bgr_size > resized_bgr_pooled_buffer->data.capacity()) {
+            LOG_WARNING(std::string(stream_name) + " resized BGR image size (" + std::to_string(resized_bgr_size) +
+                        ") exceeds buffer capacity (" + std::to_string(resized_bgr_pooled_buffer->data.capacity()) + "). Dropping frame.");
+            return false;
+        }
         std::memcpy(resized_bgr_pooled_buffer->data.data(), resized_image_bgr.data, resized_bgr_size);
         resized_bgr_pooled_buffer->size = resized_bgr_size;
-        
+
         image_data.width = target_width;
         image_data.height = target_height;
         image_data.buffer = std::move(resized_bgr_pooled_buffer);
-
     }
-    
-    // 6. Push data to the queue
-    LOG_INFO("Pushing " + std::string(stream_name) + " to queue. Final dimensions: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height) + ", data size: " + std::to_string(image_data.buffer->size));
+
+    // 4. Push data to the queue.
+    LOG_DEBUG("Pushing " + std::string(stream_name) + " to queue. Final dimensions: " +
+              std::to_string(image_data.width) + "x" + std::to_string(image_data.height));
     queue.push(std::move(image_data));
-    
+
     return true;
 }
 
@@ -349,13 +314,13 @@ bool CameraCapture::setup_camera() {
 
     // Configure main stream (index 0)
     libcamera::StreamConfiguration& mainCfg = config->at(0);
-    mainCfg.pixelFormat = libcamera::formats::YUV420;
+    mainCfg.pixelFormat = libcamera::formats::BGR888;
     mainCfg.size.width = width_;
     mainCfg.size.height = height_;
 
     // Configure tpu stream (index 1)
     libcamera::StreamConfiguration& tpuCfg = config->at(1);
-    tpuCfg.pixelFormat = libcamera::formats::YUV420;
+    tpuCfg.pixelFormat = libcamera::formats::BGR888;
     tpuCfg.size.width = tpu_width_;
     tpuCfg.size.height = tpu_height_;
     
@@ -475,7 +440,7 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     }
 
     if (request->status() == libcamera::Request::RequestCancelled) {
-        LOG_INFO("CameraCapture: Request cancelled (likely flushing).");
+        LOG_DEBUG("CameraCapture: Request cancelled (likely flushing).");
         return;
     }
     
@@ -575,15 +540,15 @@ void CameraCapture::get_performance_metrics() {
     long long p50_latency_ms = frame_latencies_ms_[std::min(percentile_50_index, static_cast<size_t>(total_frames_processed_ - 1))];
 
     LOG_CSV("CameraCapture", "FrameCapture", p50_latency_ms, p95_latency_ms, p99_latency_ms, 0.0, average_fps);
-    LOG_INFO("--- CameraCapture Performance Metrics (Frame Latency) ---");
-    LOG_INFO("  Total Frames Processed: " + std::to_string(total_frames_processed_));
-    LOG_INFO("  Average FPS: " + std::to_string(average_fps));
-    LOG_INFO("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
-    LOG_INFO("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
-    LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
-    LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
-    LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
-    LOG_INFO("---------------------------------------------------------");
+    LOG_DEBUG("--- CameraCapture Performance Metrics (Frame Latency) ---");
+    LOG_DEBUG("  Total Frames Processed: " + std::to_string(total_frames_processed_));
+    LOG_DEBUG("  Average FPS: " + std::to_string(average_fps));
+    LOG_DEBUG("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
+    LOG_DEBUG("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
+    LOG_DEBUG("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    LOG_DEBUG("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    LOG_DEBUG("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    LOG_DEBUG("---------------------------------------------------------");
 
     frame_latencies_ms_.clear();
     total_frames_processed_ = 0;
@@ -604,10 +569,4 @@ void CameraCapture::get_state() const {
         LOG_INFO("  Number of buffers (TPU): " + std::to_string(allocator_->buffers(tpu_stream_).size()));
     }
     LOG_INFO("---------------------------");
-}
-
-// Placeholder functions for completeness, assuming they exist elsewhere
-bool CameraCapture::init_video_encoder(const std::string& output_uri, int fps) {
-    LOG_WARNING("init_video_encoder is a placeholder and not implemented.");
-    return true;
 }

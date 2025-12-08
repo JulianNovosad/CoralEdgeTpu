@@ -59,6 +59,7 @@ public:
                     DetectionResultsQueue& detection_results_for_overlay_queue, 
                     DetectionResultsQueue& detection_results_for_logic_queue, 
                     std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool,
+                    float score_threshold,
                     int num_threads = 1);
 
     /**
@@ -155,6 +156,7 @@ private:
     DetectionResultsQueue& detection_results_for_logic_queue_; ///< Reference to the output queue for detection results to the logic module.
     std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool_; ///< Pool for detection result buffers.
     int num_threads_; ///< Number of inference worker threads.
+    float score_threshold_; ///< Confidence threshold for filtering detections.
 
     int input_width_ = 0; ///< Input width required by the loaded model.
     int input_height_ = 0; ///< Input height required by the loaded model.

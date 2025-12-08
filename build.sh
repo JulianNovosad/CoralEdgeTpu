@@ -10,6 +10,7 @@ find . -name "CMakeCache.txt" -delete
 echo "1. Installing required packages..."
 sudo apt-get update -y
 sudo apt-get install -y libcamera-dev
+sudo apt-get install -y libzmq3-dev
 
 # 2. EdgeTPU runtime install and check
 echo "2. Installing EdgeTPU runtime and checking device..."
@@ -40,8 +41,8 @@ cd ..
 # 3.5. CivetWeb (clone and copy)
 echo "3.5. Cloning and copying CivetWeb..."
 if [ ! -d "civetweb_temp" ]; then
-    echo "Cloning CivetWeb for the first time..."
-    git clone https://github.com/civetweb/civetweb.git civetweb_temp
+    echo "Cloning CivetWeb v1.16 for the first time..."
+    git clone https://github.com/civetweb/civetweb.git --branch v1.16 --depth 1 civetweb_temp
 else
     echo "CivetWeb already cloned."
 fi
