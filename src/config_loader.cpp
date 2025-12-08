@@ -36,22 +36,8 @@ unsigned int ConfigLoader::get_high_res_height() const {
     return config_data_.value("/application/high_res_height"_json_pointer, 1080);
 }
 
-int ConfigLoader::get_udp_raw_video_port() const {
-    return config_data_.value("/application/udp_raw_video_port"_json_pointer, 12345);
-}
-
-int ConfigLoader::get_udp_bounding_box_port() const {
-    return config_data_.value("/application/udp_bounding_box_port"_json_pointer, 12346);
-}
-
-
-
-std::string ConfigLoader::get_mobile_app_ip() const {
-    return config_data_.value("/application/mobile_app_ip"_json_pointer, "127.0.0.1");
-}
-
-std::string ConfigLoader::get_ip_address() const {
-    return get_mobile_app_ip();
+std::string ConfigLoader::get_listen_address() const {
+    return config_data_.value("/application/listen_address"_json_pointer, "0.0.0.0");
 }
 
 std::chrono::seconds ConfigLoader::get_camera_watchdog_timeout() const {
@@ -70,31 +56,59 @@ double ConfigLoader::get_camera_fps() const {
     return config_data_.value("/application/camera_fps"_json_pointer, 30.0);
 }
 
+float ConfigLoader::get_detection_score_threshold() const {
+    return config_data_.value("/application/detection_score_threshold"_json_pointer, 0.5f);
+}
+
+std::string ConfigLoader::get_log_path() const {
+    return config_data_.value("/application/log_path"_json_pointer, "/home/pi/CoralEdgeTpu/logs");
+}
+
+std::string ConfigLoader::get_video_stream_protocol() const {
+    return config_data_.value("/application/video_stream/protocol"_json_pointer, "HTTP_WEBSOCKET");
+}
+
+std::string ConfigLoader::get_video_stream_address() const {
+    return config_data_.value("/application/video_stream/address"_json_pointer, "0.0.0.0");
+}
+
+unsigned short ConfigLoader::get_video_stream_port() const {
+    return config_data_.value("/application/video_stream/port"_json_pointer, 5000);
+}
+
+std::string ConfigLoader::get_telemetry_protocol() const {
+    return config_data_.value("/application/telemetry/protocol"_json_pointer, "HTTP_WEBSOCKET");
+}
+
+std::string ConfigLoader::get_telemetry_pub_address() const {
+    return config_data_.value("/application/telemetry/pub_address"_json_pointer, "tcp://*:6000");
+}
+
 // New Network Port Getters
 unsigned short ConfigLoader::get_livestream_video_port() const {
-    return config_data_.value("/application/network_ports/livestream_video_port/port"_json_pointer, 1001);
+    return config_data_.value("/application/network_ports/livestream_video"_json_pointer, 1001);
 }
 
 unsigned short ConfigLoader::get_bounding_box_stream_port() const {
-    return config_data_.value("/application/network_ports/bounding_box_stream_port/port"_json_pointer, 1002);
+    return config_data_.value("/application/network_ports/bounding_box_stream"_json_pointer, 1002);
 }
 
 unsigned short ConfigLoader::get_reticle_coordinate_port() const {
-    return config_data_.value("/application/network_ports/reticle_coordinate_port/port"_json_pointer, 1003);
+    return config_data_.value("/application/network_ports/reticle_coordinate"_json_pointer, 1003);
 }
 
 unsigned short ConfigLoader::get_status_telemetry_port() const {
-    return config_data_.value("/application/network_ports/status_telemetry_port/port"_json_pointer, 1004);
+    return config_data_.value("/application/network_ports/status_telemetry"_json_pointer, 1004);
 }
 
 unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {
-    return config_data_.value("/application/network_ports/phone_orientation_yaw_port/port"_json_pointer, 2001);
+    return config_data_.value("/application/network_ports/phone_orientation_yaw"_json_pointer, 2001);
 }
 
 unsigned short ConfigLoader::get_phone_orientation_pitch_port() const {
-    return config_data_.value("/application/network_ports/phone_orientation_pitch_port/port"_json_pointer, 2002);
+    return config_data_.value("/application/network_ports/phone_orientation_pitch"_json_pointer, 2002);
 }
 
 unsigned short ConfigLoader::get_phone_orientation_roll_port() const {
-    return config_data_.value("/application/network_ports/phone_orientation_roll_port/port"_json_pointer, 2003);
+    return config_data_.value("/application/network_ports/phone_orientation_roll"_json_pointer, 2003);
 }

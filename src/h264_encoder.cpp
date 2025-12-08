@@ -53,6 +53,10 @@ void H264Encoder::stop() {
             for (int i = 0; i < i_nal; ++i) {
                 auto h264_buffer = h264_buffer_pool_->acquire();
                 if (h264_buffer) {
+                    if (nal[i].i_payload > h264_buffer->data.capacity()) {
+                        LOG_WARNING("H264Encoder::stop(): NAL unit payload is larger than the buffer capacity. Dropping.");
+                        continue;
+                    }
                     memcpy(h264_buffer->data.data(), nal[i].p_payload, nal[i].i_payload);
                     h264_buffer->size = nal[i].i_payload;
                     output_queue_.push(std::move(h264_buffer));
@@ -399,11 +403,11 @@ void H264Encoder::worker_thread_func() {
         cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420); // Convert BGR to YUV420p
 
         // Copy YUV data to x264 picture_in_
-        LOG_INFO("H264Encoder: Before memcpy to plane[0] - YUV data: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data)) + ", Plane[0]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[0])) + ", Size: " + std::to_string(width_ * height_));
+        LOG_DEBUG("H264Encoder: Before memcpy to plane[0] - YUV data: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data)) + ", Plane[0]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[0])) + ", Size: " + std::to_string(width_ * height_));
         memcpy(picture_in_.img.plane[0], frame_yuv.data, width_ * height_);
-        LOG_INFO("H264Encoder: Before memcpy to plane[1] - YUV data offset: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data + (width_ * height_))) + ", Plane[1]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[1])) + ", Size: " + std::to_string((width_ * height_) / 4));
+        LOG_DEBUG("H264Encoder: Before memcpy to plane[1] - YUV data offset: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data + (width_ * height_))) + ", Plane[1]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[1])) + ", Size: " + std::to_string((width_ * height_) / 4));
         memcpy(picture_in_.img.plane[1], frame_yuv.data + (width_ * height_), (width_ * height_) / 4);
-        LOG_INFO("H264Encoder: Before memcpy to plane[2] - YUV data offset: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data + (width_ * height_) + ((width_ * height_) / 4))) + ", Plane[2]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[2])) + ", Size: " + std::to_string((width_ * height_) / 4));
+        LOG_DEBUG("H264Encoder: Before memcpy to plane[2] - YUV data offset: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data + (width_ * height_) + ((width_ * height_) / 4))) + ", Plane[2]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[2])) + ", Size: " + std::to_string((width_ * height_) / 4));
         memcpy(picture_in_.img.plane[2], frame_yuv.data + (width_ * height_) + ((width_ * height_) / 4), (width_ * height_) / 4);
 
         picture_in_.i_pts++;
@@ -421,6 +425,10 @@ void H264Encoder::worker_thread_func() {
             for (int i = 0; i < i_nal; ++i) {
                 auto h264_buffer = h264_buffer_pool_->acquire();
                 if (h264_buffer) {
+                    if (nal[i].i_payload > h264_buffer->data.capacity()) {
+                        LOG_WARNING("H264Encoder: NAL unit payload is larger than the buffer capacity. Dropping.");
+                        continue;
+                    }
                      memcpy(h264_buffer->data.data(), nal[i].p_payload, nal[i].i_payload);
                      h264_buffer->size = nal[i].i_payload;
                      output_queue_.push(std::move(h264_buffer));
