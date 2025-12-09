@@ -78,36 +78,6 @@ CoralEdgeTpu/
 
 ---
 
-## ⚙️ Configuratie (`config.json`)
-
-```json
-{
-  "application": {
-    "model_path": "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite",
-    "labels_path": "coco_labels.txt",
-    "listen_address": "0.0.0.0",
-    "high_res_width": 1920,
-    "high_res_height": 1080,
-    "camera_watchdog_timeout_seconds": 10,
-    "inference_worker_threads": 2,
-    "jpeg_quality": 90,
-    "camera_fps": 120.0,
-    "detection_score_threshold": 0.5,
-    "log_path": "/home/pi/CoralEdgeTpu/logs",
-    "video_stream": {
-      "protocol": "RTP",
-      "address": "192.168.1.100",
-      "port": 5000
-    },
-    "telemetry": {
-      "protocol": "ZeroMQ",
-      "pub_address": "tcp://*:6000"
-    }
-  }
-}
-```
-
----
 
 ## 🔧 Stage-Gate Plan
 
@@ -117,14 +87,15 @@ CoralEdgeTpu/
 
 **Subsystemen:**
 
-* Logic: actuation, 3D ballistiek, hit-scan, veiligheids-/onzekerheidspropagatie (tijdelijk standalone testen)
+* Logic: `logic.*` : actuation, 3D ballistiek, hit-scan, veiligheids-/onzekerheidspropagatie 
 * Camera: `src/camera_capture.*`, `src/buffer_pool.h`, `src/pipeline_structs.h`
 * TPU: `src/inference.*` + `.tflite model`
+* Encoder: `src/h264_encoder.*`
 
 **Gating criteria:**
 
 * FPS, berekeningen/s en latentie per subsystem gemeten
-* Kernel-aanpassingen (PCIe, IRQ-affiniteiten, MSI-X) gedocumenteerd
+* Kernel-aanpassingen (PCIe, IRQ-affiniteiten, MSI-X) gedocumenteerd met lspci -vvv , sudo dmesg | grep -i apex , etc.
 
 **Resultaat:** Subsystemale prestatiegrenzen vastgesteld → goedkeuring Stage 1
 

@@ -285,7 +285,6 @@ void CameraCapture::stop() {
 bool CameraCapture::setup_camera() {
     // --- SAFETY CHECK ---
     if (!camera_) {
-        // This is the log line the user reported. It means the pointer was null here.
         LOG_ERROR("CRITICAL: setup_camera called but camera_ is nullptr! Aborting setup.");
         return false;
     }
@@ -431,6 +430,12 @@ bool CameraCapture::setup_camera() {
     }
     LOG_INFO("Libcamera requests created and buffers added for both streams.");
     
+    // Call init_video_encoder here as it's now safe to assume streams are configured.
+    if (!init_video_encoder()) {
+        LOG_ERROR("Failed to initialize video encoder.");
+        return false;
+    }
+
     return true;
 }
 
@@ -510,7 +515,7 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
             stop();
         }
     }
-}
+} // Correct closing brace for request_complete_callback
 
 void CameraCapture::get_performance_metrics() {
     std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
@@ -522,16 +527,16 @@ void CameraCapture::get_performance_metrics() {
 
     double average_latency_ms = 0;
     for (long long latency : frame_latencies_ms_) {
-        average_latency_ms += latency;
+        average_latency_ms += static_cast<double>(latency); // Cast to double for accurate average
     }
     average_latency_ms /= total_frames_processed_;
     double average_fps = 1000.0 / average_latency_ms; // Inverse of average latency to get average FPS
 
-    double sum_sq_diff = 0;
-    for (long long latency : frame_latencies_ms_) {
-        sum_sq_diff += (latency - average_latency_ms) * (latency - average_latency_ms);
-    }
-    double std_dev_ms = std::sqrt(sum_sq_diff / total_frames_processed_);
+    // double sum_sq_diff = 0; // Commented out unused variable
+    // for (long long latency : frame_latencies_ms_) {
+    //     sum_sq_diff += (latency - average_latency_ms) * (latency - average_latency_ms);
+    // }
+    // double std_dev_ms = std::sqrt(sum_sq_diff / total_frames_processed_);
 
     std::sort(frame_latencies_ms_.begin(), frame_latencies_ms_.end());
     size_t percentile_99_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.99));
@@ -542,12 +547,11 @@ void CameraCapture::get_performance_metrics() {
     long long p95_latency_ms = frame_latencies_ms_[std::min(percentile_95_index, static_cast<size_t>(total_frames_processed_ - 1))];
     long long p50_latency_ms = frame_latencies_ms_[std::min(percentile_50_index, static_cast<size_t>(total_frames_processed_ - 1))];
 
-    LOG_CSV("CameraCapture", "FrameCapture", p50_latency_ms, p95_latency_ms, p99_latency_ms, 0.0, average_fps);
+    LOG_CSV("CameraCapture", "FrameCapture", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
     LOG_DEBUG("--- CameraCapture Performance Metrics (Frame Latency) ---");
     LOG_DEBUG("  Total Frames Processed: " + std::to_string(total_frames_processed_));
     LOG_DEBUG("  Average FPS: " + std::to_string(average_fps));
     LOG_DEBUG("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
-    LOG_DEBUG("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
     LOG_DEBUG("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
     LOG_DEBUG("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
     LOG_DEBUG("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
@@ -557,19 +561,744 @@ void CameraCapture::get_performance_metrics() {
     total_frames_processed_ = 0;
 } // Correct closing brace for request_complete_callback
 
-void CameraCapture::get_state() const {
-    LOG_INFO("--- CameraCapture State ---");
-    LOG_INFO("  Running: " + std::to_string(running_));
-    LOG_INFO("  Main Stream Resolution: " + std::to_string(width_) + "x" + std::to_string(height_));
-    LOG_INFO("  TPU Stream Resolution: " + std::to_string(tpu_width_) + "x" + std::to_string(tpu_height_));
-    if (camera_) {
-        LOG_INFO("  Camera ID: " + camera_->id());
+bool CameraCapture::init_video_encoder() {
+    LOG_INFO("Initializing H.264 encoder...");
+    // This is a placeholder; actual encoder initialization would go here.
+    // It would involve setting up encoder parameters, potentially using libavcodec or a hardware encoder.
+    // For now, we'll just log that it's initialized.
+    LOG_INFO("H.264 encoder initialized (placeholder).");
+    return true;
+}
+
+bool CameraCapture::setup_camera() {
+    // --- SAFETY CHECK ---
+    if (!camera_) {
+        LOG_ERROR("CRITICAL: setup_camera called but camera_ is nullptr! Aborting setup.");
+        return false;
     }
-    LOG_INFO("  Actual Configured Main Stream: " + std::to_string(actual_size_.width) + "x" + std::to_string(actual_size_.height) + " " + pixelFormatToString(actual_pixel_format_));
-    LOG_INFO("  Actual Configured Stride: " + std::to_string(actual_stride_));
-    if (allocator_ && video_stream_ && tpu_stream_) {
-        LOG_INFO("  Number of buffers (Main): " + std::to_string(allocator_->buffers(video_stream_).size()));
-        LOG_INFO("  Number of buffers (TPU): " + std::to_string(allocator_->buffers(tpu_stream_).size()));
+    
+    LOG_INFO("setup_camera: Configuring camera: " + camera_->id());
+    int ret = 0; 
+
+    // Configure dual streams: main high-res and TPU viewfinder
+    std::vector<libcamera::StreamRole> roles = {
+        libcamera::StreamRole::VideoRecording, // main high-res
+        libcamera::StreamRole::Viewfinder      // TPU/resized
+    };
+    
+    std::unique_ptr<libcamera::CameraConfiguration> config = camera_->generateConfiguration(roles);
+
+    if (!config) {
+        LOG_ERROR("Failed to generate dual stream configuration.");
+        return false;
     }
-    LOG_INFO("---------------------------");
+
+    // Check if the generated configuration contains exactly two streams
+    if (config->size() < 2) {
+        LOG_ERROR("Generated camera configuration has less than two streams for dual-stream setup (found " + std::to_string(config->size()) + ").");
+        return false;
+    }
+
+    // Configure main stream (index 0)
+    libcamera::StreamConfiguration& mainCfg = config->at(0);
+    mainCfg.pixelFormat = libcamera::formats::BGR888;
+    mainCfg.size.width = width_;
+    mainCfg.size.height = height_;
+
+    // Configure tpu stream (index 1)
+    libcamera::StreamConfiguration& tpuCfg = config->at(1);
+    tpuCfg.pixelFormat = libcamera::formats::BGR888;
+    tpuCfg.size.width = tpu_width_;
+    tpuCfg.size.height = tpu_height_;
+    
+    // Validate and complete the configuration
+    libcamera::CameraConfiguration::Status config_status = config->validate();
+    LOG_INFO(std::string("CameraConfiguration validate() -> Status: ") + std::to_string(config_status));
+    
+    if (config_status == libcamera::CameraConfiguration::Invalid) {
+        LOG_ERROR("Invalid dual stream camera configuration. Check requested resolutions/formats.");
+        return false;
+    } else if (config_status == libcamera::CameraConfiguration::Adjusted) {
+        LOG_WARNING("Camera configuration adjusted by libcamera for dual streams.");
+    }
+    
+    // Log final chosen config for each stream
+    for (unsigned i = 0; i < config->size(); ++i) {
+        std::string log_msg = "Final stream[" + std::to_string(i) + "] size=" +
+                              std::to_string(config->at(i).size.width) + "x" +
+                              std::to_string(config->at(i).size.height) + " fmt=" +
+                              pixelFormatToString(config->at(i).pixelFormat);
+        LOG_INFO(log_msg);
+    }
+
+    // Store the actual configured stream properties for the main video stream
+    actual_pixel_format_ = mainCfg.pixelFormat;
+    actual_size_ = mainCfg.size;
+    actual_stride_ = mainCfg.stride; // Get the stride, important for raw data.
+
+    LOG_INFO("CameraCapture: Configured main stream format: " + pixelFormatToString(actual_pixel_format_) + 
+             ", size: " + std::to_string(actual_size_.width) + "x" + std::to_string(actual_size_.height) +
+             ", stride: " + std::to_string(actual_stride_) + " (FOURCC: " + std::to_string(actual_pixel_format_.fourcc()) + ")");
+    
+    ret = camera_->configure(config.get());
+    if (ret) {
+        LOG_ERROR("Failed to configure camera streams (Error: " + std::to_string(ret) + ").");
+        return false;
+    }
+    LOG_INFO("Libcamera dual streams configured.");
+    
+    video_stream_ = mainCfg.stream();
+    tpu_stream_ = tpuCfg.stream();
+
+    if (video_stream_) {
+        LOG_INFO("Actual Video Stream Config: " + std::to_string(video_stream_->configuration().size.width) + "x" + std::to_string(video_stream_->configuration().size.height) + " format: " + pixelFormatToString(video_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("Video stream is null after configuration.");
+    }
+
+    if (tpu_stream_) {
+        LOG_INFO("Actual TPU Stream Config: " + std::to_string(tpu_stream_->configuration().size.width) + "x" + std::to_string(tpu_stream_->configuration().size.height) + " format: " + pixelFormatToString(tpu_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("TPU stream is null after configuration.");
+    }
+
+    // Allocate buffers for main video stream
+    allocator_ = std::make_unique<libcamera::FrameBufferAllocator>(camera_);
+    ret = allocator_->allocate(video_stream_);
+    if (ret < 0) {
+        LOG_ERROR("Failed to allocate buffers for main video stream (Error: " + std::to_string(ret) + ").");
+        allocator_.reset(); // Ensure allocator is cleaned up if it failed early
+        return false;
+    }
+    LOG_INFO("Libcamera buffers allocated for main video stream. Number of buffers: " + std::to_string(allocator_->buffers(video_stream_).size()));
+
+    // Allocate buffers for TPU stream
+    ret = allocator_->allocate(tpu_stream_);
+    if (ret < 0) {
+        LOG_ERROR("Failed to allocate buffers for TPU stream (Error: " + std::to_string(ret) + ").");
+        allocator_.reset();
+        return false;
+    }
+    LOG_INFO("Libcamera buffers allocated for TPU stream. Number of buffers: " + std::to_string(allocator_->buffers(tpu_stream_).size()));
+
+    // Create requests
+    const std::vector<std::unique_ptr<libcamera::FrameBuffer>>& video_buffers = allocator_->buffers(video_stream_);
+    const std::vector<std::unique_ptr<libcamera::FrameBuffer>>& tpu_buffers = allocator_->buffers(tpu_stream_);
+
+    if (video_buffers.size() != tpu_buffers.size()) {
+        LOG_ERROR("Mismatched buffer counts between main video stream and TPU stream. This is unexpected.");
+        return false;
+    }
+    
+    requests_.clear(); // Ensure clean slate before populating
+    
+    for (unsigned int i = 0; i < video_buffers.size(); ++i) {
+        std::unique_ptr<libcamera::Request> request = camera_->createRequest();
+        if (!request) {
+            LOG_ERROR("Failed to create request.");
+            return false;
+        }
+
+        // Set initial controls
+        request->controls().set(libcamera::controls::AeEnable, true);
+        
+        ret = request->addBuffer(video_stream_, video_buffers[i].get()); 
+        if (ret) {
+            LOG_ERROR("Failed to add main buffer to request (Error: " + std::to_string(ret) + ").");
+            return false;
+        }
+
+        ret = request->addBuffer(tpu_stream_, tpu_buffers[i].get());
+        if (ret) {
+            LOG_ERROR("Failed to add TPU buffer to request (Error: " + std::to_string(ret) + ").");
+            return false;
+        }
+
+        requests_.push_back(std::move(request));
+    }
+    LOG_INFO("Libcamera requests created and buffers added for both streams.");
+    
+    // Call init_video_encoder here as it's now safe to assume streams are configured.
+    if (!init_video_encoder()) {
+        LOG_ERROR("Failed to initialize video encoder.");
+        return false;
+    }
+
+    return true;
+}
+
+void CameraCapture::request_complete_callback(libcamera::Request* request) {
+    LOG_DEBUG("CameraCapture: request_complete_callback invoked.");
+    if (!running_) {
+        return;
+    }
+
+    if (request->status() == libcamera::Request::RequestCancelled) {
+        LOG_DEBUG("CameraCapture: Request cancelled (likely flushing).");
+        return;
+    }
+    
+    if (request->status() != libcamera::Request::RequestComplete) {
+        LOG_ERROR("CameraCapture: Request failed with status: " + std::to_string(request->status()));
+        // Allow requeueing even on failure to recover
+    }
+
+    // Get the hardware capture timestamp from the request metadata
+    std::chrono::high_resolution_clock::time_point hardware_capture_timestamp;
+    auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
+    if (md_timestamp) {
+        hardware_capture_timestamp = std::chrono::high_resolution_clock::time_point(std::chrono::nanoseconds(*md_timestamp));
+    } else {
+        LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
+        hardware_capture_timestamp = std::chrono::high_resolution_clock::now();
+    }
+
+    // --- PROCESSING START ---
+    auto processing_start_time = std::chrono::high_resolution_clock::now();
+    
+    // Capture buffer map BEFORE calling reuse()
+    libcamera::Request::BufferMap captured_buffers = request->buffers();
+
+    // Process Main Video Stream (only if there's a consumer queue)
+    if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
+        const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
+        const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
+        
+        process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, hardware_capture_timestamp);
+    } else if (captured_buffers.count(video_stream_)) {
+        LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
+    } else {
+        LOG_WARNING("CameraCapture: Video stream buffer missing from completed request.");
+    }
+
+    // Process TPU Stream
+    if (captured_buffers.count(tpu_stream_)) {
+        const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
+        const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
+        
+        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, hardware_capture_timestamp);
+    } else {
+        LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
+    }
+    
+    // --- PERFORMANCE METRICS ---
+    auto processing_end_time = std::chrono::high_resolution_clock::now();
+    long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(processing_end_time - processing_start_time).count();
+    {
+        std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
+        frame_latencies_ms_.push_back(duration_ms);
+        total_frames_processed_++;
+    }
+    
+    // --- REQUEUE ---
+    // CRITICAL FIX: Use ReuseBuffers flag for efficient buffer recycling.
+    // This preserves the buffers attached to the request, avoiding the need to
+    // manually call request->addBuffer() again, which would crash.
+    request->reuse(libcamera::Request::ReuseBuffers); 
+
+    // Requeue only if still running
+    if (running_) {
+        if (camera_->queueRequest(request)) {
+            LOG_ERROR("Failed to re-queue request. Stopping capture.");
+            stop();
+        }
+    }
+} // Correct closing brace for request_complete_callback
+
+void CameraCapture::get_performance_metrics() {
+    std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
+
+    if (total_frames_processed_ == 0) {
+        LOG_INFO("CameraCapture: No frames processed for performance metrics.");
+        return;
+    }
+
+    double average_latency_ms = 0;
+    for (long long latency : frame_latencies_ms_) {
+        average_latency_ms += static_cast<double>(latency); // Cast to double for accurate average
+    }
+    average_latency_ms /= total_frames_processed_;
+    double average_fps = 1000.0 / average_latency_ms; // Inverse of average latency to get average FPS
+
+    // double sum_sq_diff = 0; // Commented out unused variable
+    // for (long long latency : frame_latencies_ms_) {
+    //     sum_sq_diff += (latency - average_latency_ms) * (latency - average_latency_ms);
+    // }
+    // double std_dev_ms = std::sqrt(sum_sq_diff / total_frames_processed_);
+
+    std::sort(frame_latencies_ms_.begin(), frame_latencies_ms_.end());
+    size_t percentile_99_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.99));
+    size_t percentile_95_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.95));
+    size_t percentile_50_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.50));
+
+    long long p99_latency_ms = frame_latencies_ms_[std::min(percentile_99_index, static_cast<size_t>(total_frames_processed_ - 1))];
+    long long p95_latency_ms = frame_latencies_ms_[std::min(percentile_95_index, static_cast<size_t>(total_frames_processed_ - 1))];
+    long long p50_latency_ms = frame_latencies_ms_[std::min(percentile_50_index, static_cast<size_t>(total_frames_processed_ - 1))];
+
+    LOG_CSV("CameraCapture", "FrameCapture", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
+    LOG_DEBUG("--- CameraCapture Performance Metrics (Frame Latency) ---");
+    LOG_DEBUG("  Total Frames Processed: " + std::to_string(total_frames_processed_));
+    LOG_DEBUG("  Average FPS: " + std::to_string(average_fps));
+    LOG_DEBUG("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
+    LOG_DEBUG("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    LOG_DEBUG("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    LOG_DEBUG("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    LOG_DEBUG("---------------------------------------------------------");
+
+    frame_latencies_ms_.clear();
+    total_frames_processed_ = 0;
+} // Correct closing brace for request_complete_callback
+
+bool CameraCapture::init_video_encoder() {
+    LOG_INFO("Initializing H.264 encoder...");
+    // This is a placeholder; actual encoder initialization would go here.
+    // It would involve setting up encoder parameters, potentially using libavcodec or a hardware encoder.
+    // For now, we'll just log that it's initialized.
+    LOG_INFO("H.264 encoder initialized (placeholder).");
+    return true;
+}
+
+bool CameraCapture::setup_camera() {
+    // --- SAFETY CHECK ---
+    if (!camera_) {
+        LOG_ERROR("CRITICAL: setup_camera called but camera_ is nullptr! Aborting setup.");
+        return false;
+    }
+    
+    LOG_INFO("setup_camera: Configuring camera: " + camera_->id());
+    int ret = 0; 
+
+    // Configure dual streams: main high-res and TPU viewfinder
+    std::vector<libcamera::StreamRole> roles = {
+        libcamera::StreamRole::VideoRecording, // main high-res
+        libcamera::StreamRole::Viewfinder      // TPU/resized
+    };
+    
+    std::unique_ptr<libcamera::CameraConfiguration> config = camera_->generateConfiguration(roles);
+
+    if (!config) {
+        LOG_ERROR("Failed to generate dual stream configuration.");
+        return false;
+    }
+
+    // Check if the generated configuration contains exactly two streams
+    if (config->size() < 2) {
+        LOG_ERROR("Generated camera configuration has less than two streams for dual-stream setup (found " + std::to_string(config->size()) + ").");
+        return false;
+    }
+
+    // Configure main stream (index 0)
+    libcamera::StreamConfiguration& mainCfg = config->at(0);
+    mainCfg.pixelFormat = libcamera::formats::BGR888;
+    mainCfg.size.width = width_;
+    mainCfg.size.height = height_;
+
+    // Configure tpu stream (index 1)
+    libcamera::StreamConfiguration& tpuCfg = config->at(1);
+    tpuCfg.pixelFormat = libcamera::formats::BGR888;
+    tpuCfg.size.width = tpu_width_;
+    tpuCfg.size.height = tpu_height_;
+    
+    // Validate and complete the configuration
+    libcamera::CameraConfiguration::Status config_status = config->validate();
+    LOG_INFO(std::string("CameraConfiguration validate() -> Status: ") + std::to_string(config_status));
+    
+    if (config_status == libcamera::CameraConfiguration::Invalid) {
+        LOG_ERROR("Invalid dual stream camera configuration. Check requested resolutions/formats.");
+        return false;
+    } else if (config_status == libcamera::CameraConfiguration::Adjusted) {
+        LOG_WARNING("Camera configuration adjusted by libcamera for dual streams.");
+    }
+    
+    // Log final chosen config for each stream
+    for (unsigned i = 0; i < config->size(); ++i) {
+        std::string log_msg = "Final stream[" + std::to_string(i) + "] size=" +
+                              std::to_string(config->at(i).size.width) + "x" +
+                              std::to_string(config->at(i).size.height) + " fmt=" +
+                              pixelFormatToString(config->at(i).pixelFormat);
+        LOG_INFO(log_msg);
+    }
+
+    // Store the actual configured stream properties for the main video stream
+    actual_pixel_format_ = mainCfg.pixelFormat;
+    actual_size_ = mainCfg.size;
+    actual_stride_ = mainCfg.stride; // Get the stride, important for raw data.
+
+    LOG_INFO("CameraCapture: Configured main stream format: " + pixelFormatToString(actual_pixel_format_) + 
+             ", size: " + std::to_string(actual_size_.width) + "x" + std::to_string(actual_size_.height) +
+             ", stride: " + std::to_string(actual_stride_) + " (FOURCC: " + std::to_string(actual_pixel_format_.fourcc()) + ")");
+    
+    ret = camera_->configure(config.get());
+    if (ret) {
+        LOG_ERROR("Failed to configure camera streams (Error: " + std::to_string(ret) + ").");
+        return false;
+    }
+    LOG_INFO("Libcamera dual streams configured.");
+    
+    video_stream_ = mainCfg.stream();
+    tpu_stream_ = tpuCfg.stream();
+
+    if (video_stream_) {
+        LOG_INFO("Actual Video Stream Config: " + std::to_string(video_stream_->configuration().size.width) + "x" + std::to_string(video_stream_->configuration().size.height) + " format: " + pixelFormatToString(video_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("Video stream is null after configuration.");
+    }
+
+    if (tpu_stream_) {
+        LOG_INFO("Actual TPU Stream Config: " + std::to_string(tpu_stream_->configuration().size.width) + "x" + std::to_string(tpu_stream_->configuration().size.height) + " format: " + pixelFormatToString(tpu_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("TPU stream is null after configuration.");
+    }
+
+    // Allocate buffers for main video stream
+    allocator_ = std::make_unique<libcamera::FrameBufferAllocator>(camera_);
+    ret = allocator_->allocate(video_stream_);
+    if (ret < 0) {
+        LOG_ERROR("Failed to allocate buffers for main video stream (Error: " + std::to_string(ret) + ").");
+        allocator_.reset(); // Ensure allocator is cleaned up if it failed early
+        return false;
+    }
+    LOG_INFO("Libcamera buffers allocated for main video stream. Number of buffers: " + std::to_string(allocator_->buffers(video_stream_).size()));
+
+    // Allocate buffers for TPU stream
+    ret = allocator_->allocate(tpu_stream_);
+    if (ret < 0) {
+        LOG_ERROR("Failed to allocate buffers for TPU stream (Error: " + std::to_string(ret) + ").");
+        allocator_.reset();
+        return false;
+    }
+    LOG_INFO("Libcamera buffers allocated for TPU stream. Number of buffers: " + std::to_string(allocator_->buffers(tpu_stream_).size()));
+
+    // Create requests
+    const std::vector<std::unique_ptr<libcamera::FrameBuffer>>& video_buffers = allocator_->buffers(video_stream_);
+    const std::vector<std::unique_ptr<libcamera::FrameBuffer>>& tpu_buffers = allocator_->buffers(tpu_stream_);
+
+    if (video_buffers.size() != tpu_buffers.size()) {
+        LOG_ERROR("Mismatched buffer counts between main video stream and TPU stream. This is unexpected.");
+        return false;
+    }
+    
+    requests_.clear(); // Ensure clean slate before populating
+    
+    for (unsigned int i = 0; i < video_buffers.size(); ++i) {
+        std::unique_ptr<libcamera::Request> request = camera_->createRequest();
+        if (!request) {
+            LOG_ERROR("Failed to create request.");
+            return false;
+        }
+
+        // Set initial controls
+        request->controls().set(libcamera::controls::AeEnable, true);
+        
+        ret = request->addBuffer(video_stream_, video_buffers[i].get()); 
+        if (ret) {
+            LOG_ERROR("Failed to add main buffer to request (Error: " + std::to_string(ret) + ").");
+            return false;
+        }
+
+        ret = request->addBuffer(tpu_stream_, tpu_buffers[i].get());
+        if (ret) {
+            LOG_ERROR("Failed to add TPU buffer to request (Error: " + std::to_string(ret) + ").");
+            return false;
+        }
+
+        requests_.push_back(std::move(request));
+    }
+    LOG_INFO("Libcamera requests created and buffers added for both streams.");
+    
+    // Call init_video_encoder here as it's now safe to assume streams are configured.
+    if (!init_video_encoder()) {
+        LOG_ERROR("Failed to initialize video encoder.");
+        return false;
+    }
+
+    return true;
+}
+
+void CameraCapture::request_complete_callback(libcamera::Request* request) {
+    LOG_DEBUG("CameraCapture: request_complete_callback invoked.");
+    if (!running_) {
+        return;
+    }
+
+    if (request->status() == libcamera::Request::RequestCancelled) {
+        LOG_DEBUG("CameraCapture: Request cancelled (likely flushing).");
+        return;
+    }
+    
+    if (request->status() != libcamera::Request::RequestComplete) {
+        LOG_ERROR("CameraCapture: Request failed with status: " + std::to_string(request->status()));
+        // Allow requeueing even on failure to recover
+    }
+
+    // Get the hardware capture timestamp from the request metadata
+    std::chrono::high_resolution_clock::time_point hardware_capture_timestamp;
+    auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
+    if (md_timestamp) {
+        hardware_capture_timestamp = std::chrono::high_resolution_clock::time_point(std::chrono::nanoseconds(*md_timestamp));
+    } else {
+        LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
+        hardware_capture_timestamp = std::chrono::high_resolution_clock::now();
+    }
+
+    // --- PROCESSING START ---
+    auto processing_start_time = std::chrono::high_resolution_clock::now();
+    
+    // Capture buffer map BEFORE calling reuse()
+    libcamera::Request::BufferMap captured_buffers = request->buffers();
+
+    // Process Main Video Stream (only if there's a consumer queue)
+    if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
+        const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
+        const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
+        
+        process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, hardware_capture_timestamp);
+    } else if (captured_buffers.count(video_stream_)) {
+        LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
+    } else {
+        LOG_WARNING("CameraCapture: Video stream buffer missing from completed request.");
+    }
+
+    // Process TPU Stream
+    if (captured_buffers.count(tpu_stream_)) {
+        const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
+        const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
+        
+        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, hardware_capture_timestamp);
+    } else {
+        LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
+    }
+    
+    // --- PERFORMANCE METRICS ---
+    auto processing_end_time = std::chrono::high_resolution_clock::now();
+    long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(processing_end_time - processing_start_time).count();
+    {
+        std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
+        frame_latencies_ms_.push_back(duration_ms);
+        total_frames_processed_++;
+    }
+    
+    // --- REQUEUE ---
+    // CRITICAL FIX: Use ReuseBuffers flag for efficient buffer recycling.
+    // This preserves the buffers attached to the request, avoiding the need to
+    // manually call request->addBuffer() again, which would crash.
+    request->reuse(libcamera::Request::ReuseBuffers); 
+
+    // Requeue only if still running
+    if (running_) {
+        if (camera_->queueRequest(request)) {
+            LOG_ERROR("Failed to re-queue request. Stopping capture.");
+            stop();
+        }
+    }
+} // Correct closing brace for request_complete_callback
+
+void CameraCapture::get_performance_metrics() {
+    std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
+
+    if (total_frames_processed_ == 0) {
+        LOG_INFO("CameraCapture: No frames processed for performance metrics.");
+        return;
+    }
+
+    double average_latency_ms = 0;
+    for (long long latency : frame_latencies_ms_) {
+        average_latency_ms += static_cast<double>(latency); // Cast to double for accurate average
+    }
+    average_latency_ms /= total_frames_processed_;
+    double average_fps = 1000.0 / average_latency_ms; // Inverse of average latency to get average FPS
+
+    // double sum_sq_diff = 0; // Commented out unused variable
+    // for (long long latency : frame_latencies_ms_) {
+    //     sum_sq_diff += (latency - average_latency_ms) * (latency - average_latency_ms);
+    // }
+    // double std_dev_ms = std::sqrt(sum_sq_diff / total_frames_processed_);
+
+    std::sort(frame_latencies_ms_.begin(), frame_latencies_ms_.end());
+    size_t percentile_99_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.99));
+    size_t percentile_95_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.95));
+    size_t percentile_50_index = static_cast<size_t>(std::round(total_frames_processed_ * 0.50));
+
+    long long p99_latency_ms = frame_latencies_ms_[std::min(percentile_99_index, static_cast<size_t>(total_frames_processed_ - 1))];
+    long long p95_latency_ms = frame_latencies_ms_[std::min(percentile_95_index, static_cast<size_t>(total_frames_processed_ - 1))];
+    long long p50_latency_ms = frame_latencies_ms_[std::min(percentile_50_index, static_cast<size_t>(total_frames_processed_ - 1))];
+
+    LOG_CSV("CameraCapture", "FrameCapture", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
+    LOG_DEBUG("--- CameraCapture Performance Metrics (Frame Latency) ---");
+    LOG_DEBUG("  Total Frames Processed: " + std::to_string(total_frames_processed_));
+    LOG_DEBUG("  Average FPS: " + std::to_string(average_fps));
+    LOG_DEBUG("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
+    LOG_DEBUG("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    LOG_DEBUG("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    LOG_DEBUG("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    LOG_DEBUG("---------------------------------------------------------");
+
+    frame_latencies_ms_.clear();
+    total_frames_processed_ = 0;
+} // Correct closing brace for request_complete_callback
+
+bool CameraCapture::init_video_encoder() {
+    LOG_INFO("Initializing H.264 encoder...");
+    // This is a placeholder; actual encoder initialization would go here.
+    // It would involve setting up encoder parameters, potentially using libavcodec or a hardware encoder.
+    // For now, we'll just log that it's initialized.
+    LOG_INFO("H.264 encoder initialized (placeholder).");
+    return true;
+}
+
+bool CameraCapture::setup_camera() {
+    // --- SAFETY CHECK ---
+    if (!camera_) {
+        LOG_ERROR("CRITICAL: setup_camera called but camera_ is nullptr! Aborting setup.");
+        return false;
+    }
+    
+    LOG_INFO("setup_camera: Configuring camera: " + camera_->id());
+    int ret = 0; 
+
+    // Configure dual streams: main high-res and TPU viewfinder
+    std::vector<libcamera::StreamRole> roles = {
+        libcamera::StreamRole::VideoRecording, // main high-res
+        libcamera::StreamRole::Viewfinder      // TPU/resized
+    };
+    
+    std::unique_ptr<libcamera::CameraConfiguration> config = camera_->generateConfiguration(roles);
+
+    if (!config) {
+        LOG_ERROR("Failed to generate dual stream configuration.");
+        return false;
+    }
+
+    // Check if the generated configuration contains exactly two streams
+    if (config->size() < 2) {
+        LOG_ERROR("Generated camera configuration has less than two streams for dual-stream setup (found " + std::to_string(config->size()) + ").");
+        return false;
+    }
+
+    // Configure main stream (index 0)
+    libcamera::StreamConfiguration& mainCfg = config->at(0);
+    mainCfg.pixelFormat = libcamera::formats::BGR888;
+    mainCfg.size.width = width_;
+    mainCfg.size.height = height_;
+
+    // Configure tpu stream (index 1)
+    libcamera::StreamConfiguration& tpuCfg = config->at(1);
+    tpuCfg.pixelFormat = libcamera::formats::BGR888;
+    tpuCfg.size.width = tpu_width_;
+    tpuCfg.size.height = tpu_height_;
+    
+    // Validate and complete the configuration
+    libcamera::CameraConfiguration::Status config_status = config->validate();
+    LOG_INFO(std::string("CameraConfiguration validate() -> Status: ") + std::to_string(config_status));
+    
+    if (config_status == libcamera::CameraConfiguration::Invalid) {
+        LOG_ERROR("Invalid dual stream camera configuration. Check requested resolutions/formats.");
+        return false;
+    } else if (config_status == libcamera::CameraConfiguration::Adjusted) {
+        LOG_WARNING("Camera configuration adjusted by libcamera for dual streams.");
+    }
+    
+    // Log final chosen config for each stream
+    for (unsigned i = 0; i < config->size(); ++i) {
+        std::string log_msg = "Final stream[" + std::to_string(i) + "] size=" +
+                              std::to_string(config->at(i).size.width) + "x" +
+                              std::to_string(config->at(i).size.height) + " fmt=" +
+                              pixelFormatToString(config->at(i).pixelFormat);
+        LOG_INFO(log_msg);
+    }
+
+    // Store the actual configured stream properties for the main video stream
+    actual_pixel_format_ = mainCfg.pixelFormat;
+    actual_size_ = mainCfg.size;
+    actual_stride_ = mainCfg.stride; // Get the stride, important for raw data.
+
+    LOG_INFO("CameraCapture: Configured main stream format: " + pixelFormatToString(actual_pixel_format_) + 
+             ", size: " + std::to_string(actual_size_.width) + "x" + std::to_string(actual_size_.height) +
+             ", stride: " + std::to_string(actual_stride_) + " (FOURCC: " + std::to_string(actual_pixel_format_.fourcc()) + ")");
+    
+    ret = camera_->configure(config.get());
+    if (ret) {
+        LOG_ERROR("Failed to configure camera streams (Error: " + std::to_string(ret) + ").");
+        return false;
+    }
+    LOG_INFO("Libcamera dual streams configured.");
+    
+    video_stream_ = mainCfg.stream();
+    tpu_stream_ = tpuCfg.stream();
+
+    if (video_stream_) {
+        LOG_INFO("Actual Video Stream Config: " + std::to_string(video_stream_->configuration().size.width) + "x" + std::to_string(video_stream_->configuration().size.height) + " format: " + pixelFormatToString(video_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("Video stream is null after configuration.");
+    }
+
+    if (tpu_stream_) {
+        LOG_INFO("Actual TPU Stream Config: " + std::to_string(tpu_stream_->configuration().size.width) + "x" + std::to_string(tpu_stream_->configuration().size.height) + " format: " + pixelFormatToString(tpu_stream_->configuration().pixelFormat));
+    } else {
+        LOG_ERROR("TPU stream is null after configuration.");
+    }
+
+    // Allocate buffers for main video stream
+    allocator_ = std::make_unique<libcamera::FrameBufferAllocator>(camera_);
+    ret = allocator_->allocate(video_stream_);
+    if (ret < 0) {
+        LOG_ERROR("Failed to allocate buffers for main video stream (Error: " + std::to_string(ret) + ").");
+        allocator_.reset(); // Ensure allocator is cleaned up if it failed early
+        return false;
+    }
+    LOG_INFO("Libcamera buffers allocated for main video stream. Number of buffers: " + std::to_string(allocator_->buffers(video_stream_).size()));
+
+    // Allocate buffers for TPU stream
+    ret = allocator_->allocate(tpu_stream_);
+    if (ret < 0) {
+        LOG_ERROR("Failed to allocate buffers for TPU stream (Error: " + std::to_string(ret) + ").");
+        allocator_.reset();
+        return false;
+    }
+    LOG_INFO("Libcamera buffers allocated for TPU stream. Number of buffers: " + std::to_string(allocator_->buffers(tpu_stream_).size()));
+
+    // Create requests
+    const std::vector<std::unique_ptr<libcamera::FrameBuffer>>& video_buffers = allocator_->buffers(video_stream_);
+    const std::vector<std::unique_ptr<libcamera::FrameBuffer>>& tpu_buffers = allocator_->buffers(tpu_stream_);
+
+    if (video_buffers.size() != tpu_buffers.size()) {
+        LOG_ERROR("Mismatched buffer counts between main video stream and TPU stream. This is unexpected.");
+        return false;
+    }
+    
+    requests_.clear(); // Ensure clean slate before populating
+    
+    for (unsigned int i = 0; i < video_buffers.size(); ++i) {
+        std::unique_ptr<libcamera::Request> request = camera_->createRequest();
+        if (!request) {
+            LOG_ERROR("Failed to create request.");
+            return false;
+        }
+
+        // Set initial controls
+        request->controls().set(libcamera::controls::AeEnable, true);
+        
+        ret = request->addBuffer(video_stream_, video_buffers[i].get()); 
+        if (ret) {
+            LOG_ERROR("Failed to add main buffer to request (Error: " + std::to_string(ret) + ").");
+            return false;
+        }
+
+        ret = request->addBuffer(tpu_stream_, tpu_buffers[i].get());
+        if (ret) {
+            LOG_ERROR("Failed to add TPU buffer to request (Error: " + std::to_string(ret) + ").");
+            return false;
+        }
+
+        requests_.push_back(std::move(request));
+    }
+    LOG_INFO("Libcamera requests created and buffers added for both streams.");
+    
+    // Call init_video_encoder here as it's now safe to assume streams are configured.
+    if (!init_video_encoder()) {
+        LOG_ERROR("Failed to initialize video encoder.");
+        return false;
+    }
+
+    return true;
 }

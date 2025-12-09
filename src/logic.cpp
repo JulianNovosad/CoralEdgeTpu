@@ -237,19 +237,57 @@ void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_dat
 
 void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) {
     char log_buffer[256];
+    // --- 4. Uncertainty Propagation & Safety Checks ---
     float predicted_impact_uncertainty = 0.5f; 
     std::string safety_message;
     
+    // Iterate through active tracks and perform safety checks
     for (auto& track : active_tracks_) {
         SafetyStatus safety_status = perform_safety_and_uncertainty_checks(track, predicted_impact_uncertainty, safety_message);
         
-        if (safety_status == SAFETY_OK) {
-            Vec3 impact_point;
-            if (predict_impact_point(track, imu_data, impact_point)) {
-                issue_servo_commands(impact_point.x, impact_point.y, impact_point.z);
-            }
+        switch (safety_status) {
+            case SAFETY_OK:
+                if (current_fallback_mode_ != NORMAL_OPERATION) {
+                    LOG_INFO("Returning to NORMAL_OPERATION.");
+                    current_fallback_mode_ = NORMAL_OPERATION;
+                }
+                snprintf(log_buffer, sizeof(log_buffer), "Safety check PASSED for Track ID %ld: %s", track.id, safety_message.c_str());
+                LOG_INFO(log_buffer);
+                
+                // Calculate impact point and send as telemetry instead of servo commands
+                Vec3 impact_point;
+                if (predict_impact_point(track, imu_data, impact_point)) {
+                    // Format the impact point as JSON for telemetry
+                    // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
+                    std::string telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
+                                                    ", \"impact_point\": {\"x\": " + std::to_string(impact_point.x) +
+                                                    ", \"y\": " + std::to_string(impact_point.y) +
+                                                    ", \"z\": " + std::to_string(impact_point.z) + "}}";
+                    // In a real system, this telemetry_message would be sent over ZeroMQ to tcp://*:6000
+                    LOG_INFO("Telemetry (simulated): Sending impact point data: " + telemetry_message);
+                }
+                break;
+            case SAFETY_WARNING_UNCERTAINTY:
+            case SAFETY_WARNING_TRACK_UNSTABLE:
+                if (current_fallback_mode_ != FALLBACK_A_REDUCED_PERFORMANCE) {
+                    LOG_WARNING("Activating FALLBACK_A_REDUCED_PERFORMANCE due to warning: " + safety_message);
+                    current_fallback_mode_ = FALLBACK_A_REDUCED_PERFORMANCE;
+                }
+                snprintf(log_buffer, sizeof(log_buffer), "Safety check WARNING for Track ID %ld: %s", track.id, safety_message.c_str());
+                LOG_WARNING(log_buffer);
+                // Reduced performance action: e.g., only log, do not issue commands
+                break;
+            case SAFETY_CRITICAL_UNCERTAINTY:
+            case SAFETY_CRITICAL_OTHER:
+                if (current_fallback_mode_ < FALLBACK_B_WARNING_STATE) { // Promote to higher fallback if less severe mode
+                    LOG_ERROR("Activating FALLBACK_B_WARNING_STATE due to critical issue: " + safety_message);
+                    current_fallback_mode_ = FALLBACK_B_WARNING_STATE;
+                }
+                snprintf(log_buffer, sizeof(log_buffer), "Safety check CRITICAL for Track ID %ld: %s", track.id, safety_message.c_str());
+                LOG_ERROR(log_buffer);
+                // Critical action: e.g., halt all operations, wait for manual override
+                break;
         }
-        // ... (andere safety logic)
     }
 }
 

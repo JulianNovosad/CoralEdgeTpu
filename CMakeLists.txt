@@ -3,8 +3,8 @@ project(CoralEdgeTpuDetector CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror")
 set(CMAKE_BUILD_TYPE Debug)
 
 find_package(PkgConfig REQUIRED)
@@ -97,6 +97,9 @@ target_include_directories(detector PRIVATE
     SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow_2.5.0
 )
 
+target_compile_options(detector PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-error=unused-parameter>
+)
 
 
 add_executable(config_loader_test tests/config_loader_test.cpp src/config_loader.cpp src/util_logging.cpp)
