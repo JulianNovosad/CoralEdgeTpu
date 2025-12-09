@@ -67,9 +67,11 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
     edgetpu_delegate_ = tflite_plugin_create_delegate(nullptr, nullptr, 0, edgetpu_error_reporter);
     if (!edgetpu_delegate_) {
         LOG_ERROR("Edge TPU delegate creation failed (tflite_plugin_create_delegate returned nullptr).");
+        // Explicitly report error if delegate creation failed
+        edgetpu_error_reporter("tflite_plugin_create_delegate returned nullptr.");
         throw std::runtime_error("Failed to create EdgeTPU delegate in constructor. Ensure libedgetpu1-std is installed and device is connected.");
     }
-    LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor.");
+    LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: " + std::to_string(reinterpret_cast<uintptr_t>(edgetpu_delegate_)));
 }
 
 InferenceEngine::~InferenceEngine() {
@@ -154,7 +156,7 @@ void InferenceEngine::worker_thread_func() {
             // LOG_INFO("InferenceEngine received image - Dimensions: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Data size: " + std::to_string(input_image.buffer->size));
             
             int expected_input_size = input_width_ * input_height_ * input_channels_;
-            if (input_image.buffer->size != expected_input_size) {
+            if (input_image.buffer->size != static_cast<size_t>(expected_input_size)) {
                  LOG_ERROR("Input RGB image data size (" + std::to_string(input_image.buffer->size) + 
                            ") does not match expected model input size (" + std::to_string(expected_input_size) + "). Skipping frame.");
                  continue;
@@ -272,7 +274,7 @@ void InferenceEngine::get_performance_metrics() {
     long long p95_latency_ms = inference_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_inferences_ - 1))];
     long long p50_latency_ms = inference_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_inferences_ - 1))];
 
-    LOG_CSV("InferenceEngine", "Inference", p50_latency_ms, p95_latency_ms, p99_latency_ms, 0.0, average_fps);
+    LOG_CSV("InferenceEngine", "Inference", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
     LOG_INFO("--- Inference Performance Metrics ---");
     LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
     LOG_INFO("  Average FPS: " + std::to_string(average_fps));

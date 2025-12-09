@@ -55,14 +55,10 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         unsigned int inf_h = inference_engine_->get_input_height();
 
         std::list<std::reference_wrapper<ImageQueue>> camera_queues;
-        camera_queues.push_back(std::ref(main_camera_output_queue_));
-        primary_camera_ = std::make_unique<CameraCapture>(cam_w, cam_h, inf_w, inf_h, inf_w, inf_h, image_pool_, camera_queues, tpu_inference_queue_, camera_watchdog_timeout);
-
-        overlay_processor_ = std::make_unique<VideoOverlayProcessor>(main_camera_output_queue_, detection_results_for_overlay_queue_, overlaid_video_queue_, labels_);
-        h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, cam_w, cam_h, fps);
+        // primary_camera_ = std::make_unique<CameraCapture>(cam_w, cam_h, inf_w, inf_h, inf_w, inf_h, image_pool_, camera_queues, tpu_inference_queue_, camera_watchdog_timeout);
         orientation_sensor_ = std::make_shared<OrientationSensor>(config_loader_.get_phone_orientation_yaw_port(), config_loader_.get_phone_orientation_pitch_port(), config_loader_.get_phone_orientation_roll_port());
-        logic_module_ = std::make_unique<LogicModule>(detection_results_for_logic_queue_, orientation_sensor_);
-        system_monitor_ = std::make_unique<SystemMonitor>();
+        logic_module_ = std::make_unique<LogicModule>(detection_results_for_logic_queue_, orientation_sensor_, config_loader_);
+        // system_monitor_ = std::make_unique<SystemMonitor>();
 
     } catch (const std::exception& e) {
         LOG_ERROR("Failed to initialize modules: " + std::string(e.what()));
@@ -76,22 +72,17 @@ bool Application::start_modules() {
     LOG_INFO("Starting all modules...");
     bool start_ok = true;
     start_ok &= inference_engine_->start();
-    start_ok &= primary_camera_->start();
-    start_ok &= overlay_processor_->start();
-    start_ok &= h264_encoder_->start();
+    // start_ok &= primary_camera_->start();
     start_ok &= orientation_sensor_->start();
     start_ok &= logic_module_->start();
-    start_ok &= system_monitor_->start();
+    // start_ok &= system_monitor_->start();
 
     if (!start_ok) {
-        LOG_ERROR("Failed to start one or more modules. Initiating shutdown.");
-        // Stop already started modules
-        if (system_monitor_->is_running()) system_monitor_->stop();
+        LOG_ERROR("One or more modules failed to start. Shutting down.");
+        // if (system_monitor_->is_running()) system_monitor_->stop();
         if (logic_module_->is_running()) logic_module_->stop();
         if (orientation_sensor_->is_running()) orientation_sensor_->stop();
-        if (h264_encoder_->is_running()) h264_encoder_->stop();
-        if (overlay_processor_->is_running()) overlay_processor_->stop();
-        if (primary_camera_->is_running()) primary_camera_->stop();
+        // if (primary_camera_->is_running()) primary_camera_->stop();
         if (inference_engine_->is_running()) inference_engine_->stop();
         return false;
     }
@@ -100,12 +91,10 @@ bool Application::start_modules() {
 }
 
 void Application::register_shutdown_handlers() {
-    supervisor_.register_module_stop("SystemMonitor", [&]() { system_monitor_->stop(); });
+    // supervisor_.register_module_stop("SystemMonitor", [&]() { system_monitor_->stop(); });
     supervisor_.register_module_stop("LogicModule", [&]() { logic_module_->stop(); });
     supervisor_.register_module_stop("OrientationSensor", [&]() { orientation_sensor_->stop(); });
-    supervisor_.register_module_stop("H264Encoder", [&]() { h264_encoder_->stop(); });
-    supervisor_.register_module_stop("VideoOverlayProcessor", [&]() { overlay_processor_->stop(); });
-    supervisor_.register_module_stop("CameraCapture", [&]() { primary_camera_->stop(); });
+    // supervisor_.register_module_stop("CameraCapture", [&]() { primary_camera_->stop(); });
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
 }
 
@@ -114,10 +103,13 @@ void Application::main_loop() {
     while (!shutdown_requested) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
-        // Performance metrics can be logged periodically if needed
-        // inference_engine_->get_performance_metrics();
-        // logic_module_->get_performance_metrics();
-        // primary_camera_->get_performance_metrics();
+        static auto last_metric_log_time = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_metric_log_time).count() >= 5) {
+            inference_engine_->get_performance_metrics();
+            logic_module_->get_performance_metrics();
+            last_metric_log_time = now;
+        }
     }
 }
 

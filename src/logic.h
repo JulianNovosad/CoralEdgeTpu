@@ -8,36 +8,76 @@
 
 #include "pipeline_structs.h"
 #include "orientation_sensor.h"
+#include "config_loader.h" // Include de config loader
 #include <chrono>
 #include <thread>
 #include <vector>
 #include <atomic>
 #include <memory>
+#include <cmath>
+
+// --- Nieuwe 3D Ballistiek Structuren ---
+
+/**
+ * @brief Een eenvoudige 3D-vectorstructuur.
+ */
+struct Vec3 {
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+
+    Vec3 operator+(const Vec3& other) const { return {x + other.x, y + other.y, z + other.z}; }
+    Vec3 operator-(const Vec3& other) const { return {x - other.x, y - other.y, z - other.z}; }
+    Vec3 operator*(float scalar) const { return {x * scalar, y * scalar, z * scalar}; }
+    float magnitude() const { return std::sqrt(x*x + y*y + z*z); }
+};
+
+/**
+ * @brief Profiel voor wapen- en munitie-eigenschappen.
+ */
+struct BallisticProfile {
+    // Munitie
+    float muzzle_velocity_mps;  // Mondingssnelheid in m/s
+    float bullet_mass_kg;       // Kogelmassa in kg
+    float ballistic_coefficient_si; // G1 Ballistische coëfficiënt in SI-eenheden (kg/m^2)
+
+    // Wapen
+    float sight_height_m;       // Hoogte van vizier boven de loop in meters
+    float zero_distance_m;      // Afstand waarop ingeschoten is in meters
+
+    // Omgeving (vereenvoudigd, kan later dynamisch)
+    float air_pressure_pa;      // Luchtdruk in Pascal
+    float temperature_c;        // Temperatuur in Celsius
+};
+
+/**
+ * @brief Toestandsvector voor de RK4-solver.
+ */
+struct BallisticState {
+    Vec3 position;
+    Vec3 velocity;
+};
+
+// --- Einde Nieuwe 3D Ballistiek Structuren ---
+
 
 /**
  * @brief Representeert een enkel gevolgd object.
- *
- * Deze struct bevat de status van een dynamisch gevolgd object, inclusief zijn unieke ID,
- * de laatst bekende detectie, geschatte 3D-positie en -snelheid, en een historie
- * voor robuustere tracking.
  */
 struct TrackedObject {
-    long id;                               ///< Unieke identifier voor dit gevolgde object.
-    DetectionResult last_detection;        ///< De laatste detectie die aan dit spoor is gekoppeld.
+    long id;
+    DetectionResult last_detection;
     
-    // Geschatte 3D-toestand (vereenvoudigd)
-    float pos_x, pos_y, pos_z;             ///< Geschatte 3D-positie (bijv. in cameracoördinaten, meters).
-    float vel_x, vel_y, vel_z;             ///< Geschatte 3D-snelheid (bijv. in meters/seconde).
+    Vec3 position; // Gebruikt nu Vec3
+    Vec3 velocity; // Gebruikt nu Vec3
 
-    std::chrono::high_resolution_clock::time_point last_update_time; ///< Tijdstip van de laatste update.
-    int hit_streak;                        ///< Aantal opeenvolgende frames dat dit object is gedetecteerd.
-    int missed_frames;                     ///< Aantal opeenvolgende frames dat dit object is gemist.
-    bool associated_this_frame;            ///< Vlag om aan te geven of het spoor in het huidige frame is geassocieerd.
+    std::chrono::high_resolution_clock::time_point last_update_time;
+    int hit_streak;
+    int missed_frames;
+    bool associated_this_frame;
 
     TrackedObject(long _id, const DetectionResult& detection, float initial_distance)
         : id(_id), last_detection(detection), 
-          pos_x(0.0f), pos_y(0.0f), pos_z(initial_distance), // Aanname dat initiële afstand Z levert
-          vel_x(0.0f), vel_y(0.0f), vel_z(0.0f),
+          position({0.0f, 0.0f, initial_distance}), // Init positie
+          velocity({0.0f, 0.0f, 0.0f}),
           last_update_time(detection.timestamp),
           hit_streak(1), missed_frames(0), associated_this_frame(true) {}
 };
@@ -46,65 +86,60 @@ struct TrackedObject {
  * @brief Enumeratie voor de veiligheidsstatus van het systeem.
  */
 enum SafetyStatus {
-    SAFETY_OK,                          ///< Systeem functioneert normaal.
-    SAFETY_WARNING_UNCERTAINTY,         ///< Waarschuwing: onzekerheid in voorspelling is hoog.
-    SAFETY_WARNING_TRACK_UNSTABLE,      ///< Waarschuwing: object-track is onstabiel.
-    SAFETY_CRITICAL_UNCERTAINTY,        ///< Kritiek: onzekerheid overschrijdt veilige drempels.
-    SAFETY_CRITICAL_OTHER               ///< Kritiek: andere kritieke fout.
+    SAFETY_OK,
+    SAFETY_WARNING_UNCERTAINTY,
+    SAFETY_WARNING_TRACK_UNSTABLE,
+    SAFETY_CRITICAL_UNCERTAINTY,
+    SAFETY_CRITICAL_OTHER
 };
 
 /**
  * @brief Enumeratie voor de fallback-modi van het systeem.
  */
 enum FallbackMode {
-    NORMAL_OPERATION,                   ///< Normale werking.
-    FALLBACK_A_REDUCED_PERFORMANCE,     ///< Terugvalmodus A: verminderde prestaties.
-    FALLBACK_B_WARNING_STATE,           ///< Terugvalmodus B: waarschuwingsstatus.
-    FALLBACK_C_SAFE_SHUTDOWN            ///< Terugvalmodus C: veilige uitschakeling.
+    NORMAL_OPERATION,
+    FALLBACK_A_REDUCED_PERFORMANCE,
+    FALLBACK_B_WARNING_STATE,
+    FALLBACK_C_SAFE_SHUTDOWN
 };
+
+
+/**
+ * @brief Klasse voor het uitvoeren van 3D ballistische berekeningen met RK4.
+ */
+class BallisticsSolver {
+public:
+    BallisticsSolver(const BallisticProfile& profile);
+    
+    std::vector<BallisticState> calculate_trajectory(float initial_pitch, float max_distance, float time_step = 0.001f);
+    float calculate_zero_pitch();
+
+private:
+    BallisticProfile profile_;
+    float zero_pitch_rad_ = 0.0f;
+    
+    Vec3 drag_force(const Vec3& velocity, float air_density);
+    BallisticState derivatives(const BallisticState& state, float air_density);
+    BallisticState rk4_step(const BallisticState& state, float dt, float air_density);
+    float get_air_density() const;
+};
+
 
 /**
  * @brief De centrale logica-module.
- *
- * Verwerkt detectieresultaten, fuseert sensordata, volgt objecten,
- * berekent ballistiek en voert veiligheidscontroles uit.
  */
 class LogicModule {
 public:
-    /**
-     * @brief Constructor voor de LogicModule.
-     * @param detection_input_queue Wachtrij voor inkomende detectieresultaten.
-     * @param orientation_sensor Gedeelde pointer naar de oriëntatiesensor.
-     */
-    LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor);
+    LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor, const ConfigLoader& config);
     ~LogicModule();
 
-    /**
-     * @brief Start de worker thread van de logica-module.
-     * @return True bij succes, anders false.
-     */
     bool start();
-
-    /**
-     * @brief Stopt de worker thread van de logica-module.
-     */
     void stop();
-
-    /**
-     * @brief Controleert of de module draait.
-     * @return True als de module draait, anders false.
-     */
     bool is_running() const { return running_; }
-
-    /**
-     * @brief Berekent en logt prestatie-indicatoren.
-     */
     void get_performance_metrics();
 
 private:
     void worker_thread_func();
-
-    // De hoofdverwerkingsfunctie
     void process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data);
 
     DetectionResultsQueue& detection_input_queue_;
@@ -112,34 +147,28 @@ private:
     std::thread worker_thread_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
 
-    std::vector<TrackedObject> active_tracks_; ///< Huidige actieve gevolgde objecten.
-    static long next_track_id_;                ///< Teller voor het genereren van unieke track-ID's.
+    std::vector<TrackedObject> active_tracks_;
+    static long next_track_id_;
 
-    // Hulpmethode voor het berekenen van Intersection over Union (IoU).
+    std::unique_ptr<BallisticsSolver> ballistics_solver_;
+
     static float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
 
-    // Hulpmethode voor het voorspellen van het inslagpunt.
-    bool predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, float& out_x, float& out_y, float& out_z);
+    bool predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, Vec3& out_impact_point);
 
-    // Hulpmethode voor veiligheids- en onzekerheidscontroles.
     SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, float predicted_impact_uncertainty, std::string& safety_status_message);
-
-    // Hulpmethode voor servo-aansturing.
     void issue_servo_commands(float target_x, float target_y, float target_z);
     
-    // Leden voor prestatiemetingen
     std::vector<long long> prediction_times_ms_;
     std::mutex prediction_times_mutex_;
     long long total_predictions_ = 0;
     std::chrono::time_point<std::chrono::high_resolution_clock> performance_start_time_;
     FallbackMode current_fallback_mode_;
 
-    // Private hulpmethoden voor het refactoren van de process-functie
     void perform_sensor_fusion(const OrientationData& imu_data);
     void update_object_tracks(const std::vector<DetectionResult>& detections);
     void calculate_ballistics_for_tracks(const OrientationData& imu_data);
     void perform_safety_and_actuation(const OrientationData& imu_data);
-    void update_process_metrics(std::chrono::high_resolution_clock::time_point processing_start_time, std::chrono::high_resolution_clock::time_point processing_end_time);
 };
 
 #endif // LOGIC_H

@@ -131,7 +131,7 @@ void H264Encoder::worker_thread_func() {
 
         // Simplify keyframe interval for debugging
 
-        param.i_keyint_max = 1;
+        param.i_keyint_max = static_cast<int>(fps_);
 
     
 
