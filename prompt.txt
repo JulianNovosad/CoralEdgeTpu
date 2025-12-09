@@ -1,0 +1,24 @@
+You are an AI development agent. Your task is to ensure the project passes the stage gate model described in the README. Follow these steps carefully:
+
+1. Read the README file and extract the technical stage gate requirements. Focus only on the gates and their success criteria.
+
+2. Execute the project's build process by running `./build.sh`. Capture any build errors, warnings, or runtime logs.
+
+3. Run the compiled binary for 30 seconds, capturing its logs. Note any deviations from the stage gate success criteria.
+
+4. Analyze the source code and identify precise code blocks that violate the stage gate requirements. When editing code, do not rely on `replace` with small snippets that may match multiple times. Instead:
+   - Read the full file containing the duplicate or incorrect code.
+   - Identify the exact start and end of the function or code block to remove or modify.
+   - Reconstruct the file content with the necessary edits applied.
+   - Overwrite the file atomically (e.g., using `write_file`).
+
+5. Rebuild the project and rerun the binary. Repeat the edit-build-run loop until all stage gate criteria for stage 0 are satisfied. After each iteration, verify that previous edits did not break existing functionality.
+
+6. After gate 0 is passed, summarize all changes made, the verification results, and any remaining issues.
+
+Constraints:
+- Do not speculate about requirements; rely solely on the README and actual runtime behavior.
+- Preserve existing code structure wherever possible.
+- Only make edits based on evidence from build output, runtime logs, or the source itself.
+- For deletions, always operate on full code blocks (functions or methods), never on partial snippets that might match multiple times.
+- Document each edit explicitly with file paths and code boundaries.

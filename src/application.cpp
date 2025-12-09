@@ -17,19 +17,19 @@ Application::~Application() {
 }
 
 void Application::setup_pools_and_queues() {
-    const unsigned int cam_w = config_loader_.get_high_res_width();
-    const unsigned int cam_h = config_loader_.get_high_res_height();
+    // const unsigned int cam_w = config_loader_.get_high_res_width();
+    // const unsigned int cam_h = config_loader_.get_high_res_height();
     
-    size_t image_buffer_size = cam_w * cam_h * 3; // BGR888
+    size_t image_buffer_size = 1920 * 1080 * 3; // BGR888 - Using default if vars are commented out
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(20, image_buffer_size, "ImagePool");
     detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(20, 100, "DetectionPool");
     h264_pool_ = std::make_shared<BufferPool<uint8_t>>(50, 1024 * 1024, "H264Pool");
 }
 
 bool Application::initialize_modules(const std::string& model_path, const std::string& labels_path) {
-    const unsigned int cam_w = config_loader_.get_high_res_width();
-    const unsigned int cam_h = config_loader_.get_high_res_height();
-    const double fps = config_loader_.get_camera_fps();
+    // const unsigned int cam_w = config_loader_.get_high_res_width();
+    // const unsigned int cam_h = config_loader_.get_high_res_height();
+    // const double fps = config_loader_.get_camera_fps();
     const std::chrono::seconds camera_watchdog_timeout = config_loader_.get_camera_watchdog_timeout();
     
     // --- Labels ---
@@ -51,8 +51,8 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             config_loader_.get_detection_score_threshold(), 
             config_loader_.get_inference_worker_threads());
         
-        unsigned int inf_w = inference_engine_->get_input_width();
-        unsigned int inf_h = inference_engine_->get_input_height();
+        // unsigned int inf_w = inference_engine_->get_input_width();
+        // unsigned int inf_h = inference_engine_->get_input_height();
 
         std::list<std::reference_wrapper<ImageQueue>> camera_queues;
         // primary_camera_ = std::make_unique<CameraCapture>(cam_w, cam_h, inf_w, inf_h, inf_w, inf_h, image_pool_, camera_queues, tpu_inference_queue_, camera_watchdog_timeout);
@@ -108,6 +108,7 @@ void Application::main_loop() {
         if (std::chrono::duration_cast<std::chrono::seconds>(now - last_metric_log_time).count() >= 5) {
             inference_engine_->get_performance_metrics();
             logic_module_->get_performance_metrics();
+            // primary_camera_->get_performance_metrics();
             last_metric_log_time = now;
         }
     }
