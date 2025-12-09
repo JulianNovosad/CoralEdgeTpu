@@ -66,6 +66,12 @@ public:
     unsigned short get_phone_orientation_pitch_port() const;
     unsigned short get_phone_orientation_roll_port() const;
 
+    /**
+     * @brief Provides read-only access to the raw JSON configuration data.
+     * @return A const reference to the nlohmann::json object containing the configuration.
+     */
+    const nlohmann::json& get_json_config() const;
+
 private:
     nlohmann::json config_data_; ///< De geparste JSON-configuratiedata.
 };

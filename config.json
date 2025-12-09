@@ -1,12 +1,42 @@
 {
+  "logging": {
+    "subsystems": [
+      {
+        "name": "CameraCapture",
+        "log_dir_suffix": "camera",
+        "max_log_files": 3
+      },
+      {
+        "name": "InferenceEngine",
+        "log_dir_suffix": "tpu",
+        "max_log_files": 3
+      },
+      {
+        "name": "H264Encoder",
+        "log_dir_suffix": "encoder",
+        "max_log_files": 3
+      },
+      {
+        "name": "LogicModule",
+        "log_dir_suffix": "logic",
+        "max_log_files": 3
+      },
+      {
+        "name": "SystemMonitor",
+        "log_dir_suffix": "system_monitor",
+        "max_log_files": 3
+      }
+    ]
+  },
   "application": {
+
     "model_path": "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite",
     "labels_path": "coco_labels.txt",
     "listen_address": "0.0.0.0",
     "high_res_width": 1536,
     "high_res_height": 864,
     "camera_watchdog_timeout_seconds": 10,
-    "camera_fps": 120.0,
+    "camera_fps": 30.0,
     "detection_score_threshold": 0.5,
     "log_path": "/home/pi/CoralEdgeTpu/logs",
     "video_stream": {

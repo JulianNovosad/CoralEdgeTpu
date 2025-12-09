@@ -96,6 +96,11 @@ CoralEdgeTpu/
 
 * FPS, berekeningen/s en latentie per subsystem gemeten
 * Kernel-aanpassingen (PCIe, IRQ-affiniteiten, MSI-X) gedocumenteerd met lspci -vvv , sudo dmesg | grep -i apex , etc.
+* **Logging per Subsystem:**
+    *   Elk kernsubsystem (Camera, TPU, Encoder, Logic, System Monitor) moet zijn eigen CSV-logbestanden hebben.
+    *   Deze logbestanden moeten worden opgeslagen in een subdirectory onder de geconfigureerde `log_path`, met de naam van het subsystem (bijv. `/logs/camera`, `/logs/tpu`).
+    *   De bestandsnaamconventie moet `module_YYYY_MM_DD_HH:MM.csv` zijn.
+    *   Er mogen maximaal 3 rotaties van logbestanden per subsystem worden bewaard.
 
 **Resultaat:** Subsystemale prestatiegrenzen vastgesteld → goedkeuring Stage 1
 

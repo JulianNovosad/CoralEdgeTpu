@@ -64,15 +64,16 @@ private:
     DetectionResultsQueue detection_results_for_logic_queue_;
     ImageQueue overlaid_video_queue_;
     H264Queue h264_output_queue_;
+    std::list<std::reference_wrapper<ImageQueue>> main_image_output_queues_;
 
     // Modules
     std::unique_ptr<InferenceEngine> inference_engine_;
-    // std::unique_ptr<CameraCapture> primary_camera_;
+    std::unique_ptr<CameraCapture> primary_camera_;
     // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
-    // std::unique_ptr<H264Encoder> h264_encoder_;
+    std::unique_ptr<H264Encoder> h264_encoder_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;
-    // std::unique_ptr<SystemMonitor> system_monitor_;
+    std::unique_ptr<SystemMonitor> system_monitor_;
 
     std::vector<std::string> labels_;
 };

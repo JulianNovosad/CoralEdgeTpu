@@ -126,3 +126,7 @@ unsigned short ConfigLoader::get_phone_orientation_pitch_port() const {
 unsigned short ConfigLoader::get_phone_orientation_roll_port() const {
     return config_data_.value("/application/network_ports/2003/port"_json_pointer, 2003);
 }
+
+const nlohmann::json& ConfigLoader::get_json_config() const {
+    return config_data_;
+}

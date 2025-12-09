@@ -12,7 +12,7 @@
 #include <functional> // For std::function
 #include "buffer_pool.h" // For BufferPool
 #include <boost/lockfree/spsc_queue.hpp> // For lock-free SPSC queues
-
+#include <libcamera/pixel_format.h> // Include for libcamera::PixelFormat
 
 // --- Generic Data Structures ---
 
@@ -26,6 +26,7 @@ struct ImageData {
     BufferPool<uint8_t>::PooledPtr buffer; ///< Shared pointer to a pooled buffer holding pixel data.
     size_t width;                                  ///< Width of the image in pixels.
     size_t height;                                 ///< Height of the image in pixels.
+    libcamera::PixelFormat format;                 ///< Pixel format of the image data.
     std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of image capture.
 
     // Constructor to allow explicit setting of timestamp

@@ -148,12 +148,14 @@ void InferenceEngine::worker_thread_func() {
     
     ImageData input_image;
     while (running_) {
+        // Use a non-blocking pop with a short delay to allow checking the running_ flag
         if (input_queue_.pop(input_image)) {
+            LOG_INFO("InferenceEngine worker thread: Successfully popped image from queue.");
             if (!input_image.buffer) {
                 LOG_ERROR("InferenceEngine received an image with no buffer. Skipping.");
                 continue;
             }
-            // LOG_INFO("InferenceEngine received image - Dimensions: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Data size: " + std::to_string(input_image.buffer->size));
+            LOG_INFO("InferenceEngine received image - Dimensions: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Data size: " + std::to_string(input_image.buffer->size));
             
             int expected_input_size = input_width_ * input_height_ * input_channels_;
             if (input_image.buffer->size != static_cast<size_t>(expected_input_size)) {
@@ -184,6 +186,9 @@ void InferenceEngine::worker_thread_func() {
                 detection_results_for_overlay_queue_.push(results_buffer); // Push to overlay queue
                 detection_results_for_logic_queue_.push(results_buffer); // Push to logic queue
             }
+        } else {
+            // If the queue is empty, sleep for a short duration to avoid busy-waiting
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 }
