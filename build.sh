@@ -14,7 +14,7 @@ sudo apt-get install -y libzmq3-dev
 
 # 2. EdgeTPU runtime install and check
 echo "2. Installing EdgeTPU runtime and checking device..."
-sudo apt-get install -y libedgetpu1-std || true
+sudo apt-get install -y libedgetpu-dev || true
 ls -l /usr/lib | grep edgetpu || true
 ls -l /dev | grep apex || true
 

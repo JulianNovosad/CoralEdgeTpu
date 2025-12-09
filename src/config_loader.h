@@ -26,63 +26,44 @@ public:
 
     // --- Getters voor configuratiewaarden ---
 
-    /** @return Pad naar het TFLite-modelbestand. Standaard: "model.tflite". */
     std::string get_model_path() const;
-
-    /** @return Pad naar het labels-bestand. Standaard: "labels.txt". */
     std::string get_labels_path() const;
-
-    /** @return Breedte van de hoge-resolutie videostream. Standaard: 1920. */
     unsigned int get_high_res_width() const;
-
-    /** @return Hoogte van de hoge-resolutie videostream. Standaard: 1080. */
     unsigned int get_high_res_height() const;
-
-    /** @return Timeout voor de camera-watchdog in seconden. Standaard: 10. */
     std::chrono::seconds get_camera_watchdog_timeout() const;
-
-    /** @return Aantal worker threads voor inferentie. Standaard: 1. */
     int get_inference_worker_threads() const;
-
-    /** @return JPEG-kwaliteit voor de HTTP-stream. Standaard: 90. */
     int get_jpeg_quality() const;
-
-    /** @return Doel-FPS voor de camera. Standaard: 30.0. */
     double get_camera_fps() const;
-
-    /** @return Minimale betrouwbaarheidsscore voor detecties. Standaard: 0.5. */
     float get_detection_score_threshold() const;
-
-    /** @return Pad voor logbestanden. Standaard: "/home/pi/CoralEdgeTpu/logs". */
     std::string get_log_path() const;
 
-    /** @return Protocol voor videostreaming (e.g., "RTP", "HTTP_WEBSOCKET"). Standaard: "HTTP_WEBSOCKET". */
+    // --- Video & Telemetry ---
     std::string get_video_stream_protocol() const;
-
-    /** @return Adres voor videostreaming. Standaard: "0.0.0.0". */
     std::string get_video_stream_address() const;
-
-    /** @return Poort voor videostreaming. Standaard: 5000. */
     unsigned short get_video_stream_port() const;
-
-    /** @return Protocol voor telemetriestreaming (e.g., "ZeroMQ", "HTTP_WEBSOCKET"). Standaard: "HTTP_WEBSOCKET". */
     std::string get_telemetry_protocol() const;
-
-    /** @return Publicatie-adres voor telemetriestreaming (ZeroMQ). Standaard: "tcp://*:6000". */
     std::string get_telemetry_pub_address() const;
+    
+    // --- Ballistiek ---
+    /** @return Mondingssnelheid in m/s. Standaard: 850.0. */
+    float get_muzzle_velocity_mps() const;
+    /** @return Kogelmassa in kg. Standaard: 0.008. */
+    float get_bullet_mass_kg() const;
+    /** @return Ballistische coëfficiënt (G1 SI). Standaard: 0.25. */
+    float get_ballistic_coefficient_si() const;
+    /** @return Hoogte van vizier boven loop in meters. Standaard: 0.05. */
+    float get_sight_height_m() const;
+    /** @return Afstand waarop ingeschoten is in meters. Standaard: 100.0. */
+    float get_zero_distance_m() const;
+    /** @return Luchtdruk in Pascal. Standaard: 101325.0. */
+    float get_air_pressure_pa() const;
+    /** @return Temperatuur in Celsius. Standaard: 15.0. */
+    float get_temperature_c() const;
 
     // --- Netwerkconfiguratie ---
-
-    /** @return Het IP-adres waarop de server moet luisteren. Standaard: "0.0.0.0". */
     std::string get_listen_address() const;
-
-    /** @return UDP-poort voor oriëntatie (yaw) van de telefoon. Standaard: 2001. */
     unsigned short get_phone_orientation_yaw_port() const;
-
-    /** @return UDP-poort voor oriëntatie (pitch) van de telefoon. Standaard: 2002. */
     unsigned short get_phone_orientation_pitch_port() const;
-
-    /** @return UDP-poort voor oriëntatie (roll) van de telefoon. Standaard: 2003. */
     unsigned short get_phone_orientation_roll_port() const;
 
 private:

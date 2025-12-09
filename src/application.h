@@ -10,7 +10,7 @@
 #include "orientation_sensor.h"
 #include "pipeline_structs.h"
 #include "system_monitor.h"
-#include "video_overlay_processor.h"
+
 #include "buffer_pool.h"
 
 #include <memory>
@@ -59,7 +59,7 @@ private:
 
     // Queues
     ImageQueue tpu_inference_queue_;
-    ImageQueue main_camera_output_queue_;
+
     DetectionResultsQueue detection_results_for_overlay_queue_;
     DetectionResultsQueue detection_results_for_logic_queue_;
     ImageQueue overlaid_video_queue_;
@@ -67,12 +67,12 @@ private:
 
     // Modules
     std::unique_ptr<InferenceEngine> inference_engine_;
-    std::unique_ptr<CameraCapture> primary_camera_;
-    std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
-    std::unique_ptr<H264Encoder> h264_encoder_;
+    // std::unique_ptr<CameraCapture> primary_camera_;
+    // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
+    // std::unique_ptr<H264Encoder> h264_encoder_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;
-    std::unique_ptr<SystemMonitor> system_monitor_;
+    // std::unique_ptr<SystemMonitor> system_monitor_;
 
     std::vector<std::string> labels_;
 };

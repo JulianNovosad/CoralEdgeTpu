@@ -3,6 +3,8 @@ project(CoralEdgeTpuDetector CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_BUILD_TYPE Debug)
 
 find_package(PkgConfig REQUIRED)
@@ -50,7 +52,7 @@ add_executable(detector
     src/util_logging.cpp
     src/config_loader.cpp # Added ConfigLoader source file
     src/logic.cpp
-    src/video_overlay_processor.cpp
+
     src/h264_encoder.cpp
     src/orientation_sensor.cpp
     src/application_supervisor.cpp
@@ -85,14 +87,14 @@ target_link_options(detector PRIVATE "-Wl,-rpath,'$ORIGIN/../lib'")
 message(STATUS "Target 'detector' configured. Ready to build.")
 target_include_directories(detector PRIVATE
     ${OpenCV_INCLUDE_DIRS}
-    ${TFLITE_INCLUDE_DIR}
+    SYSTEM ${TFLITE_INCLUDE_DIR}
     ${FLATBUFFERS_INCLUDE_DIR}
     ${JPEG_INCLUDE_DIRS}
     ${ZEROMQ_INCLUDE_DIRS}
     /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
     civetweb/include
     src # Include the src directory for h264_encoder.h, etc.
-    tensorflow_2.5.0
+    SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow_2.5.0
 )
 
 

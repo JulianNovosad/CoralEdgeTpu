@@ -435,6 +435,7 @@ bool CameraCapture::setup_camera() {
 }
 
 void CameraCapture::request_complete_callback(libcamera::Request* request) {
+    LOG_DEBUG("CameraCapture: request_complete_callback invoked.");
     if (!running_) {
         return;
     }
@@ -465,12 +466,14 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     // Capture buffer map BEFORE calling reuse()
     libcamera::Request::BufferMap captured_buffers = request->buffers();
 
-    // Process Main Video Stream
-    if (captured_buffers.count(video_stream_)) {
+    // Process Main Video Stream (only if there's a consumer queue)
+    if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
         const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
         const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
         
         process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, hardware_capture_timestamp);
+    } else if (captured_buffers.count(video_stream_)) {
+        LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
     } else {
         LOG_WARNING("CameraCapture: Video stream buffer missing from completed request.");
     }

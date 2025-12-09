@@ -20,6 +20,15 @@
       "pub_address": "tcp://*:1002",
       "module_refs": ["src/logic.*"]
     },
+    "ballistics": {
+      "muzzle_velocity_mps": 850.0,
+      "bullet_mass_kg": 0.008,
+      "ballistic_coefficient_si": 0.25,
+      "sight_height_m": 0.05,
+      "zero_distance_m": 100.0,
+      "air_pressure_pa": 101325.0,
+      "temperature_c": 15.0
+    },
     "network_ports": {
       "1001": {
         "purpose": "video_stream_1536x864_pi_to_phone",

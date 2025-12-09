@@ -105,6 +105,7 @@ public:
      * @brief Stelt een callback in voor het toevoegen van overlays op de frames.
      * @param callback De functie die wordt aangeroepen met een cv::Mat frame als argument.
      */
+    bool init_video_encoder();
     void set_overlay_callback(std::function<void(cv::Mat& frame)> callback) {
         overlay_callback_ = callback;
     }

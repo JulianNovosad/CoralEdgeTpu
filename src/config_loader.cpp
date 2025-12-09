@@ -84,15 +84,45 @@ std::string ConfigLoader::get_telemetry_pub_address() const {
     return config_data_.value("/application/telemetry/pub_address"_json_pointer, "tcp://*:6000");
 }
 
-// New Network Port Getters
+// --- Ballistics Getters ---
+float ConfigLoader::get_muzzle_velocity_mps() const {
+    return config_data_.value("/application/ballistics/muzzle_velocity_mps"_json_pointer, 850.0f);
+}
+
+float ConfigLoader::get_bullet_mass_kg() const {
+    return config_data_.value("/application/ballistics/bullet_mass_kg"_json_pointer, 0.008f);
+}
+
+float ConfigLoader::get_ballistic_coefficient_si() const {
+    return config_data_.value("/application/ballistics/ballistic_coefficient_si"_json_pointer, 0.25f);
+}
+
+float ConfigLoader::get_sight_height_m() const {
+    return config_data_.value("/application/ballistics/sight_height_m"_json_pointer, 0.05f);
+}
+
+float ConfigLoader::get_zero_distance_m() const {
+    return config_data_.value("/application/ballistics/zero_distance_m"_json_pointer, 100.0f);
+}
+
+float ConfigLoader::get_air_pressure_pa() const {
+    return config_data_.value("/application/ballistics/air_pressure_pa"_json_pointer, 101325.0f);
+}
+
+float ConfigLoader::get_temperature_c() const {
+    return config_data_.value("/application/ballistics/temperature_c"_json_pointer, 15.0f);
+}
+
+
+// --- Network Port Getters (Corrected) ---
 unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {
-    return config_data_.value("/application/network_ports/phone_orientation_yaw"_json_pointer, 2001);
+    return config_data_.value("/application/network_ports/2001/port"_json_pointer, 2001);
 }
 
 unsigned short ConfigLoader::get_phone_orientation_pitch_port() const {
-    return config_data_.value("/application/network_ports/phone_orientation_pitch"_json_pointer, 2002);
+    return config_data_.value("/application/network_ports/2002/port"_json_pointer, 2002);
 }
 
 unsigned short ConfigLoader::get_phone_orientation_roll_port() const {
-    return config_data_.value("/application/network_ports/phone_orientation_roll"_json_pointer, 2003);
+    return config_data_.value("/application/network_ports/2003/port"_json_pointer, 2003);
 }
