@@ -21,6 +21,7 @@ public:
 
     bool start();
     void stop();
+    void get_performance_metrics();
     bool is_running() const { return running_; }
 
 private:

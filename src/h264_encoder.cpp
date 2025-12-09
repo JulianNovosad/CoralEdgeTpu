@@ -45,25 +45,14 @@ void H264Encoder::stop() {
     }
     
     if (encoder_) { // Check if encoder was successfully opened
-        // Flush the encoder
-        x264_nal_t *nal;
+        x264_nal_t* nal;
         int i_nal;
-        int frame_size; // Declare frame_size here
-        while ((frame_size = x264_encoder_encode(encoder_, &nal, &i_nal, NULL, &picture_out_)) > 0) {
-            for (int i = 0; i < i_nal; ++i) {
-                auto h264_buffer = h264_buffer_pool_->acquire();
-                if (h264_buffer) {
-                    if (nal[i].i_payload > h264_buffer->data.capacity()) {
-                        LOG_WARNING("H264Encoder::stop(): NAL unit payload is larger than the buffer capacity. Dropping.");
-                        continue;
-                    }
-                    memcpy(h264_buffer->data.data(), nal[i].p_payload, nal[i].i_payload);
-                    h264_buffer->size = nal[i].i_payload;
-                    output_queue_.push(std::move(h264_buffer));
-                } else {
-                    LOG_WARNING("H264Encoder::stop(): Failed to acquire buffer for NAL unit during flush. Dropping.");
-                }
-            }
+        // Flush the encoder by draining it, but don't process the output.
+        // This is important because there might be no consumer for the output_queue_,
+        // which would cause the h264_buffer_pool_->acquire() to block/timeout,
+        // stalling the shutdown process.
+        while (x264_encoder_encode(encoder_, &nal, &i_nal, NULL, &picture_out_) > 0) {
+            // Do nothing, just drain the encoder.
         }
         x264_encoder_close(encoder_);
         encoder_ = nullptr;
@@ -194,41 +183,45 @@ void H264Encoder::worker_thread_func() {
         ImageData image_data;
         if (!input_queue_.pop(image_data)) {
             if (!running_.load()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Prevent busy-waiting
             continue; 
         }
+        LOG_DEBUG("H264Encoder: Popped image from input queue. Size: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height));
 
         if (!image_data.buffer) {
             LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
             continue;
         }
 
-
         cv::Mat frame_bgr(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
         cv::Mat frame_yuv;
         cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420); // Convert BGR to YUV420p
 
-        LOG_DEBUG("H264Encoder: frame_yuv details - Size: " + std::to_string(frame_yuv.total() * frame_yuv.elemSize()) +
-                  ", Dims: " + std::to_string(frame_yuv.cols) + "x" + std::to_string(frame_yuv.rows) +
-                  ", Channels: " + std::to_string(frame_yuv.channels()) +
-                  ", isContinuous: " + (frame_yuv.isContinuous() ? "true" : "false"));
-        
-        LOG_DEBUG("H264Encoder: picture_in_ plane info - Y Stride: " + std::to_string(picture_in_.img.i_stride[0]) +
-                  ", U Stride: " + std::to_string(picture_in_.img.i_stride[1]) +
-                  ", V Stride: " + std::to_string(picture_in_.img.i_stride[2]) +
-                  ", Y Plane Ptr: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[0])));
+        // Explicitly release the buffer back to the pool now that its data has been copied/processed
+        image_data.buffer.reset();
 
         // Copy YUV data to x264 picture_in_
-        LOG_DEBUG("H264Encoder: Before memcpy to plane[0] - YUV data: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data)) + ", Plane[0]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[0])) + ", Size: " + std::to_string(width_ * height_));
-        memcpy(picture_in_.img.plane[0], frame_yuv.data, width_ * height_);
-        LOG_DEBUG("H264Encoder: Before memcpy to plane[1] - YUV data offset: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data + (width_ * height_))) + ", Plane[1]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[1])) + ", Size: " + std::to_string((width_ * height_) / 4));
-        memcpy(picture_in_.img.plane[1], frame_yuv.data + (width_ * height_), (width_ * height_) / 4);
-        LOG_DEBUG("H264Encoder: Before memcpy to plane[2] - YUV data offset: " + std::to_string(reinterpret_cast<uintptr_t>(frame_yuv.data + (width_ * height_) + ((width_ * height_) / 4))) + ", Plane[2]: " + std::to_string(reinterpret_cast<uintptr_t>(picture_in_.img.plane[2])) + ", Size: " + std::to_string((width_ * height_) / 4));
-        memcpy(picture_in_.img.plane[2], frame_yuv.data + (width_ * height_) + ((width_ * height_) / 4), (width_ * height_) / 4);
+        // Y plane
+        for (int i = 0; i < height_; ++i) {
+            memcpy(picture_in_.img.plane[0] + i * picture_in_.img.i_stride[0],
+                   frame_yuv.data + i * width_,
+                   width_);
+        }
+        // U and V planes (subsampled by 2 in both dimensions for 4:2:0)
+        for (int i = 0; i < height_ / 2; ++i) {
+            memcpy(picture_in_.img.plane[1] + i * picture_in_.img.i_stride[1],
+                   frame_yuv.data + (width_ * height_) + i * (width_ / 2),
+                   width_ / 2);
+            memcpy(picture_in_.img.plane[2] + i * picture_in_.img.i_stride[2],
+                   frame_yuv.data + (width_ * height_) + (width_ * height_) / 4 + i * (width_ / 2),
+                   width_ / 2);
+        }
 
         picture_in_.i_pts++;
 
         x264_nal_t *nal;
         int i_nal;
+        auto encoding_start_time = std::chrono::high_resolution_clock::now(); // Added this line
         int frame_size = x264_encoder_encode(encoder_, &nal, &i_nal, &picture_in_, &picture_out_);
 
         if (frame_size < 0) {
@@ -237,16 +230,25 @@ void H264Encoder::worker_thread_func() {
         }
 
         if (frame_size > 0) {
+            auto encoding_end_time = std::chrono::high_resolution_clock::now();
+            long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(encoding_end_time - encoding_start_time).count();
+            {
+                std::lock_guard<std::mutex> lock(encoding_times_mutex_);
+                encoding_times_ms_.push_back(duration_ms);
+                total_encoded_frames_++;
+            }
             for (int i = 0; i < i_nal; ++i) {
+                LOG_DEBUG("H264Encoder: Acquiring H264 buffer for NAL unit.");
                 auto h264_buffer = h264_buffer_pool_->acquire();
                 if (h264_buffer) {
-                    if (nal[i].i_payload > h264_buffer->data.capacity()) {
+                    if (static_cast<size_t>(nal[i].i_payload) > h264_buffer->data.capacity()) {
                         LOG_WARNING("H264Encoder: NAL unit payload is larger than the buffer capacity. Dropping.");
                         continue;
                     }
                      memcpy(h264_buffer->data.data(), nal[i].p_payload, nal[i].i_payload);
                      h264_buffer->size = nal[i].i_payload;
                      output_queue_.push(std::move(h264_buffer));
+                     LOG_DEBUG("H264Encoder: Pushed H264 buffer to output queue.");
                 } else {
                     LOG_WARNING("H264Encoder: Failed to acquire buffer for NAL unit. Dropping.");
                 }
@@ -254,5 +256,43 @@ void H264Encoder::worker_thread_func() {
         }
     }
     LOG_INFO("H264Encoder worker thread stopped.");
+}
+
+void H264Encoder::get_performance_metrics() {
+    std::lock_guard<std::mutex> lock(encoding_times_mutex_);
+
+    if (total_encoded_frames_ == 0) {
+        LOG_INFO("H264Encoder: No frames encoded for performance metrics.");
+        return;
+    }
+
+    double average_latency_ms = 0;
+    for (long long latency : encoding_times_ms_) {
+        average_latency_ms += static_cast<double>(latency);
+    }
+    average_latency_ms /= total_encoded_frames_;
+    double average_fps = 1000.0 / average_latency_ms;
+
+    std::sort(encoding_times_ms_.begin(), encoding_times_ms_.end());
+    size_t percentile_99_index = static_cast<size_t>(std::round(total_encoded_frames_ * 0.99));
+    size_t percentile_95_index = static_cast<size_t>(std::round(total_encoded_frames_ * 0.95));
+    size_t percentile_50_index = static_cast<size_t>(std::round(total_encoded_frames_ * 0.50));
+
+    long long p99_latency_ms = encoding_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_encoded_frames_ - 1))];
+    long long p95_latency_ms = encoding_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_encoded_frames_ - 1))];
+    long long p50_latency_ms = encoding_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_encoded_frames_ - 1))];
+
+    LOG_CSV("H264Encoder", "Encoding", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
+    LOG_INFO("--- H264Encoder Performance Metrics ---");
+    LOG_INFO("  Total Encoded Frames: " + std::to_string(total_encoded_frames_));
+    LOG_INFO("  Average FPS: " + std::to_string(average_fps));
+    LOG_INFO("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
+    LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    LOG_INFO("---------------------------------------");
+
+    encoding_times_ms_.clear();
+    total_encoded_frames_ = 0;
 }
 

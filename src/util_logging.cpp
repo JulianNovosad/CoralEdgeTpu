@@ -17,6 +17,10 @@
 
 namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity.
 
+// Static members initialization
+std::unique_ptr<Logger> Logger::instance_;
+std::once_flag Logger::once_flag_;
+
 // Implement CsvLogger methods
 CsvLogger::CsvLogger(const std::string& module_name, const std::string& log_dir, int max_log_files)
     : module_name_(module_name), log_dir_(log_dir), max_log_files_(max_log_files) {
@@ -64,48 +68,61 @@ void CsvLogger::rotate_log_file() {
         current_log_file_.close();
     }
 
-    // Delete oldest files (e.g., module.2.csv -> delete)
-    for (int i = max_log_files_; i >= 1; --i) {
-        fs::path old_path = fs::path(log_dir_) / (module_name_ + "." + std::to_string(i) + ".csv");
-        if (fs::exists(old_path)) {
-            if (i == max_log_files_) {
-                fs::remove(old_path);
-            } else {
-                fs::path new_path = fs::path(log_dir_) / (module_name_ + "." + std::to_string(i + 1) + ".csv");
-                fs::rename(old_path, new_path);
-            }
-        }
+    // Ensure the subsystem-specific log directory exists
+    if (!fs::exists(log_dir_)) {
+        fs::create_directories(log_dir_);
     }
 
-    // Rename current (un-numbered) file to .1
-    fs::path current_log_filename = fs::path(log_dir_) / (module_name_ + ".csv");
-    if (fs::exists(current_log_filename)) {
-        fs::path new_path = fs::path(log_dir_) / (module_name_ + ".1.csv");
-        fs::rename(current_log_filename, new_path);
-    }
+    // Generate current timestamped filename
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm* now_tm = std::localtime(&now_c); // Use localtime for file naming
+
+    std::ostringstream oss;
+    oss << module_name_ << "_" << std::put_time(now_tm, "%Y_%m_%d_%H_%M") << ".csv";
+    std::string new_log_filename = oss.str();
     
+    fs::path new_log_filepath = fs::path(log_dir_) / new_log_filename;
+
     // Open new primary log file
-    current_log_file_.open(current_log_filename.string(), std::ios_base::out | std::ios_base::trunc); // Overwrite if exists
+    current_log_file_.open(new_log_filepath.string(), std::ios_base::out | std::ios_base::app); // Use app to append if file already exists for current minute
     if (!current_log_file_.is_open()) {
-        std::cerr << "Failed to open CSV log file: " << current_log_filename << std::endl;
+        std::cerr << "Failed to open CSV log file: " << new_log_filepath << std::endl;
     } else {
-        write_header(); // Write header to the newly created file
+        // Only write header if file was newly created or is empty
+        if (fs::file_size(new_log_filepath) == 0) {
+            write_header();
+        }
+
+        // Manage old log files (keep max_log_files)
+        std::vector<fs::path> log_files;
+        for (const auto& entry : fs::directory_iterator(log_dir_)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".csv" && entry.path().stem().string().rfind(module_name_, 0) == 0) {
+                log_files.push_back(entry.path());
+            }
+        }
+        std::sort(log_files.begin(), log_files.end()); // Sort by name, which should naturally sort by date/time
+
+        while (log_files.size() > max_log_files_) {
+            fs::remove(log_files.front()); // Remove the oldest log file
+            log_files.erase(log_files.begin());
+        }
     }
 }
 
-/**
- * @brief Retrieves the singleton instance of the Logger.
- *
- * This is the access point for the Logger. The instance is created upon the first
- * call. Subsequent calls return the same instance.
- *
- * @param log_file_prefix The prefix for log filenames (e.g., "run").
- * @param log_dir The directory where log files will be stored (e.g., "logs").
- * @return A reference to the singleton Logger instance.
- */
-Logger& Logger::getInstance(const std::string& log_file_prefix, const std::string& log_dir) {
-    static Logger instance(log_file_prefix, log_dir);
-    return instance;
+void Logger::init(const std::string& log_file_prefix, const std::string& base_log_dir, const std::vector<SubsystemLogConfig>& csv_configs) {
+    std::call_once(once_flag_, [&]() {
+        instance_.reset(new Logger(log_file_prefix, base_log_dir, csv_configs));
+    });
+}
+
+Logger& Logger::getInstance() {
+    if (!instance_) {
+        // This should ideally not happen if init() is called at startup.
+        // Provide a basic default or throw an error.
+        throw std::runtime_error("Logger::init() was not called before getInstance().");
+    }
+    return *instance_.get();
 }
 
 /**
@@ -115,18 +132,30 @@ Logger& Logger::getInstance(const std::string& log_file_prefix, const std::strin
  * initial log file, and starting the asynchronous writer thread.
  *
  * @param log_file_prefix The prefix for log filenames.
- * @param log_dir The directory for log files.
+ * @param base_log_dir The base directory for log files.
+ * @param csv_configs A vector of configurations for subsystem-specific CSV logs.
  */
-Logger::Logger(const std::string& log_file_prefix, const std::string& log_dir)
-    : log_dir_(log_dir), log_file_prefix_(log_file_prefix), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(3) {
+Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_dir, const std::vector<SubsystemLogConfig>& csv_configs)
+    : base_log_dir_(base_log_dir), log_file_prefix_(log_file_prefix), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(3), csv_subsystem_configs_(csv_configs) {
     
-    // Ensure log directory exists, create it if not.
-    if (!fs::exists(log_dir_)) {
-        fs::create_directories(log_dir_);
+    // Ensure base log directory exists, create it if not.
+    if (!fs::exists(base_log_dir_)) {
+        fs::create_directories(base_log_dir_);
     }
     
-    rotate_standard_log_file(); // Create the initial log file (e.g., run-YYYYMMDD-HHMMSS.json).
-    // start_writer_thread() will be called externally now.
+    // Initialize standard log file
+    rotate_standard_log_file();
+
+    // Initialize CsvLogger instances for each subsystem
+    for (const auto& config : csv_subsystem_configs_) {
+        fs::path sub_log_dir = fs::path(base_log_dir_) / config.log_dir_suffix;
+        csv_loggers_.try_emplace(config.name, config.name, sub_log_dir.string(), config.max_log_files);
+        // Proactively create subdirectory and rotate log file to write header
+        if (!fs::exists(sub_log_dir)) {
+            fs::create_directories(sub_log_dir);
+        }
+        csv_loggers_.at(config.name).rotate_log_file();
+    }
 }
 
 /**
@@ -280,16 +309,13 @@ void Logger::csv_writer_thread_func() {
         csv_log_queue_.pop();
         lock.unlock(); // Release lock before writing to allow other threads to log.
 
-        // Get or create CsvLogger for this module
-        auto [it, inserted] = csv_loggers_.try_emplace(entry.module, entry.module, log_dir_, 3);
-        if (inserted) {
-            it->second.rotate_log_file(); // Ensure initial rotation and header for new loggers
+        // Retrieve the correct CsvLogger for this module
+        auto it = csv_loggers_.find(entry.module);
+        if (it != csv_loggers_.end()) {
+            it->second.write_entry(entry);
+        } else {
+            std::cerr << "Warning: CsvLogger not found for module: " << entry.module << ". Entry dropped." << std::endl;
         }
-        it->second.write_entry(entry);
-
-        // Optional: Trigger rotation based on file size or time for CSV logs
-        // This is more complex and would involve checking the file size within the CsvLogger.
-        // For now, rotation is explicitly triggered via rotate_log_file on startup.
     }
 }
 
@@ -306,21 +332,21 @@ void Logger::rotate_standard_log_file() {
 
     // Delete oldest files (e.g., run-prefix.2.json -> delete)
     for (int i = max_standard_log_files_; i >= 1; --i) {
-        fs::path old_path = fs::path(log_dir_) / (log_file_prefix_ + "." + std::to_string(i) + ".json");
+        fs::path old_path = fs::path(base_log_dir_) / (log_file_prefix_ + "." + std::to_string(i) + ".json");
         if (fs::exists(old_path)) {
             if (i == max_standard_log_files_) {
                 fs::remove(old_path);
             } else {
-                fs::path new_path = fs::path(log_dir_) / (log_file_prefix_ + "." + std::to_string(i + 1) + ".json");
+                fs::path new_path = fs::path(base_log_dir_) / (log_file_prefix_ + "." + std::to_string(i + 1) + ".json");
                 fs::rename(old_path, new_path);
             }
         }
     }
 
     // Rename current (un-numbered) file to .1
-    fs::path current_log_filename = fs::path(log_dir_) / (log_file_prefix_ + ".json");
+    fs::path current_log_filename = fs::path(base_log_dir_) / (log_file_prefix_ + ".json");
     if (fs::exists(current_log_filename)) {
-        fs::path new_path = fs::path(log_dir_) / (log_file_prefix_ + ".1.json");
+        fs::path new_path = fs::path(base_log_dir_) / (log_file_prefix_ + ".1.json");
         fs::rename(current_log_filename, new_path);
     }
     

@@ -146,3 +146,18 @@ float SystemMonitor::read_memory_usage() {
     }
     return 0.0f;
 }
+
+void SystemMonitor::get_performance_metrics() {
+    // This function is called by the Application main_loop to log current system stats
+    float cpu_temp = read_cpu_temperature();
+    float memory_usage_percent = read_memory_usage();
+    float cpu_usage = read_cpu_usage();
+    
+    // Log using the CSV format (p50 for CPU usage, temp for CPU temp, fps for memory usage percent)
+    LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
+    LOG_INFO("--- SystemMonitor Performance Metrics ---");
+    LOG_INFO("  CPU Usage: " + std::to_string(cpu_usage) + "%");
+    LOG_INFO("  CPU Temperature: " + std::to_string(cpu_temp) + " C");
+    LOG_INFO("  Memory Usage: " + std::to_string(memory_usage_percent) + "%");
+    LOG_INFO("-----------------------------------------");
+}

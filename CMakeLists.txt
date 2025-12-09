@@ -115,4 +115,3 @@ target_include_directories(config_loader_test PRIVATE
 
 add_executable(dlopen_test tests/dlopen_test.cpp)
 target_link_libraries(dlopen_test PRIVATE dl)
-

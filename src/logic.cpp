@@ -200,7 +200,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
     total_predictions_++;
 }
 
-bool LogicModule::predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, Vec3& out_impact_point) {
+bool LogicModule::predict_impact_point(const TrackedObject& target, const OrientationData& /*current_imu_data*/, Vec3& out_impact_point) {
     if (!ballistics_solver_) return false;
 
     float target_distance = target.position.x;
@@ -237,6 +237,7 @@ void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_dat
 
 void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) {
     char log_buffer[256];
+    Vec3 impact_point; // Moved declaration outside the switch
     // --- 4. Uncertainty Propagation & Safety Checks ---
     float predicted_impact_uncertainty = 0.5f; 
     std::string safety_message;
@@ -255,7 +256,6 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 LOG_INFO(log_buffer);
                 
                 // Calculate impact point and send as telemetry instead of servo commands
-                Vec3 impact_point;
                 if (predict_impact_point(track, imu_data, impact_point)) {
                     // Format the impact point as JSON for telemetry
                     // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
@@ -287,12 +287,15 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 LOG_ERROR(log_buffer);
                 // Critical action: e.g., halt all operations, wait for manual override
                 break;
+            default:
+                snprintf(log_buffer, sizeof(log_buffer), "Safety check: Unhandled SafetyStatus for Track ID %ld: %d", track.id, static_cast<int>(safety_status));
+                LOG_ERROR(log_buffer);
+                break;
         }
     }
 }
 
 void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detections) {
-    char log_buffer[256];
     for (auto& track : active_tracks_) track.associated_this_frame = false;
 
     for (const auto& new_detection : detections) {
@@ -351,5 +354,5 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
     LOG_INFO(log_buffer);
 }
 
-void LogicModule::get_performance_metrics() { /* ... onveranderd ... */ }
-void LogicModule::perform_sensor_fusion(const OrientationData& imu_data) { /* ... onveranderd ... */ }
+void LogicModule::get_performance_metrics() { /* Implement performance metrics logging */ }
+void LogicModule::perform_sensor_fusion(const OrientationData& /*imu_data*/) { /* Implement sensor fusion logic */ }

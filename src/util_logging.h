@@ -25,8 +25,38 @@
 #include <iomanip>        // For std::put_time
 #include <map>            // For std::map<std::string, CsvLogger>
 #include <filesystem>     // For std::filesystem
+#include <vector>         // For std::vector
+
+// --- Logging Configuration Struct ---
+struct SubsystemLogConfig {
+    std::string name;
+    std::string log_dir_suffix;
+    int max_log_files;
+};
+
 // Forward declare CsvLogger to avoid circular dependency
 class CsvLogger;
+
+// --- Global Logging Macros for Convenience ---
+
+/// @brief Logs an informational message.
+#define LOG_INFO(msg) Logger::getInstance().log("INFO", msg)
+/// @brief Logs a warning message.
+#define LOG_WARNING(msg) Logger::getInstance().log("WARNING", msg)
+/// @brief Logs an error message.
+#define LOG_ERROR(msg) Logger::getInstance().log("ERROR", msg)
+#ifdef DEBUG_MODE
+/// @brief Logs a debug message.
+#define LOG_DEBUG(msg) Logger::getInstance().log("DEBUG", msg)
+#else
+#define LOG_DEBUG(msg) (void)0 // No-op in release mode
+#endif
+/// @brief Logs a structured JSON message.
+#define LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
+
+// Macro for convenience to log CSV performance metrics
+#define LOG_CSV(module, stage, p50, p95, p99, temp, fps) \
+    Logger::getInstance().log_csv({Logger::getInstance().get_raw_monotonic_time_ns(), module, stage, p50, p95, p99, temp, fps})
 
 /**
  * @brief Structure to hold a single log entry.
@@ -86,17 +116,25 @@ private:
 class Logger {
 public:
     /**
+     * @brief Initializes the singleton Logger instance with logging parameters.
+     *
+     * This method should be called once at the application's startup.
+     *
+     * @param log_file_prefix The prefix for standard log filenames (e.g., "run").
+     * @param base_log_dir The base directory where log files will be stored (e.g., "/home/pi/logs").
+     * @param csv_configs A vector of configurations for subsystem-specific CSV logs.
+     */
+    static void init(const std::string& log_file_prefix, const std::string& base_log_dir, const std::vector<SubsystemLogConfig>& csv_configs);
+
+    /**
      * @brief Retrieves the singleton instance of the Logger.
      *
-     * This is the primary access point for the Logger. The instance is created
-     * upon the first call with default or provided parameters. Subsequent calls
-     * return the same instance.
+     * This is the primary access point for the Logger. `init()` must have been
+     * called prior to the first call of this method.
      *
-     * @param log_file_prefix The prefix for log filenames (e.g., "run").
-     * @param log_dir The directory where log files will be stored (e.g., "logs").
      * @return A reference to the singleton Logger instance.
      */
-    static Logger& getInstance(const std::string& log_file_prefix = "run", const std::string& log_dir = "logs");
+    static Logger& getInstance();
     
     // Delete copy constructor and assignment operator to enforce singleton pattern.
     Logger(const Logger&) = delete;
@@ -167,9 +205,10 @@ private:
      * log file.
      *
      * @param log_file_prefix The prefix for log filenames.
-     * @param log_dir The directory for log files.
+     * @param base_log_dir The base directory for log files.
+     * @param csv_configs A vector of configurations for subsystem-specific CSV logs.
      */
-    Logger(const std::string& log_file_prefix, const std::string& log_dir);
+    Logger(const std::string& log_file_prefix, const std::string& base_log_dir, const std::vector<SubsystemLogConfig>& csv_configs);
 
     /**
      * @brief Private destructor for the Logger.
@@ -209,8 +248,12 @@ private:
     std::string get_current_iso_time();
 
 
+    // Static member for the singleton instance
+    static std::unique_ptr<Logger> instance_;
+    static std::once_flag once_flag_;
+
     // Standard log members
-    std::string log_dir_;                        ///< The directory where log files are stored.
+    std::string base_log_dir_;                   ///< The base directory where log files are stored.
     std::string log_file_prefix_;                ///< The prefix used for standard log filenames.
     std::ofstream standard_log_file_;            ///< Output file stream for standard logs.
     std::mutex log_mutex_;                       ///< Mutex to protect access to the standard log queue.
@@ -226,6 +269,7 @@ private:
     std::queue<CsvLogEntry> csv_log_queue_;      ///< Queue for asynchronous CSV log processing.
     std::thread csv_writer_thread_;              ///< Dedicated thread for writing CSV log messages.
     std::map<std::string, CsvLogger> csv_loggers_; ///< Map to manage CsvLogger instances per module.
+    std::vector<SubsystemLogConfig> csv_subsystem_configs_; ///< Store CSV subsystem configurations
 
     std::atomic<bool> running_ = false;          ///< Atomic flag to control writer threads' running state.
 };

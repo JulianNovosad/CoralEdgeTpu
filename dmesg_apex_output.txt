@@ -1,0 +1,8 @@
+[    3.048936] apex 0000:01:00.0: enabling device (0000 -> 0002)
+[    8.164264] apex 0000:01:00.0: Apex performance not throttled due to temperature
+[19722.959296] apex 0000:01:00.0: Process 51989 is opening a node held by 51956.
+[20054.574258] apex 0000:01:00.0: Process 54085 is opening a node held by 52051.
+[20593.260660] apex 0000:01:00.0: Process 55244 is opening a node held by 55194.
+[23017.088727] apex 0000:01:00.0: Process 58441 is opening a node held by 57317.
+[24295.039597] apex 0000:01:00.0: Process 58470 is opening a node held by 57317.
+[25007.310896] apex 0000:01:00.0: Process 58495 is opening a node held by 57317.

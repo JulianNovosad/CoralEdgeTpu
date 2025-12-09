@@ -1,12 +1,45 @@
 #include <iostream>
 #include <dlfcn.h> // For dlopen, dlsym, dlclose
 #include <string>
+#include <array>
+#include <cstdio> // For popen, pclose
+#include <memory> // Required for std::unique_ptr
 
 // Define the function signature we expect to find in the library
 typedef void* (*tflite_plugin_create_delegate_t)(char**, char**, size_t, void (*)(const char*));
 typedef void (*tflite_plugin_destroy_delegate_t)(void*);
 
+// Custom error reporting function for the Edge TPU delegate
+void edgetpu_error_reporter(const char* msg) {
+    std::cerr << "Edge TPU Delegate Error: " << msg << std::endl;
+}
+
+// Function to check if /dev/apex_0 is in use
+bool is_edgetpu_in_use() {
+    std::array<char, 128> buffer;
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen("fuser /dev/apex_0 2>&1", "r"), pclose);
+    if (!pipe) {
+        std::cerr << "Error: popen failed for fuser command." << std::endl;
+        return false; // Assume not in use if we can't check
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    // If fuser finds a process, it will return an exit code of 0 and print output.
+    // If no process is found, it returns non-zero and prints nothing or an error.
+    // We check if the result string contains any PID.
+    return result.find("/dev/apex_0") != std::string::npos;
+}
+
 int main() {
+    // Check if Edge TPU is in use by another process
+    if (is_edgetpu_in_use()) {
+        std::cerr << "Error: /dev/apex_0 (Edge TPU) is currently in use by another process." << std::endl;
+        std::cerr << "Please ensure no other applications or tests are using the Edge TPU and try again." << std::endl;
+        return 1;
+    }
+
     std::cout << "Attempting to dynamically load libedgetpu.so.1.0..." << std::endl;
 
     // Path to libedgetpu.so.1.0 (assuming it's in /usr/lib/aarch64-linux-gnu/)
@@ -42,9 +75,7 @@ int main() {
 
     // 4. Try to create a delegate using the loaded function
     std::cout << "Attempting to create delegate using dlsym'd function..." << std::endl;
-    // We pass nullptr for options and a simple error reporter
-    void (*simple_error_reporter)(const char*) = [](const char* msg){ std::cerr << "Simple Error: " << msg << std::endl; };
-    void* delegate = create_delegate_func(nullptr, nullptr, 0, simple_error_reporter);
+    void* delegate = create_delegate_func(nullptr, nullptr, 0, edgetpu_error_reporter);
 
     if (!delegate) {
         std::cerr << "Failed to create delegate using dlsym'd function." << std::endl;
