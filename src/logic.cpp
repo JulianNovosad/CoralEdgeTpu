@@ -17,7 +17,7 @@ long LogicModule::next_track_id_ = 0;
 
 BallisticsSolver::BallisticsSolver(const BallisticProfile& profile) : profile_(profile) {
     zero_pitch_rad_ = calculate_zero_pitch();
-    LOG_INFO("BallisticsSolver created and zero pitch calculated.");
+    APP_LOG_INFO("BallisticsSolver created and zero pitch calculated.");
 }
 
 float BallisticsSolver::get_air_density() const {
@@ -70,7 +70,7 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
         current_state = rk4_step(current_state, time_step, air_density);
         trajectory.push_back(current_state);
         if (trajectory.size() > 5000) { // Veiligheidsstop
-            LOG_WARNING("Trajectory calculation exceeded 5000 steps.");
+            APP_LOG_WARNING("Trajectory calculation exceeded 5000 steps.");
             break;
         }
     }
@@ -78,7 +78,7 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
 }
 
 float BallisticsSolver::calculate_zero_pitch() {
-    LOG_INFO("Calculating zero pitch for " + std::to_string(profile_.zero_distance_m) + "m...");
+    APP_LOG_INFO("Calculating zero pitch for " + std::to_string(profile_.zero_distance_m) + "m...");
 
     float low_angle_rad = -0.05f; // -~3 degrees, a reasonable lower bound
     float high_angle_rad = 0.05f; // +~3 degrees, a reasonable upper bound
@@ -91,7 +91,7 @@ float BallisticsSolver::calculate_zero_pitch() {
         auto trajectory = calculate_trajectory(mid_angle_rad, profile_.zero_distance_m + 1.0f);
 
         if (trajectory.empty()) {
-            LOG_ERROR("Failed to calculate trajectory during zero pitch calculation.");
+            APP_LOG_ERROR("Failed to calculate trajectory during zero pitch calculation.");
             return 0.0f; // Fout
         }
 
@@ -110,7 +110,7 @@ float BallisticsSolver::calculate_zero_pitch() {
         
         // Vergelijk de hoogte met de zichtlijn (die op y=0 ligt in ons coördinatensysteem)
         if (std::abs(height_at_zero) < tolerance_m) {
-            LOG_INFO("Zero pitch found after " + std::to_string(i + 1) + " iterations: " + std::to_string(mid_angle_rad) + " rad");
+            APP_LOG_INFO("Zero pitch found after " + std::to_string(i + 1) + " iterations: " + std::to_string(mid_angle_rad) + " rad");
             return mid_angle_rad;
         }
 
@@ -121,7 +121,7 @@ float BallisticsSolver::calculate_zero_pitch() {
         }
     }
 
-    LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations.");
+    APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations.");
     return (low_angle_rad + high_angle_rad) / 2.0f; // Geef de beste schatting terug
 }
 
@@ -156,22 +156,22 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
     };
     ballistics_solver_ = std::make_unique<BallisticsSolver>(profile);
 
-    LOG_INFO("LogicModule created with 3D Ballistics Solver, configured from file.");
+    APP_LOG_INFO("LogicModule created with 3D Ballistics Solver, configured from file.");
     performance_start_time_ = std::chrono::high_resolution_clock::now();
 }
 
-LogicModule::~LogicModule() { stop(); LOG_INFO("LogicModule destroyed."); }
+LogicModule::~LogicModule() { stop(); APP_LOG_INFO("LogicModule destroyed."); }
 bool LogicModule::start() {
-    if (running_.exchange(true)) { LOG_ERROR("LogicModule is already running."); return false; }
+    if (running_.exchange(true)) { APP_LOG_ERROR("LogicModule is already running."); return false; }
     worker_thread_ = std::thread(&LogicModule::worker_thread_func, this);
-    LOG_INFO("LogicModule started.");
+    APP_LOG_INFO("LogicModule started.");
     return true;
 }
 void LogicModule::stop() {
     if (running_.exchange(false)) {
-        LOG_INFO("Stopping LogicModule...");
+        APP_LOG_INFO("Stopping LogicModule...");
         if (worker_thread_.joinable()) worker_thread_.join();
-        LOG_INFO("LogicModule stopped.");
+        APP_LOG_INFO("LogicModule stopped.");
     }
 }
 
@@ -227,10 +227,10 @@ void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_dat
         if (predict_impact_point(track, imu_data, impact_point)) {
             snprintf(log_buffer, sizeof(log_buffer), "Predicted Impact Point for Track ID %ld: (x:%.2f, y:%.2f, z:%.2f)",
                      track.id, impact_point.x, impact_point.y, impact_point.z);
-            LOG_INFO(log_buffer);
+            APP_LOG_INFO(log_buffer);
         } else {
             snprintf(log_buffer, sizeof(log_buffer), "No Impact Point Predicted for Track ID %ld.", track.id);
-            LOG_INFO(log_buffer);
+            APP_LOG_INFO(log_buffer);
         }
     }
 }
@@ -249,11 +249,11 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
         switch (safety_status) {
             case SAFETY_OK:
                 if (current_fallback_mode_ != NORMAL_OPERATION) {
-                    LOG_INFO("Returning to NORMAL_OPERATION.");
+                    APP_LOG_INFO("Returning to NORMAL_OPERATION.");
                     current_fallback_mode_ = NORMAL_OPERATION;
                 }
                 snprintf(log_buffer, sizeof(log_buffer), "Safety check PASSED for Track ID %ld: %s", track.id, safety_message.c_str());
-                LOG_INFO(log_buffer);
+                APP_LOG_INFO(log_buffer);
                 
                 // Calculate impact point and send as telemetry instead of servo commands
                 if (predict_impact_point(track, imu_data, impact_point)) {
@@ -264,32 +264,32 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                                                     ", \"y\": " + std::to_string(impact_point.y) +
                                                     ", \"z\": " + std::to_string(impact_point.z) + "}}";
                     // In a real system, this telemetry_message would be sent over ZeroMQ to tcp://*:6000
-                    LOG_INFO("Telemetry (simulated): Sending impact point data: " + telemetry_message);
+                    APP_LOG_INFO("Telemetry (simulated): Sending impact point data: " + telemetry_message);
                 }
                 break;
             case SAFETY_WARNING_UNCERTAINTY:
             case SAFETY_WARNING_TRACK_UNSTABLE:
                 if (current_fallback_mode_ != FALLBACK_A_REDUCED_PERFORMANCE) {
-                    LOG_WARNING("Activating FALLBACK_A_REDUCED_PERFORMANCE due to warning: " + safety_message);
+                    APP_LOG_WARNING("Activating FALLBACK_A_REDUCED_PERFORMANCE due to warning: " + safety_message);
                     current_fallback_mode_ = FALLBACK_A_REDUCED_PERFORMANCE;
                 }
                 snprintf(log_buffer, sizeof(log_buffer), "Safety check WARNING for Track ID %ld: %s", track.id, safety_message.c_str());
-                LOG_WARNING(log_buffer);
+                APP_LOG_WARNING(log_buffer);
                 // Reduced performance action: e.g., only log, do not issue commands
                 break;
             case SAFETY_CRITICAL_UNCERTAINTY:
             case SAFETY_CRITICAL_OTHER:
                 if (current_fallback_mode_ < FALLBACK_B_WARNING_STATE) { // Promote to higher fallback if less severe mode
-                    LOG_ERROR("Activating FALLBACK_B_WARNING_STATE due to critical issue: " + safety_message);
+                    APP_LOG_ERROR("Activating FALLBACK_B_WARNING_STATE due to critical issue: " + safety_message);
                     current_fallback_mode_ = FALLBACK_B_WARNING_STATE;
                 }
                 snprintf(log_buffer, sizeof(log_buffer), "Safety check CRITICAL for Track ID %ld: %s", track.id, safety_message.c_str());
-                LOG_ERROR(log_buffer);
+                APP_LOG_ERROR(log_buffer);
                 // Critical action: e.g., halt all operations, wait for manual override
                 break;
             default:
                 snprintf(log_buffer, sizeof(log_buffer), "Safety check: Unhandled SafetyStatus for Track ID %ld: %d", track.id, static_cast<int>(safety_status));
-                LOG_ERROR(log_buffer);
+                APP_LOG_ERROR(log_buffer);
                 break;
         }
     }
@@ -351,7 +351,7 @@ SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObj
 void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z) {
     char log_buffer[256];
     snprintf(log_buffer, sizeof(log_buffer), "Issuing servo commands for target: (%.2f, %.2f, %.2f)", target_x, target_y, target_z);
-    LOG_INFO(log_buffer);
+    APP_LOG_INFO(log_buffer);
 }
 
 void LogicModule::get_performance_metrics() { /* Implement performance metrics logging */ }
