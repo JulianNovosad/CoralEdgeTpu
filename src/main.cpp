@@ -11,7 +11,7 @@ std::vector<std::string> load_labels(const std::string& path) {
     std::vector<std::string> labels;
     std::ifstream file(path);
     if (!file.is_open()) {
-        LOG_ERROR("Failed to open labels file: " + path);
+        APP_LOG_ERROR("Failed to open labels file: " + path);
         return labels;
     }
     std::string line;

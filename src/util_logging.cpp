@@ -14,6 +14,7 @@
 #include <filesystem>     // C++17 for creating directories
 #include <sstream>        // For std::ostringstream
 #include <iomanip>        // For std::put_time
+#include <algorithm>      // For std::sort
 
 namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity.
 
@@ -103,7 +104,7 @@ void CsvLogger::rotate_log_file() {
         }
         std::sort(log_files.begin(), log_files.end()); // Sort by name, which should naturally sort by date/time
 
-        while (log_files.size() > max_log_files_) {
+        while (log_files.size() > static_cast<size_t>(max_log_files_)) {
             fs::remove(log_files.front()); // Remove the oldest log file
             log_files.erase(log_files.begin());
         }
@@ -118,11 +119,19 @@ void Logger::init(const std::string& log_file_prefix, const std::string& base_lo
 
 Logger& Logger::getInstance() {
     if (!instance_) {
-        // This should ideally not happen if init() is called at startup.
-        // Provide a basic default or throw an error.
-        throw std::runtime_error("Logger::init() was not called before getInstance().");
+        // DEBUGGING: Print to stderr if not initialized instead of throwing
+        std::cerr << "WARNING: Logger::init() was not called before getInstance(). Using a dummy logger for this call." << std::endl;
+        static Logger dummy_logger; // Use the now-public default constructor
+        return dummy_logger;
     }
     return *instance_.get();
+}
+
+// Definition for the public default constructor
+Logger::Logger()
+    : base_log_dir_("."), log_file_prefix_("dummy_log"), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(1), running_(false) {
+    // No-op, primarily for the dummy logger during early initialization
+    // No need to create directories or start threads for a dummy.
 }
 
 /**

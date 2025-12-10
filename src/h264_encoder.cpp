@@ -21,7 +21,7 @@ H264Encoder::~H264Encoder() {
 
 bool H264Encoder::start() {
     if (running_.load()) {
-        LOG_WARNING("H264Encoder already running.");
+        APP_LOG_WARNING("H264Encoder already running.");
         return true; // Already running, consider it a success
     }
 
@@ -29,13 +29,13 @@ bool H264Encoder::start() {
     // Emplace the thread object into the optional.
     // The x264 encoder will be initialized inside worker_thread_func
     worker_thread_.emplace(&H264Encoder::worker_thread_func, this);
-    LOG_INFO("H264Encoder started.");
+    APP_LOG_INFO("H264Encoder started.");
     return true;
 }
 
 void H264Encoder::stop() {
     if (!running_.load()) {
-        LOG_WARNING("H264Encoder not running.");
+        APP_LOG_WARNING("H264Encoder not running.");
         return;
     }
 
@@ -58,13 +58,13 @@ void H264Encoder::stop() {
         encoder_ = nullptr;
         x264_picture_clean(&picture_in_);
     }
-    LOG_INFO("H264Encoder stopped.");
+    APP_LOG_INFO("H264Encoder stopped.");
 }
 
 void H264Encoder::worker_thread_func() {
 
-    LOG_INFO("H264Encoder worker thread started.");
-    LOG_INFO("H264Encoder: Initializing x264 with width=" + std::to_string(width_) + ", height=" + std::to_string(height_) + ", fps=" + std::to_string(fps_));
+    APP_LOG_INFO("H264Encoder worker thread started.");
+    APP_LOG_INFO("H264Encoder: Initializing x264 with width=" + std::to_string(width_) + ", height=" + std::to_string(height_) + ", fps=" + std::to_string(fps_));
 
     
 
@@ -124,7 +124,7 @@ void H264Encoder::worker_thread_func() {
 
     
 
-        LOG_INFO("H264Encoder: x264 parameters - width=" + std::to_string(param.i_width) +
+        APP_LOG_INFO("H264Encoder: x264 parameters - width=" + std::to_string(param.i_width) +
 
                  ", height=" + std::to_string(param.i_height) +
 
@@ -140,7 +140,7 @@ void H264Encoder::worker_thread_func() {
 
     
 
-        LOG_INFO("H264Encoder: Attempting to open x264 encoder...");
+        APP_LOG_INFO("H264Encoder: Attempting to open x264 encoder...");
 
         // Open the encoder
 
@@ -148,7 +148,7 @@ void H264Encoder::worker_thread_func() {
 
         if (!encoder_) {
 
-            LOG_ERROR("H264Encoder: Failed to open x264 encoder.");
+            APP_LOG_ERROR("H264Encoder: Failed to open x264 encoder.");
 
             running_.store(false); // Set running_ to false to stop the thread
 
@@ -156,17 +156,17 @@ void H264Encoder::worker_thread_func() {
 
         }
 
-        LOG_INFO("H264Encoder: x264 encoder opened successfully.");
+        APP_LOG_INFO("H264Encoder: x264 encoder opened successfully.");
 
     
 
-        LOG_INFO("H264Encoder: Attempting to allocate x264 picture_in_...");
+        APP_LOG_INFO("H264Encoder: Attempting to allocate x264 picture_in_...");
 
                 // Allocate pictures
 
                 if (x264_picture_alloc(&picture_in_, param.i_csp, param.i_width, param.i_height) < 0) {
 
-                    LOG_ERROR("H264Encoder: Failed to allocate x264 picture_in_.");
+                    APP_LOG_ERROR("H264Encoder: Failed to allocate x264 picture_in_.");
 
                     running_.store(false); // Set running_ to false to stop the thread
 
@@ -174,7 +174,7 @@ void H264Encoder::worker_thread_func() {
 
                 }
 
-                LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
+                APP_LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
 
     picture_in_.i_pts = 0; // Initialize presentation timestamp
     x264_picture_init(&picture_out_); // Initialize picture_out_
@@ -186,10 +186,10 @@ void H264Encoder::worker_thread_func() {
             std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Prevent busy-waiting
             continue; 
         }
-        LOG_DEBUG("H264Encoder: Popped image from input queue. Size: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height));
+        APP_LOG_DEBUG("H264Encoder: Popped image from input queue. Size: " + std::to_string(image_data.width) + "x" + std::to_string(image_data.height));
 
         if (!image_data.buffer) {
-            LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
+            APP_LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
             continue;
         }
 
@@ -225,7 +225,7 @@ void H264Encoder::worker_thread_func() {
         int frame_size = x264_encoder_encode(encoder_, &nal, &i_nal, &picture_in_, &picture_out_);
 
         if (frame_size < 0) {
-            LOG_ERROR("H264Encoder: x264_encoder_encode failed.");
+            APP_LOG_ERROR("H264Encoder: x264_encoder_encode failed.");
             continue;
         }
 
@@ -238,31 +238,31 @@ void H264Encoder::worker_thread_func() {
                 total_encoded_frames_++;
             }
             for (int i = 0; i < i_nal; ++i) {
-                LOG_DEBUG("H264Encoder: Acquiring H264 buffer for NAL unit.");
+                APP_LOG_DEBUG("H264Encoder: Acquiring H264 buffer for NAL unit.");
                 auto h264_buffer = h264_buffer_pool_->acquire();
                 if (h264_buffer) {
                     if (static_cast<size_t>(nal[i].i_payload) > h264_buffer->data.capacity()) {
-                        LOG_WARNING("H264Encoder: NAL unit payload is larger than the buffer capacity. Dropping.");
+                        APP_LOG_WARNING("H264Encoder: NAL unit payload is larger than the buffer capacity. Dropping.");
                         continue;
                     }
                      memcpy(h264_buffer->data.data(), nal[i].p_payload, nal[i].i_payload);
                      h264_buffer->size = nal[i].i_payload;
                      output_queue_.push(std::move(h264_buffer));
-                     LOG_DEBUG("H264Encoder: Pushed H264 buffer to output queue.");
+                     APP_LOG_DEBUG("H264Encoder: Pushed H264 buffer to output queue.");
                 } else {
-                    LOG_WARNING("H264Encoder: Failed to acquire buffer for NAL unit. Dropping.");
+                    APP_LOG_WARNING("H264Encoder: Failed to acquire buffer for NAL unit. Dropping.");
                 }
             }
         }
     }
-    LOG_INFO("H264Encoder worker thread stopped.");
+    APP_LOG_INFO("H264Encoder worker thread stopped.");
 }
 
 void H264Encoder::get_performance_metrics() {
     std::lock_guard<std::mutex> lock(encoding_times_mutex_);
 
     if (total_encoded_frames_ == 0) {
-        LOG_INFO("H264Encoder: No frames encoded for performance metrics.");
+        APP_LOG_INFO("H264Encoder: No frames encoded for performance metrics.");
         return;
     }
 
@@ -282,15 +282,15 @@ void H264Encoder::get_performance_metrics() {
     long long p95_latency_ms = encoding_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_encoded_frames_ - 1))];
     long long p50_latency_ms = encoding_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_encoded_frames_ - 1))];
 
-    LOG_CSV("H264Encoder", "Encoding", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
-    LOG_INFO("--- H264Encoder Performance Metrics ---");
-    LOG_INFO("  Total Encoded Frames: " + std::to_string(total_encoded_frames_));
-    LOG_INFO("  Average FPS: " + std::to_string(average_fps));
-    LOG_INFO("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
-    LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
-    LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
-    LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
-    LOG_INFO("---------------------------------------");
+    APP_LOG_CSV("H264Encoder", "Encoding", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
+    APP_LOG_INFO("--- H264Encoder Performance Metrics ---");
+    APP_LOG_INFO("  Total Encoded Frames: " + std::to_string(total_encoded_frames_));
+    APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));
+    APP_LOG_INFO("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
+    APP_LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    APP_LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    APP_LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    APP_LOG_INFO("---------------------------------------");
 
     encoding_times_ms_.clear();
     total_encoded_frames_ = 0;

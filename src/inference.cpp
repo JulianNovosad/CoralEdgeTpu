@@ -14,7 +14,7 @@ extern "C" {
 
 // Custom error reporting function for the Edge TPU delegate
 void edgetpu_error_reporter(const char* msg) {
-    LOG_ERROR("Edge TPU Delegate: " + std::string(msg));
+    APP_LOG_ERROR("Edge TPU Delegate: " + std::string(msg));
 }
 
 InferenceEngine::InferenceEngine(const std::string& model_path, 
@@ -56,39 +56,39 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
     input_width_ = input_tensor->dims->data[2];
     input_channels_ = input_tensor->dims->data[3];
     
-    LOG_INFO("Model Input Dimensions: " + std::to_string(input_width_) + "x" + std::to_string(input_height_) + "x" + std::to_string(input_channels_));
+    APP_LOG_INFO("Model Input Dimensions: " + std::to_string(input_width_) + "x" + std::to_string(input_height_) + "x" + std::to_string(input_channels_));
 
     if (input_channels_ != 3) {
         throw std::runtime_error("Model expects " + std::to_string(input_channels_) + " channels, but this application is hardcoded for 3 (RGB).");
     }
 
     // Create the Edge TPU delegate once for the entire InferenceEngine instance.
-    LOG_INFO("Edge TPU delegate creation starting...");
+    APP_LOG_INFO("Edge TPU delegate creation starting...");
     edgetpu_delegate_ = tflite_plugin_create_delegate(nullptr, nullptr, 0, edgetpu_error_reporter);
     if (!edgetpu_delegate_) {
-        LOG_ERROR("Edge TPU delegate creation failed (tflite_plugin_create_delegate returned nullptr).");
+        APP_LOG_ERROR("Edge TPU delegate creation failed (tflite_plugin_create_delegate returned nullptr).");
         // Explicitly report error if delegate creation failed
         edgetpu_error_reporter("tflite_plugin_create_delegate returned nullptr.");
         throw std::runtime_error("Failed to create EdgeTPU delegate in constructor. Ensure libedgetpu1-std is installed and device is connected.");
     }
-    LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: " + std::to_string(reinterpret_cast<uintptr_t>(edgetpu_delegate_)));
+    APP_LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: " + std::to_string(reinterpret_cast<uintptr_t>(edgetpu_delegate_)));
 }
 
 InferenceEngine::~InferenceEngine() {
     stop();
     if (edgetpu_delegate_) {
         tflite_plugin_destroy_delegate(edgetpu_delegate_);
-        LOG_INFO("Edge TPU delegate destroyed.");
+        APP_LOG_INFO("Edge TPU delegate destroyed.");
     }
 }
 
 bool InferenceEngine::start() {
     if (running_) {
-        LOG_ERROR("InferenceEngine is already running.");
+        APP_LOG_ERROR("InferenceEngine is already running.");
         return false;
     }
     if (!model_) {
-        LOG_ERROR("Model not loaded, cannot start inference engine.");
+        APP_LOG_ERROR("Model not loaded, cannot start inference engine.");
         return false;
     }
 
@@ -98,13 +98,13 @@ bool InferenceEngine::start() {
         worker_threads_.emplace_back(&InferenceEngine::worker_thread_func, this);
     }
 
-    LOG_INFO("InferenceEngine started with " + std::to_string(num_threads_) + " worker threads.");
+    APP_LOG_INFO("InferenceEngine started with " + std::to_string(num_threads_) + " worker threads.");
     return true;
 }
 
 void InferenceEngine::stop() {
     if (running_.exchange(false)) {
-        LOG_INFO("Stopping InferenceEngine...");
+        APP_LOG_INFO("Stopping InferenceEngine...");
 
         
         for (std::thread& thread : worker_threads_) {
@@ -113,7 +113,7 @@ void InferenceEngine::stop() {
             }
         }
         worker_threads_.clear();
-        LOG_INFO("InferenceEngine stopped.");
+        APP_LOG_INFO("InferenceEngine stopped.");
     }
 }
 
@@ -121,18 +121,18 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
     std::unique_ptr<tflite::Interpreter> local_interpreter;
     tflite::InterpreterBuilder(*model_, resolver_)(&local_interpreter);
     if (!local_interpreter) {
-        LOG_ERROR("Failed to build interpreter.");
+        APP_LOG_ERROR("Failed to build interpreter.");
         return nullptr;
     }
 
     // Apply the pre-created EdgeTPU delegate
     if (edgetpu_delegate_ && local_interpreter->ModifyGraphWithDelegate(edgetpu_delegate_) != kTfLiteOk) {
-        LOG_ERROR("Failed to apply EdgeTPU delegate. Check if the model is compatible with Edge TPU.");
+        APP_LOG_ERROR("Failed to apply EdgeTPU delegate. Check if the model is compatible with Edge TPU.");
         return nullptr;
     }
     
     if (local_interpreter->AllocateTensors() != kTfLiteOk) {
-        LOG_ERROR("Failed to allocate tensors after applying EdgeTPU delegate.");
+        APP_LOG_ERROR("Failed to allocate tensors after applying EdgeTPU delegate.");
         return nullptr;
     }
     
@@ -142,7 +142,7 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
 void InferenceEngine::worker_thread_func() {
     std::unique_ptr<tflite::Interpreter> interpreter = create_interpreter();
     if (!interpreter) {
-        LOG_ERROR("Worker thread failed to create interpreter. Exiting thread.");
+        APP_LOG_ERROR("Worker thread failed to create interpreter. Exiting thread.");
         return;
     }
     
@@ -150,16 +150,16 @@ void InferenceEngine::worker_thread_func() {
     while (running_) {
         // Use a non-blocking pop with a short delay to allow checking the running_ flag
         if (input_queue_.pop(input_image)) {
-            LOG_INFO("InferenceEngine worker thread: Successfully popped image from queue.");
+            APP_LOG_INFO("InferenceEngine worker thread: Successfully popped image from queue.");
             if (!input_image.buffer) {
-                LOG_ERROR("InferenceEngine received an image with no buffer. Skipping.");
+                APP_LOG_ERROR("InferenceEngine received an image with no buffer. Skipping.");
                 continue;
             }
-            LOG_INFO("InferenceEngine received image - Dimensions: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Data size: " + std::to_string(input_image.buffer->size));
+            APP_LOG_INFO("InferenceEngine received image - Dimensions: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Data size: " + std::to_string(input_image.buffer->size));
             
             int expected_input_size = input_width_ * input_height_ * input_channels_;
             if (input_image.buffer->size != static_cast<size_t>(expected_input_size)) {
-                 LOG_ERROR("Input RGB image data size (" + std::to_string(input_image.buffer->size) + 
+                 APP_LOG_ERROR("Input RGB image data size (" + std::to_string(input_image.buffer->size) + 
                            ") does not match expected model input size (" + std::to_string(expected_input_size) + "). Skipping frame.");
                  continue;
             }
@@ -168,7 +168,7 @@ void InferenceEngine::worker_thread_func() {
 
             auto inference_start_time = std::chrono::high_resolution_clock::now();
             if (interpreter->Invoke() != kTfLiteOk) {
-                LOG_ERROR("Failed to invoke interpreter. Skipping frame.");
+                APP_LOG_ERROR("Failed to invoke interpreter. Skipping frame.");
                 continue;
             }
             auto inference_end_time = std::chrono::high_resolution_clock::now();
@@ -198,7 +198,7 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
     TfLiteTensor* input_tensor = interpreter->tensor(input_tensor_idx);
 
     if (input_tensor->type != kTfLiteUInt8) {
-        LOG_ERROR("Input tensor type is not kTfLiteUInt8 as expected. Current type: " + std::to_string(input_tensor->type) + ". Skipping frame.");
+        APP_LOG_ERROR("Input tensor type is not kTfLiteUInt8 as expected. Current type: " + std::to_string(input_tensor->type) + ". Skipping frame.");
         return;
     }
 
@@ -209,13 +209,13 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
 std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite::Interpreter* interpreter) {
     auto results_buffer = detection_result_pool_->acquire();
     if (!results_buffer) {
-        LOG_WARNING("Failed to acquire a detection result buffer from the pool. No results will be reported for this frame.");
+        APP_LOG_WARNING("Failed to acquire a detection result buffer from the pool. No results will be reported for this frame.");
         return nullptr;
     }
     results_buffer->size = 0; // Reset size
 
     if (interpreter->outputs().size() < 4) {
-        LOG_ERROR("Model does not have expected number of output tensors (expected 4 for SSD MobileNet).");
+        APP_LOG_ERROR("Model does not have expected number of output tensors (expected 4 for SSD MobileNet).");
         return nullptr;
     }
 
@@ -230,7 +230,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     for (int i = 0; i < num_detections; ++i) {
         if (detection_scores[i] > score_threshold_) { 
             if (result_count >= results_buffer->data.size()) {
-                LOG_WARNING("More detections found than space in the result buffer. Some detections will be dropped.");
+                APP_LOG_WARNING("More detections found than space in the result buffer. Some detections will be dropped.");
                 break;
             }
             DetectionResult& res = results_buffer->data[result_count];
@@ -253,7 +253,7 @@ void InferenceEngine::get_performance_metrics() {
     std::lock_guard<std::mutex> lock(inference_times_mutex_);
 
     if (total_inferences_ == 0) {
-        LOG_INFO("InferenceEngine: No inferences recorded for performance metrics.");
+        APP_LOG_INFO("InferenceEngine: No inferences recorded for performance metrics.");
         return;
     }
 
@@ -279,16 +279,16 @@ void InferenceEngine::get_performance_metrics() {
     long long p95_latency_ms = inference_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_inferences_ - 1))];
     long long p50_latency_ms = inference_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_inferences_ - 1))];
 
-    LOG_CSV("InferenceEngine", "Inference", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
-    LOG_INFO("--- Inference Performance Metrics ---");
-    LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
-    LOG_INFO("  Average FPS: " + std::to_string(average_fps));
-    LOG_INFO("  Average Latency: " + std::to_string(average_duration_ms) + " ms");
-    LOG_INFO("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
-    LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
-    LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
-    LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
-    LOG_INFO("-------------------------------------");
+    APP_LOG_CSV("InferenceEngine", "Inference", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
+    APP_LOG_INFO("--- Inference Performance Metrics ---");
+    APP_LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
+    APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));
+    APP_LOG_INFO("  Average Latency: " + std::to_string(average_duration_ms) + " ms");
+    APP_LOG_INFO("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
+    APP_LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    APP_LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    APP_LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    APP_LOG_INFO("-------------------------------------");
 
     inference_times_ms_.clear();
     total_inferences_ = 0;
@@ -296,10 +296,10 @@ void InferenceEngine::get_performance_metrics() {
 }
 
 void InferenceEngine::get_state() const {
-    LOG_INFO("--- InferenceEngine State ---");
-    LOG_INFO("  Running: " + std::to_string(running_));
-    LOG_INFO("  Model Path: " + model_path_);
-    LOG_INFO("  Input Dimensions: " + std::to_string(input_width_) + "x" + std::to_string(input_height_) + "x" + std::to_string(input_channels_));
-    LOG_INFO("  Number of Worker Threads: " + std::to_string(num_threads_));
-    LOG_INFO("-----------------------------");
+    APP_LOG_INFO("--- InferenceEngine State ---");
+    APP_LOG_INFO("  Running: " + std::to_string(running_));
+    APP_LOG_INFO("  Model Path: " + model_path_);
+    APP_LOG_INFO("  Input Dimensions: " + std::to_string(input_width_) + "x" + std::to_string(input_height_) + "x" + std::to_string(input_channels_));
+    APP_LOG_INFO("  Number of Worker Threads: " + std::to_string(num_threads_));
+    APP_LOG_INFO("-----------------------------");
 }

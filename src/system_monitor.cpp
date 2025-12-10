@@ -8,36 +8,36 @@ SystemMonitor::SystemMonitor(std::chrono::seconds interval_s)
     : interval_s_(interval_s) {
     // Initialize CPU usage stats by calling it once
     read_cpu_usage(); 
-    LOG_INFO("SystemMonitor created with interval: " + std::to_string(interval_s_.count()) + " seconds.");
+    APP_LOG_INFO("SystemMonitor created with interval: " + std::to_string(interval_s_.count()) + " seconds.");
 }
 
 SystemMonitor::~SystemMonitor() {
     stop();
-    LOG_INFO("SystemMonitor destroyed.");
+    APP_LOG_INFO("SystemMonitor destroyed.");
 }
 
 bool SystemMonitor::start() {
     if (running_.exchange(true)) {
-        LOG_ERROR("SystemMonitor is already running.");
+        APP_LOG_ERROR("SystemMonitor is already running.");
         return false;
     }
     worker_thread_ = std::thread(&SystemMonitor::worker_thread_func, this);
-    LOG_INFO("SystemMonitor started.");
+    APP_LOG_INFO("SystemMonitor started.");
     return true;
 }
 
 void SystemMonitor::stop() {
     if (running_.exchange(false)) {
-        LOG_INFO("Stopping SystemMonitor...");
+        APP_LOG_INFO("Stopping SystemMonitor...");
         if (worker_thread_.joinable()) {
             worker_thread_.join();
         }
-        LOG_INFO("SystemMonitor stopped.");
+        APP_LOG_INFO("SystemMonitor stopped.");
     }
 }
 
 void SystemMonitor::worker_thread_func() {
-    LOG_INFO("SystemMonitor worker thread started.");
+    APP_LOG_INFO("SystemMonitor worker thread started.");
     while (running_) {
         float cpu_temp = read_cpu_temperature();
         float memory_usage_percent = read_memory_usage();
@@ -46,11 +46,11 @@ void SystemMonitor::worker_thread_func() {
         // LOG_CSV(module, stage, p50, p95, p99, temp, fps)
         // For SystemMonitor, p95, p99, fps are not directly applicable or meaningful in the same way.
         // We'll use cpu_usage for p50, and 0 for p95, p99. temp for CPU temp and fps for memory usage.
-        LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
+        APP_LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
 
         std::this_thread::sleep_for(interval_s_);
     }
-    LOG_INFO("SystemMonitor worker thread stopped.");
+    APP_LOG_INFO("SystemMonitor worker thread stopped.");
 }
 
 float SystemMonitor::read_cpu_temperature() {
@@ -62,7 +62,7 @@ float SystemMonitor::read_cpu_temperature() {
         temp = static_cast<float>(raw_temp) / 1000.0f; // raw_temp is in milli-degrees Celsius
         temp_file.close();
     } else {
-        LOG_WARNING("SystemMonitor: Could not open /sys/class/thermal/thermal_zone0/temp to read CPU temperature.");
+        APP_LOG_WARNING("SystemMonitor: Could not open /sys/class/thermal/thermal_zone0/temp to read CPU temperature.");
     }
     return temp;
 }
@@ -100,7 +100,7 @@ float SystemMonitor::read_cpu_usage() {
             prev_idle_cpu_time_ = current_idle_cpu_time;
         }
     } else {
-        LOG_WARNING("SystemMonitor: Could not open /proc/stat to read CPU usage.");
+        APP_LOG_WARNING("SystemMonitor: Could not open /proc/stat to read CPU usage.");
     }
     return cpu_usage;
 }
@@ -133,7 +133,7 @@ float SystemMonitor::read_memory_usage() {
         }
         mem_file.close();
     } else {
-        LOG_WARNING("SystemMonitor: Could not open /proc/meminfo to read memory usage.");
+        APP_LOG_WARNING("SystemMonitor: Could not open /proc/meminfo to read memory usage.");
         return 0.0f;
     }
 
@@ -154,10 +154,10 @@ void SystemMonitor::get_performance_metrics() {
     float cpu_usage = read_cpu_usage();
     
     // Log using the CSV format (p50 for CPU usage, temp for CPU temp, fps for memory usage percent)
-    LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
-    LOG_INFO("--- SystemMonitor Performance Metrics ---");
-    LOG_INFO("  CPU Usage: " + std::to_string(cpu_usage) + "%");
-    LOG_INFO("  CPU Temperature: " + std::to_string(cpu_temp) + " C");
-    LOG_INFO("  Memory Usage: " + std::to_string(memory_usage_percent) + "%");
-    LOG_INFO("-----------------------------------------");
+    APP_LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
+    APP_LOG_INFO("--- SystemMonitor Performance Metrics ---");
+    APP_LOG_INFO("  CPU Usage: " + std::to_string(cpu_usage) + "%");
+    APP_LOG_INFO("  CPU Temperature: " + std::to_string(cpu_temp) + " C");
+    APP_LOG_INFO("  Memory Usage: " + std::to_string(memory_usage_percent) + "%");
+    APP_LOG_INFO("-----------------------------------------");
 }

@@ -74,7 +74,7 @@ public:
         if (cond_var_.wait_for(lock, timeout, [this] { return !pool_.empty(); })) {
             PooledBuffer<T>* raw_buffer = pool_.front();
             pool_.pop();
-            LOG_DEBUG(name_ + ": Acquired buffer. Available: " + std::to_string(pool_.size()));
+            APP_LOG_DEBUG(name_ + ": Acquired buffer. Available: " + std::to_string(pool_.size()));
             
             // Create a shared_ptr with a custom deleter that returns the raw buffer to the pool.
             return PooledPtr(raw_buffer, [this](PooledBuffer<T>* ptr) {
@@ -82,7 +82,7 @@ public:
             });
         }
         // Timeout occurred
-        LOG_WARNING(name_ + ": Failed to acquire buffer within timeout. Available: " + std::to_string(pool_.size()));
+        APP_LOG_WARNING(name_ + ": Failed to acquire buffer within timeout. Available: " + std::to_string(pool_.size()));
         return nullptr;
     }
 
@@ -105,7 +105,7 @@ private:
     void release(PooledBuffer<T>* raw_buffer) {
         std::unique_lock<std::mutex> lock(mutex_);
         pool_.push(raw_buffer);
-        LOG_DEBUG(name_ + ": Released buffer. Available: " + std::to_string(pool_.size()));
+        APP_LOG_DEBUG(name_ + ": Released buffer. Available: " + std::to_string(pool_.size()));
         cond_var_.notify_one();
     }
 

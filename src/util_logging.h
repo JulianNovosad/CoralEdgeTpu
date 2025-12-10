@@ -40,22 +40,22 @@ class CsvLogger;
 // --- Global Logging Macros for Convenience ---
 
 /// @brief Logs an informational message.
-#define LOG_INFO(msg) Logger::getInstance().log("INFO", msg)
+#define APP_LOG_INFO(msg) Logger::getInstance().log("INFO", msg)
 /// @brief Logs a warning message.
-#define LOG_WARNING(msg) Logger::getInstance().log("WARNING", msg)
+#define APP_LOG_WARNING(msg) Logger::getInstance().log("WARNING", msg)
 /// @brief Logs an error message.
-#define LOG_ERROR(msg) Logger::getInstance().log("ERROR", msg)
+#define APP_LOG_ERROR(msg) Logger::getInstance().log("ERROR", msg)
 #ifdef DEBUG_MODE
 /// @brief Logs a debug message.
-#define LOG_DEBUG(msg) Logger::getInstance().log("DEBUG", msg)
+#define APP_LOG_DEBUG(msg) Logger::getInstance().log("DEBUG", msg)
 #else
-#define LOG_DEBUG(msg) (void)0 // No-op in release mode
+#define APP_LOG_DEBUG(msg) (void)0 // No-op in release mode
 #endif
 /// @brief Logs a structured JSON message.
-#define LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
+#define APP_LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
 
 // Macro for convenience to log CSV performance metrics
-#define LOG_CSV(module, stage, p50, p95, p99, temp, fps) \
+#define APP_LOG_CSV(module, stage, p50, p95, p99, temp, fps) \
     Logger::getInstance().log_csv({Logger::getInstance().get_raw_monotonic_time_ns(), module, stage, p50, p95, p99, temp, fps})
 
 /**
@@ -136,6 +136,9 @@ public:
      */
     static Logger& getInstance();
     
+    // Public default constructor for debugging dummy logger (declared here)
+    Logger(); 
+
     // Delete copy constructor and assignment operator to enforce singleton pattern.
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
@@ -210,8 +213,9 @@ private:
      */
     Logger(const std::string& log_file_prefix, const std::string& base_log_dir, const std::vector<SubsystemLogConfig>& csv_configs);
 
+public: // Changed to public
     /**
-     * @brief Private destructor for the Logger.
+     * @brief Destructor for the Logger.
      *
      * Ensures proper shutdown of the writer threads and closes log files.
      */
@@ -277,22 +281,22 @@ private:
 // --- Global Logging Macros for Convenience ---
 
 /// @brief Logs an informational message.
-#define LOG_INFO(msg) Logger::getInstance().log("INFO", msg)
+#define APP_LOG_INFO(msg) Logger::getInstance().log("INFO", msg)
 /// @brief Logs a warning message.
-#define LOG_WARNING(msg) Logger::getInstance().log("WARNING", msg)
+#define APP_LOG_WARNING(msg) Logger::getInstance().log("WARNING", msg)
 /// @brief Logs an error message.
-#define LOG_ERROR(msg) Logger::getInstance().log("ERROR", msg)
+#define APP_LOG_ERROR(msg) Logger::getInstance().log("ERROR", msg)
 #ifdef DEBUG_MODE
 /// @brief Logs a debug message.
-#define LOG_DEBUG(msg) Logger::getInstance().log("DEBUG", msg)
+#define APP_LOG_DEBUG(msg) Logger::getInstance().log("DEBUG", msg)
 #else
-#define LOG_DEBUG(msg) (void)0 // No-op in release mode
+#define APP_LOG_DEBUG(msg) (void)0 // No-op in release mode
 #endif
 /// @brief Logs a structured JSON message.
-#define LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
+#define APP_LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
 
 // Macro for convenience to log CSV performance metrics
-#define LOG_CSV(module, stage, p50, p95, p99, temp, fps) \
+#define APP_LOG_CSV(module, stage, p50, p95, p99, temp, fps) \
     Logger::getInstance().log_csv({Logger::getInstance().get_raw_monotonic_time_ns(), module, stage, p50, p95, p99, temp, fps})
 
 
