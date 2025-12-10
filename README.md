@@ -102,6 +102,43 @@ CoralEdgeTpu/
     *   De bestandsnaamconventie moet `module_YYYY_MM_DD_HH:MM.csv` zijn.
     *   Er mogen maximaal 3 rotaties van logbestanden per subsystem worden bewaard.
 
+#### Logging format (Stage 0)
+
+Stage-0 logging moet een uniforme prefix van kolommen gebruiken (dezelfde eerste velden voor elke subsystem CSV), gevolgd door module-specifieke metrics.
+
+**Unified prefix columns (epoch UTC in milliseconden):**
+   - `produced_ts_epoch_ms`  — timestamp wanneer deze logregel werd geproduceerd (epoch ms, UTC)
+   - `module`                — module naam: `camera`|`tpu`|`encoder`|`logic`|`sysmon`
+   - `thread_id`             — numerieke OS thread id (TID)
+   - `event`                 — korte label (bijv. `frame_captured`, `inference_done`, `encode_done`)
+   - `call_ts_epoch_ms`      — timestamp wanneer de module *gevraagd/geïnitieerd* werd om te beginnen met werken (epoch ms, UTC)
+
+**Latentie (per-module):** `produced_ts_epoch_ms` − `call_ts_epoch_ms`.
+Dit is de duur tussen het moment dat een subsystem werd gevraagd om te beginnen met werken (call) en het moment dat het een resultaat produceerde. Gebruik **geen** inter-frame intervallen of tijd tussen logs als latency.
+Modules moeten `call_ts_epoch_ms` emitteren op het moment dat werk in de wachtrij wordt geplaatst/aangevraagd (bijv. camera: wanneer de opnameaanvraag wordt gepost; inferentie: wanneer een frame de inferentie-wachtrij binnenkomt).
+
+**Voorbeeld CSV header & sample lines:**
+
+Common prefix: `produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,<module-specifieke-kolommen...>`
+
+Camera voorbeeld:
+```csv
+produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,frame_id,width,height,exposure_ms,copy_time_ms
+1712681235123,camera,2234,frame_available,1712681235120,12345,1536,864,25,0.12
+```
+
+TPU voorbeeld:
+```csv
+produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,inference_ms,input_w,input_h,tpu_temp_c
+1712681235789,tpu,2299,inference_done,1712681235787,2.1,300,300,45.3
+```
+
+**Plaatsing & bestandsnaam regels:**
+Logbestanden moeten worden opgeslagen in een subdirectory onder de geconfigureerde `log_path`, met de naam van het subsystem (bijv. `/logs/camera/`, `/logs/tpu/`). De bestandsnaamconventie moet `module_YYYY_MM_DD_HH:MM.csv` zijn. Er mogen maximaal 3 rotaties van logbestanden per subsystem worden bewaard.
+
+**Opmerking:** Alle modules moeten een consistente tijdbron gebruiken (epoch ms UTC), of de monotonic-klok + offset methode documenteren indien gebruikt.
+
+
 **Resultaat:** Subsystemale prestatiegrenzen vastgesteld → goedkeuring Stage 1
 
 ---
