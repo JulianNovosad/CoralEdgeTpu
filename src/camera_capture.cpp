@@ -685,6 +685,9 @@ void CameraCapture::get_performance_metrics() {
     entry.average_fps = static_cast<float>(average_fps);
     entry.total_frames_processed_or_inferences = total_frames_processed_;
     entry.average_latency_ms = static_cast<float>(average_latency_ms);
+    // Set module and event for CsvLogger
+    copy_to_array(entry.module, "CameraCapture");
+    copy_to_array(entry.event, "PerformanceMetrics");
     // Clear details field as it is now structured
     copy_to_array(entry.details, "");
 

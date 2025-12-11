@@ -441,6 +441,11 @@ void LogicModule::get_performance_metrics() {
 
     // Populate the new CsvLogEntry fields directly
     CsvLogEntry entry;
+    copy_to_array(entry.module, "LogicModule");
+    copy_to_array(entry.event, "performance_metrics");
+    entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    entry.call_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(performance_start_time_.time_since_epoch()).count();
     entry.p50_latency_ms = static_cast<float>(p50_latency_ms);
     entry.p95_latency_ms = static_cast<float>(p95_latency_ms);
     entry.p99_latency_ms = static_cast<float>(p99_latency_ms);

@@ -341,6 +341,7 @@ void Logger::csv_writer_thread_func() {
     while (running_.load()) {
         if (csv_log_queue_.pop(entry)) {
             // Retrieve the correct CsvLogger for this module
+            APP_LOG_DEBUG("Attempting to find CsvLogger for module: [" + std::string(entry.module.data()) + "]");
             auto it = csv_loggers_.find(std::string(entry.module.data()));
             if (it != csv_loggers_.end()) {
                 // Check for log rotation based on current minute
@@ -355,7 +356,7 @@ void Logger::csv_writer_thread_func() {
                 
                 it->second.write_entry(entry);
             } else {
-                std::cerr << "Warning: CsvLogger not found for module: " << entry.module.data() << ". Entry dropped." << std::endl;
+                APP_LOG_ERROR("CsvLogger not found for module: [" + std::string(entry.module.data()) + "]. Entry dropped.");
             }
         } else {
             // If queue is empty, sleep for a short period to avoid busy-waiting
@@ -364,6 +365,7 @@ void Logger::csv_writer_thread_func() {
     }
     // Process any remaining messages in the queue before exiting
     while (csv_log_queue_.pop(entry)) {
+        APP_LOG_DEBUG("Processing remaining CsvLogEntry for module: [" + std::string(entry.module.data()) + "]");
         auto it = csv_loggers_.find(std::string(entry.module.data()));
         if (it != csv_loggers_.end()) {
             auto now_check = std::chrono::system_clock::now();
@@ -375,7 +377,7 @@ void Logger::csv_writer_thread_func() {
             }
             it->second.write_entry(entry);
         } else {
-            std::cerr << "Warning: CsvLogger not found for module: " << entry.module.data() << ". Entry dropped." << std::endl;
+            APP_LOG_ERROR("CsvLogger not found for module: [" + std::string(entry.module.data()) + "]. Entry dropped.");
         }
     }
     APP_LOG_INFO("Logger: CSV writer thread finished.");

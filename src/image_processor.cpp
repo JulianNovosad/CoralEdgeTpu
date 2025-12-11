@@ -10,6 +10,7 @@ int libcamera_pixel_format_to_opencv_type(const libcamera::PixelFormat& format) 
     if (format.fourcc() == libcamera::formats::BGR888.fourcc()) return CV_8UC3;
     if (format.fourcc() == libcamera::formats::RGBA8888.fourcc()) return CV_8UC4;
     if (format.fourcc() == libcamera::formats::RGB888.fourcc()) return CV_8UC3;
+    if (format.fourcc() == libcamera::formats::YUYV.fourcc()) return CV_8UC2; // YUYV is 2 bytes per pixel
     // Add other formats as needed, or throw an error for unsupported ones
     {
         std::stringstream ss;
@@ -130,6 +131,8 @@ void ImageProcessor::worker_thread_func() {
                 cv::cvtColor(raw_image, temp_bgr_image, cv::COLOR_RGBA2BGR);
             } else if (input_pixel_format_ == libcamera::formats::RGB888) {
                 cv::cvtColor(raw_image, temp_bgr_image, cv::COLOR_RGB2BGR);
+            } else if (input_pixel_format_ == libcamera::formats::YUYV) {
+                cv::cvtColor(raw_image, temp_bgr_image, cv::COLOR_YUV2BGR_YUYV);
             }
             else {
                 {
@@ -142,7 +145,9 @@ void ImageProcessor::worker_thread_func() {
             
             // Now resize the (potentially color-converted) image into the final output Mat
             cv::resize(temp_bgr_image, bgr_image_out, cv::Size(tpu_input_width_, tpu_input_height_), 0, 0, cv::INTER_LINEAR);
-
+            
+            // CRITICAL: Explicitly set the size of the underlying std::vector to match the actual data length
+            processed_buffer_data->data.resize(required_size);
 
             // Create new ImageData for the processed image
             ImageData processed_image;
@@ -150,6 +155,8 @@ void ImageProcessor::worker_thread_func() {
             processed_image.width = tpu_input_width_;
             processed_image.height = tpu_input_height_;
             processed_image.format = libcamera::formats::BGR888; // Output is always BGR
+            // CRITICAL: Set the size of the processed image buffer to match the BGR output size
+            processed_image.buffer->size = tpu_input_width_ * tpu_input_height_ * 3; 
             // Preserve original timestamps and IDs
             processed_image.timestamp_epoch_ms = input_image.timestamp_epoch_ms;
 
