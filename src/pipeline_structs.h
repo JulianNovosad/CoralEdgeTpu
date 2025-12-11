@@ -23,16 +23,16 @@
  * This avoids deep copies of pixel data.
  */
 struct ImageData {
-    uint8_t* buffer_ptr = nullptr;                         ///< Raw pointer to a pooled buffer holding pixel data.
-    size_t buffer_size = 0;                                ///< Size of the buffer in bytes.
+    std::shared_ptr<PooledBuffer<uint8_t>> buffer; ///< Shared pointer to a pooled buffer holding pixel data.
     size_t width;                                  ///< Width of the image in pixels.
     size_t height;                                 ///< Height of the image in pixels.
     libcamera::PixelFormat format;                 ///< Pixel format of the image data.
-    long long timestamp_epoch_ms = 0; ///< Timestamp of image capture in epoch milliseconds UTC.
+    long long timestamp_epoch_ms = 0;              ///< Timestamp of image capture in epoch milliseconds UTC.
     int frame_id = -1;                             ///< Monotonically increasing frame ID.
-    PooledBuffer<uint8_t>* original_pooled_buffer = nullptr; ///< Raw pointer to the original PooledBuffer for returning to the pool.
 
-
+    // Constructor to initialize timestamp and frame_id
+    ImageData(long long ts_epoch_ms = 0, int f_id = -1)
+        : timestamp_epoch_ms(ts_epoch_ms), frame_id(f_id) {}
 };
 
 /**

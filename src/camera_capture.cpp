@@ -122,11 +122,11 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     APP_LOG_INFO("Data copied. Pooled buffer size: " + std::to_string(pooled_buffer->size));
 
     // Construct ImageData directly with the new constructor
-    ImageData image_data(call_ts_epoch_ms, frame_id); // Pass frame_id as well
+    ImageData image_data(call_ts_epoch_ms, frame_id);
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
-    image_data.buffer = std::move(pooled_buffer);
     image_data.format = actual_format; // Store the actual format
+    image_data.buffer = std::move(pooled_buffer);
 
     // 3. Conditional color conversion
     auto start_time_color_conversion = std::chrono::high_resolution_clock::now();
@@ -278,7 +278,7 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
       target_tpu_height_(target_tpu_height),
       main_output_queues_(main_output_queues),
       image_processor_input_queue_(image_processor_input_queue), // New initializer
-      image_buffer_pool_(image_buffer_pool),
+      image_buffer_pool_(std::move(image_buffer_pool)),
       watchdog_timeout_(watchdog_timeout),
       camera_manager_(std::make_unique<libcamera::CameraManager>()), // Initialize here
       camera_(nullptr),
@@ -731,9 +731,10 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
     size_t length = plane.length;
 
     // 1. Acquire a buffer from the pool.
-    auto pooled_buffer = image_buffer_pool_->acquire();
+    BufferPool<uint8_t>::PooledPtr pooled_buffer = image_buffer_pool_->acquire();
+
     if (!pooled_buffer) {
-        APP_LOG_WARNING("Failed to acquire a buffer for raw TPU frame. Dropping frame.");
+        APP_LOG_ERROR("CameraCapture failed to acquire buffer from pool for TPU stream, dropping frame.");
         return false;
     }
 
@@ -752,7 +753,7 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
         APP_LOG_ERROR(ss.str());
     }
         // Release the acquired buffer before returning false
-        pooled_buffer.reset();
+
         return false;
     }
     size_t expected_payload_size = cfg.size.width * cfg.size.height * expected_bytes_per_pixel;
@@ -763,7 +764,7 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
                 ss << "Expected raw TPU frame size (" << expected_payload_size << ") exceeds buffer pool capacity (" << pooled_buffer->data.capacity() << "). Dropping frame.";
                 APP_LOG_ERROR(ss.str());
             }        // Release the acquired buffer before returning false
-        pooled_buffer.reset();
+
         return false;
     }
 
@@ -776,7 +777,7 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
         APP_LOG_ERROR(ss.str());
     }
         // Release the acquired buffer before returning false
-        pooled_buffer.reset();
+
         return false;
     }
 
@@ -803,8 +804,8 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
     ImageData image_data(call_ts_epoch_ms, frame_id);
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
-    image_data.buffer = std::move(pooled_buffer);
     image_data.format = cfg.pixelFormat;
+    image_data.buffer = std::move(pooled_buffer);
     // frame_id is now set via constructor
 
     if (!image_processor_input_queue_.push(std::move(image_data))) {

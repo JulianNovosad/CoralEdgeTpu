@@ -36,6 +36,9 @@ public:
     // Defines a shared_ptr that will automatically return the buffer to the pool.
 
 
+    // Defines a shared_ptr that will automatically return the buffer to the pool.
+    using PooledPtr = std::shared_ptr<PooledBuffer<T>>;
+
     BufferPool(size_t num_buffers, size_t buffer_size, std::string pool_name = "BufferPool")
         : name_(std::move(pool_name)) {
         if (num_buffers == 0 || buffer_size == 0) {
@@ -45,6 +48,7 @@ public:
         for (size_t i = 0; i < num_buffers; ++i) {
             PooledBuffer<T>* buffer = new PooledBuffer<T>(); // Manually allocate raw buffer
             buffer->data.resize(buffer_size); // Pre-allocate memory
+            buffer->size = buffer_size; // Store the buffer's capacity
             pool_.push(buffer); // Store raw pointer in the queue
         }
     }
@@ -76,10 +80,8 @@ public:
             PooledBuffer<T>* raw_buffer = pool_.front();
             pool_.pop();
             APP_LOG_DEBUG(name_ + ": Acquired buffer. Available: " + std::to_string(pool_.size()));
-            
-            // Create a shared_ptr with a custom deleter that returns the raw buffer to the pool.
-            return PooledPtr(raw_buffer, [this](PooledBuffer<T>* ptr) {
-                this->release(ptr);
+            return PooledPtr(raw_buffer, [this](PooledBuffer<T>* b) {
+                this->release(b); // Custom deleter calls the private release method
             });
         }
         // Timeout occurred
@@ -99,7 +101,7 @@ private:
     /**
      * @brief Releases a buffer, returning it to the pool.
      *
-     * This method is called automatically by the custom deleter of the PooledPtr.
+     * This method is called by the custom deleter of PooledPtr.
      *
      * @param raw_buffer The raw pointer to the buffer to be returned.
      */
@@ -109,6 +111,8 @@ private:
         APP_LOG_DEBUG(name_ + ": Released buffer. Available: " + std::to_string(pool_.size()));
         cond_var_.notify_one();
     }
+
+private:
 
     std::string name_;
     std::mutex mutex_;

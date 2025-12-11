@@ -88,14 +88,12 @@ void ImageProcessor::worker_thread_func() {
             auto process_start_time = std::chrono::high_resolution_clock::now();
 
             // Ensure the input image buffer is valid
-            if (!input_image.buffer || input_image.width == 0 || input_image.height == 0) {
-                APP_LOG_ERROR("ImageProcessor received invalid ImageData.");
+            if (!input_image.buffer || input_image.buffer->data.empty() || input_image.width == 0 || input_image.height == 0) {
+                APP_LOG_ERROR("ImageProcessor received invalid ImageData (buffer is null, empty or dimensions are zero).");
                 continue;
             }
 
-            // Create an OpenCV Mat from the input_image buffer
-            // Use the actual width/height from the input_image, not the target_tpu_width/height yet
-            cv::Mat raw_image(input_image.height, input_image.width, opencv_input_type, input_image.buffer.get());
+            cv::Mat raw_image(input_image.height, input_image.width, opencv_input_type, input_image.buffer->data.data());
 
             // Acquire buffer from pool for processed image
             size_t required_size = tpu_input_width_ * tpu_input_height_ * 3; // Always BGR 3-channel output
@@ -119,7 +117,7 @@ void ImageProcessor::worker_thread_func() {
             }
             
             // Create a Mat pointing to the acquired buffer
-            cv::Mat bgr_image_out(tpu_input_height_, tpu_input_width_, CV_8UC3, processed_buffer_data.get());
+            cv::Mat bgr_image_out(tpu_input_height_, tpu_input_width_, CV_8UC3, processed_buffer_data->data.data());
 
             cv::Mat temp_bgr_image; // Temporary Mat for color conversion if needed
             
