@@ -194,7 +194,7 @@ void LogicModule::worker_thread_func() {
                 
                 std::stringstream custom_metrics;
                 custom_metrics << "{\"processing_ms\":" << duration_ms << "}";
-                APP_LOG_CSV("logic", "logic_done", call_ts, custom_metrics.str());
+                APP_LOG_CSV("LogicModule", "logic_done", call_ts, custom_metrics.str());
             }
         }
     }

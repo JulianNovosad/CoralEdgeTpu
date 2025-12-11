@@ -104,12 +104,16 @@ public:
     void write_entry(const CsvLogEntry& entry);
     void rotate_log_file();
 
+    int get_current_log_minute() const { return current_log_minute_; }
+    bool is_file_open() const { return current_log_file_.is_open(); }
+
 private:
     std::string module_name_;
     std::string log_dir_;
     int max_log_files_;
     std::ofstream current_log_file_;
     std::recursive_mutex file_mutex_; // Protects access to the file
+    int current_log_minute_; // New member to store the minute of the current log file
 };
 
 

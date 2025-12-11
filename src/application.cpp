@@ -21,9 +21,9 @@ void Application::setup_pools_and_queues() {
     const unsigned int cam_h = config_loader_.get_high_res_height();
     
     size_t image_buffer_size = cam_w * cam_h * 3; // BGR888
-    image_pool_ = std::make_shared<BufferPool<uint8_t>>(40, image_buffer_size, "ImagePool");
+    image_pool_ = std::make_shared<BufferPool<uint8_t>>(80, image_buffer_size, "ImagePool");
     detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(20, 100, "DetectionPool");
-    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(100, 1024 * 1024, "H264Pool");
+    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(200, 1024 * 1024, "H264Pool");
 }
 
 bool Application::initialize_modules(const std::string& model_path, const std::string& labels_path) {
@@ -144,7 +144,6 @@ int Application::run() {
         return 1;
     }
 
-    std::cerr << "Extracting logging configuration..." << std::endl;
     // Extract CSV logging configurations - MUST be done BEFORE Logger::init
     std::vector<SubsystemLogConfig> csv_log_configs;
     if (config_loader_.get_json_config().contains("logging") && config_loader_.get_json_config()["logging"].contains("subsystems")) {
@@ -156,7 +155,6 @@ int Application::run() {
             });
         }
     }
-    std::cerr << "Logging configuration extracted." << std::endl;
 
     // Initialize logger immediately after successful config load, and before any LOG_ calls
     Logger::init("run", config_loader_.get_log_path(), csv_log_configs);

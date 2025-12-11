@@ -36,8 +36,11 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  const char* stream_name,
                                  unsigned int target_width,
                                  unsigned int target_height,
-                                 std::chrono::high_resolution_clock::time_point capture_timestamp,
-                                 const libcamera::PixelFormat& actual_format) { // New parameter: actual_format
+                                 long long call_ts_epoch_ms, // Changed to epoch ms for consistency
+                                 const libcamera::PixelFormat& actual_format,
+                                 long long frame_id, // New parameter
+                                 long long exposure_ms) // New parameter
+{
     APP_LOG_INFO("Processing frame for " + std::string(stream_name) + " with format: " + pixelFormatToString(actual_format));
     if (fb->planes().empty()) {
         APP_LOG_ERROR(std::string(stream_name) + " FrameBuffer has no planes.");
@@ -87,6 +90,9 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     }
     APP_LOG_INFO("Mmap successful. Copying data...");
     
+    // Timing for data copy
+    auto copy_start_time = std::chrono::high_resolution_clock::now();
+
     // Copying logic adapted for different pixel formats and stride.
     size_t bytes_per_line_src = cfg.stride;
     size_t bytes_per_line_dst = cfg.size.width * expected_bytes_per_pixel;
@@ -105,10 +111,13 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     }
     pooled_buffer->size = expected_payload_size;
 
+    auto copy_end_time = std::chrono::high_resolution_clock::now();
+    long long copy_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(copy_end_time - copy_start_time).count();
+
     munmap(mmap_ptr, length);
     APP_LOG_INFO("Data copied. Pooled buffer size: " + std::to_string(pooled_buffer->size));
 
-    ImageData image_data(capture_timestamp);
+    ImageData image_data{std::chrono::high_resolution_clock::time_point(std::chrono::milliseconds(call_ts_epoch_ms))}; // Use call_ts_epoch_ms for ImageData constructor
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
     image_data.buffer = std::move(pooled_buffer);
@@ -214,6 +223,20 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
         return false; // Indicate that the frame was dropped
     }
     APP_LOG_INFO("Push successful.");
+
+    // Log the CSV entry for this processed frame
+    std::stringstream custom_metrics_stream;
+    custom_metrics_stream << "{\"frame_id\":" << frame_id
+                   << ", \"width\":" << cfg.size.width
+                   << ", \"height\":" << cfg.size.height
+                   << ", \"exposure_ms\":" << exposure_ms
+                   << ", \"copy_time_ms\":" << copy_time_ms
+                   << "}";
+
+    APP_LOG_CSV("CameraCapture", // Module name is always CameraCapture for this function
+                (std::string(stream_name) == "Main Video Stream" ? "main_frame_processed" : "tpu_frame_processed"), // Event name based on stream
+                call_ts_epoch_ms,
+                custom_metrics_stream.str());
 
     return true;
 }
@@ -569,49 +592,99 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         // Allow requeueing even on failure to recover
     }
 
-    // Get the hardware capture timestamp from the request metadata
-    long long call_ts = 0;
-    auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
-    if (md_timestamp) {
-        // The timestamp is in nanoseconds, convert to milliseconds
-        call_ts = *md_timestamp / 1000000;
-    } else {
-        APP_LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
-        call_ts = produced_ts;
-    }
-    
-    std::stringstream custom_metrics;
-    custom_metrics << "{\"width\":" << width_ << ", \"height\":" << height_ << "}";
-    APP_LOG_CSV("camera", "frame_captured", call_ts, custom_metrics.str());
+        // Get the hardware capture timestamp from the request metadata
 
+        long long call_ts = 0;
 
-    // --- PROCESSING START ---
-    auto processing_start_time = std::chrono::high_resolution_clock::now();
-    
-    // Capture buffer map BEFORE calling reuse()
-    libcamera::Request::BufferMap captured_buffers = request->buffers();
+        auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
 
-    // Process Main Video Stream (only if there's a consumer queue)
-    if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
-        const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
-        const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
+        if (md_timestamp) {
+
+            // The timestamp is in nanoseconds, convert to milliseconds
+
+            call_ts = *md_timestamp / 1000000;
+
+        } else {
+
+            APP_LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
+
+            call_ts = produced_ts;
+
+        }
+
         
-        process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, std::chrono::high_resolution_clock::time_point(std::chrono::milliseconds(call_ts)), video_stream_->configuration().pixelFormat);
-    } else if (captured_buffers.count(video_stream_)) {
-        APP_LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
-    } else {
-        APP_LOG_WARNING("CameraCapture: Video stream buffer missing from completed request.");
-    }
 
-    // Process TPU Stream
-    if (captured_buffers.count(tpu_stream_)) {
-        const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
-        const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
+        // NEW: Extract frame_id and exposure_ms
+
+        long long frame_id = request->sequence();
+
+    
+
+        long long exposure_ms = 0;
+
+        auto md_exposure_us = request->metadata().get(libcamera::controls::ExposureTime);
+
+        if (md_exposure_us) {
+
+            exposure_ms = *md_exposure_us / 1000; // Convert microseconds to milliseconds
+
+        }
+
+    
+
+        // --- PROCESSING START ---
+
+        auto processing_start_time = std::chrono::high_resolution_clock::now();
+
         
-        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, std::chrono::high_resolution_clock::time_point(std::chrono::milliseconds(call_ts)), tpu_stream_->configuration().pixelFormat);
-    } else {
-        APP_LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
-    }
+
+        // Capture buffer map BEFORE calling reuse()
+
+        libcamera::Request::BufferMap captured_buffers = request->buffers();
+
+    
+
+        // Process Main Video Stream (only if there's a consumer queue)
+
+        if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
+
+            const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
+
+            const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
+
+            
+
+            process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, call_ts, video_stream_->configuration().pixelFormat, frame_id, exposure_ms);
+
+        } else if (captured_buffers.count(video_stream_)) {
+
+            APP_LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
+
+        } else {
+
+            APP_LOG_WARNING("CameraCapture: Video stream buffer missing from completed request.");
+
+        }
+
+    
+
+        // Process TPU Stream
+
+        if (captured_buffers.count(tpu_stream_)) {
+
+            const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
+
+            const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
+
+            
+
+            process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, call_ts, tpu_stream_->configuration().pixelFormat, frame_id, exposure_ms);
+
+        } else {
+
+            APP_LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
+
+        }
     
     // --- PERFORMANCE METRICS ---
     auto processing_end_time = std::chrono::high_resolution_clock::now();
@@ -676,7 +749,9 @@ void CameraCapture::get_performance_metrics() {
                  << ",\"average_latency_ms\":" << average_latency_ms
                  << "}";
 
-    APP_LOG_CSV("CameraCapture", "PerformanceMetrics", 0LL, json_metrics.str());
+    long long current_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::system_clock::now().time_since_epoch()).count();
+    APP_LOG_CSV("CameraCapture", "PerformanceMetrics", current_time_ms, json_metrics.str());
     APP_LOG_DEBUG("--- CameraCapture Performance Metrics (Frame Latency) ---");
     APP_LOG_DEBUG("  Total Frames Processed: " + std::to_string(total_frames_processed_));
     APP_LOG_DEBUG("  Average FPS: " + std::to_string(average_fps));

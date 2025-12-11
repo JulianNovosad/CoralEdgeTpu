@@ -24,9 +24,8 @@ std::once_flag Logger::once_flag_;
 
 // Implement CsvLogger methods
 CsvLogger::CsvLogger(const std::string& module_name, const std::string& log_dir, int max_log_files)
-    : module_name_(module_name), log_dir_(log_dir), max_log_files_(max_log_files) {
+    : module_name_(module_name), log_dir_(log_dir), max_log_files_(max_log_files), current_log_minute_(-1) {
     
-    std::cerr << "CsvLogger constructor for " << module_name_ << " in " << log_dir_ << std::endl;
     // Ensure log directory exists
     if (!fs::exists(log_dir_)) {
         fs::create_directories(log_dir_);
@@ -62,8 +61,8 @@ void CsvLogger::write_entry(const CsvLogEntry& entry) {
     }
 }
 
+
 void CsvLogger::rotate_log_file() {
-    std::cerr << "CsvLogger::rotate_log_file for " << module_name_ << std::endl;
     std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
         current_log_file_.close();
@@ -85,27 +84,27 @@ void CsvLogger::rotate_log_file() {
     
     fs::path new_log_filepath = fs::path(log_dir_) / new_log_filename;
 
-    std::cerr << "Opening CSV log file: " << new_log_filepath << std::endl;
     // Open new primary log file
     current_log_file_.open(new_log_filepath.string(), std::ios_base::out | std::ios_base::app); // Use app to append if file already exists for current minute
     if (!current_log_file_.is_open()) {
         std::cerr << "Failed to open CSV log file: " << new_log_filepath << std::endl;
+        current_log_minute_ = -1; // Indicate no file is open
     } else {
-        std::cerr << "Successfully opened CSV log file: " << new_log_filepath << std::endl;
         // Only write header if file was newly created or is empty
-        std::cerr << "Checking file size of " << new_log_filepath << std::endl;
         if (fs::file_size(new_log_filepath) == 0) {
-            std::cerr << "File is new. Writing header." << std::endl;
             write_header();
-            std::cerr << "Finished writing header." << std::endl;
         }
+
+        // Update current_log_minute_
+        auto now_for_minute = std::chrono::system_clock::now();
+        std::time_t now_c_for_minute = std::chrono::system_clock::to_time_t(now_for_minute);
+        std::tm* now_tm_for_minute = std::localtime(&now_c_for_minute);
+        current_log_minute_ = now_tm_for_minute->tm_min;
 
         // Manage old log files (keep max_log_files)
         std::vector<fs::path> log_files;
-        std::cerr << "Iterating directory: " << log_dir_ << std::endl;
         try {
             for (const auto& entry : fs::directory_iterator(log_dir_)) {
-                std::cerr << "Found entry: " << entry.path() << std::endl;
                 if (entry.is_regular_file() && entry.path().extension() == ".csv" && entry.path().stem().string().rfind(module_name_, 0) == 0) {
                     log_files.push_back(entry.path());
                 }
@@ -115,14 +114,12 @@ void CsvLogger::rotate_log_file() {
         } catch (const std::exception& e) {
             std::cerr << "General error during directory iteration for " << module_name_ << ": " << e.what() << std::endl;
         }
-        std::cerr << "Finished iterating directory." << std::endl;
         std::sort(log_files.begin(), log_files.end()); // Sort by name, which should naturally sort by date/time
 
         while (log_files.size() > static_cast<size_t>(max_log_files_)) {
             fs::remove(log_files.front()); // Remove the oldest log file
             log_files.erase(log_files.begin());
         }
-// ... (rest of the file)
     }
 }
 
@@ -134,8 +131,6 @@ void Logger::init(const std::string& log_file_prefix, const std::string& base_lo
 
 Logger& Logger::getInstance() {
     if (!instance_) {
-        // DEBUGGING: Print to stderr if not initialized instead of throwing
-        std::cerr << "WARNING: Logger::init() was not called before getInstance(). Using a dummy logger for this call." << std::endl;
         static Logger dummy_logger; // Use the now-public default constructor
         return dummy_logger;
     }
@@ -171,21 +166,15 @@ Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_d
     rotate_standard_log_file();
 
     // Initialize CsvLogger instances for each subsystem
-    std::cerr << "Logger: Starting CsvLogger initialization loop." << std::endl;
     for (const auto& config : csv_subsystem_configs_) {
-        std::cerr << "Logger: Processing subsystem config for: " << config.name << std::endl;
         fs::path sub_log_dir = fs::path(base_log_dir_) / config.log_dir_suffix;
-        std::cerr << "Logger: Attempting to emplace CsvLogger for " << config.name << std::endl;
         csv_loggers_.try_emplace(config.name, config.name, sub_log_dir.string(), config.max_log_files);
         // Proactively create subdirectory and rotate log file to write header
         if (!fs::exists(sub_log_dir)) {
             fs::create_directories(sub_log_dir);
         }
-        std::cerr << "Logger: Rotating log file for " << config.name << std::endl;
         csv_loggers_.at(config.name).rotate_log_file();
     }
-    std::cerr << "Logger: Finished CsvLogger initialization loop." << std::endl;
-    std::cerr << "Logger constructor finished." << std::endl;
 }
 
 /**
@@ -340,12 +329,20 @@ void Logger::csv_writer_thread_func() {
 
         CsvLogEntry entry = std::move(csv_log_queue_.front());
         csv_log_queue_.pop();
-        lock.unlock(); // Release lock before writing to allow other threads to log.
-
+        
         // Retrieve the correct CsvLogger for this module
-        std::lock_guard<std::mutex> lock_map(csv_log_mutex_);
         auto it = csv_loggers_.find(entry.module);
         if (it != csv_loggers_.end()) {
+            // Check for log rotation based on current minute
+            auto now_check = std::chrono::system_clock::now();
+            std::time_t now_c_check = std::chrono::system_clock::to_time_t(now_check);
+            std::tm* now_tm_check = std::localtime(&now_c_check);
+            
+            // Use getter methods to access CsvLogger members
+            if (now_tm_check->tm_min != it->second.get_current_log_minute() || !it->second.is_file_open()) {
+                it->second.rotate_log_file();
+            }
+            
             it->second.write_entry(entry);
         } else {
             std::cerr << "Warning: CsvLogger not found for module: " << entry.module << ". Entry dropped." << std::endl;
@@ -391,7 +388,6 @@ void Logger::rotate_standard_log_file() {
     } else {
         // Optionally write a header for JSON logs, but typically not needed for structured JSON per line
     }
-    last_rotation_time_ = std::chrono::system_clock::now(); // Update the last rotation timestamp with system_clock
 }
 
 /**
