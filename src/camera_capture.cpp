@@ -244,9 +244,10 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     // Log the CSV entry for this processed frame
     CsvLogEntry entry;
     entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    entry.module = "CameraCapture";
+    copy_to_array(entry.module, "CameraCapture");
     entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    entry.event = (std::string(stream_name) == "Main Video Stream" ? "main_frame_processed" : "tpu_frame_processed");
+    const char* event_name = (std::string(stream_name) == "Main Video Stream" ? "main_frame_processed" : "tpu_frame_processed");
+    copy_to_array(entry.event, event_name);
     entry.call_ts_epoch_ms = call_ts_epoch_ms;
     entry.camera_frame_id = frame_id;
     entry.camera_width = cfg.size.width;
@@ -685,7 +686,7 @@ void CameraCapture::get_performance_metrics() {
     entry.total_frames_processed_or_inferences = total_frames_processed_;
     entry.average_latency_ms = static_cast<float>(average_latency_ms);
     // Clear details field as it is now structured
-    entry.details = "";
+    copy_to_array(entry.details, "");
 
     Logger::getInstance().log_csv(entry);
     std::string header_msg = "--- CameraCapture Performance Metrics (Frame Latency) ---";

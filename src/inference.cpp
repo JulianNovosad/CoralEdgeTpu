@@ -206,9 +206,9 @@ void InferenceEngine::worker_thread_func() {
             
             CsvLogEntry entry;
             entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-            entry.module = "InferenceEngine";
+            copy_to_array(entry.module, "InferenceEngine");
             entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-            entry.event = "inference_done";
+            copy_to_array(entry.event, "inference_done");
             entry.call_ts_epoch_ms = call_ts;
             entry.tpu_inference_ms = static_cast<float>(duration_ms);
             entry.tpu_input_w = input_width_;
@@ -343,7 +343,7 @@ void InferenceEngine::get_performance_metrics() {
     entry.total_frames_processed_or_inferences = total_inferences_;
     entry.average_latency_ms = static_cast<float>(average_duration_ms);
     // Clear details field as it is now structured
-    entry.details = "";
+    copy_to_array(entry.details, "");
     // Preserve other specific metrics for the InferenceEngine module
     entry.tpu_input_w = input_width_;
     entry.tpu_input_h = input_height_;

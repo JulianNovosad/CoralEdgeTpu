@@ -63,9 +63,9 @@ void CsvLogger::write_entry(const CsvLogEntry& entry) {
     std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
         current_log_file_ << entry.produced_ts_epoch_ms << ","
-                          << entry.module << ","
+                          << entry.module.data() << ","
                           << entry.thread_id << ","
-                          << entry.event << ","
+                          << entry.event.data() << ","
                           << entry.call_ts_epoch_ms << ","
                           << entry.camera_frame_id << ","
                           << entry.camera_width << ","
@@ -91,7 +91,7 @@ void CsvLogger::write_entry(const CsvLogEntry& entry) {
                           << entry.average_fps << ","
                           << entry.total_frames_processed_or_inferences << ","
                           << entry.average_latency_ms << ","
-                          << entry.details << "\n"; // Ensure details is the last field
+                          << entry.details.data() << "\n"; // Ensure details is the last field
         current_log_file_.flush();
     }
 }
@@ -232,12 +232,13 @@ Logger::~Logger() {
  * threads to asynchronously write log messages.
  */
 void Logger::start_writer_thread() {
-            if (!running_.exchange(true)) { // Atomically set to true and check old value
-                APP_LOG_INFO("Logger: Creating standard writer thread.");
-                standard_writer_thread_ = std::thread(&Logger::writer_thread_func, this);
-                APP_LOG_INFO("Logger: Creating CSV writer thread.");
-                csv_writer_thread_ = std::thread(&Logger::csv_writer_thread_func, this);
-            }}
+    if (!running_.exchange(true)) { // Atomically set to true and check old value
+        APP_LOG_INFO("Logger: Creating standard writer thread.");
+        standard_writer_thread_ = std::thread(&Logger::writer_thread_func, this);
+        APP_LOG_INFO("Logger: Creating CSV writer thread.");
+        csv_writer_thread_ = std::thread(&Logger::csv_writer_thread_func, this);
+    }
+}
 
 /**
  * @brief Stops the asynchronous writer threads.
@@ -248,8 +249,6 @@ void Logger::start_writer_thread() {
  */
 void Logger::stop_writer_thread() {
     if (running_.exchange(false)) { // Atomically set to false and check old value
-        cond_var_.notify_all(); // Wake up standard writer thread
-        csv_cond_var_.notify_all(); // Wake up CSV writer thread
         
         if (standard_writer_thread_.joinable()) {
             standard_writer_thread_.join(); // Wait for the standard thread to finish.
@@ -270,11 +269,7 @@ void Logger::stop_writer_thread() {
  * @param message The log message content.
  */
 void Logger::log(const std::string& level, const std::string& message) {
-    {
-        std::lock_guard<std::mutex> lock(log_mutex_); // Protect queue access.
-        log_queue_.push(LogEntry{std::chrono::system_clock::now(), level, message}); // Enqueue the log entry.
-    }
-    cond_var_.notify_one();
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), level, message})); // Enqueue the log entry.
 }
 
 /**
@@ -287,22 +282,12 @@ void Logger::log(const std::string& level, const std::string& message) {
  * @param value The value for the JSON log entry (expected to be a valid JSON string or primitive).
  */
 void Logger::log_json(const std::string& key, const std::string& value) {
-    {
-        std::lock_guard<std::mutex> lock(log_mutex_); // Protect queue access.
-        // For simplicity, we'll format this as a string.
-        // A more robust JSON logger might use a dedicated JSON library.
-        std::string json_message = "{\"" + key + "\": " + value + "}";
-        log_queue_.push(LogEntry{std::chrono::system_clock::now(), "JSON", json_message}); // Enqueue structured log.
-    }
-    cond_var_.notify_one();
+    std::string json_message = "{\"" + key + "\": " + value + "}";
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), "JSON", json_message})); // Enqueue structured log.
 }
 
 void Logger::log_csv(const CsvLogEntry& entry) {
-    {
-        std::lock_guard<std::mutex> lock(csv_log_mutex_);
-        csv_log_queue_.push(entry);
-    }
-    csv_cond_var_.notify_one();
+    csv_log_queue_.push(std::move(entry));
 }
 
 /**
@@ -314,36 +299,34 @@ void Logger::log_csv(const CsvLogEntry& entry) {
  */
 void Logger::writer_thread_func() {
     APP_LOG_INFO("Logger: Standard writer thread started.");
-    while (true) {
-        std::unique_lock<std::mutex> lock(log_mutex_);
-        // Wait until the queue is not empty or the logger is shutting down
-        cond_var_.wait(lock, [this] { return !log_queue_.empty() || !running_; });
+    LogEntry entry; // Declare outside loop to avoid re-allocation
+    while (running_.load()) { // Loop while running_ is true
+        // Try to pop an entry from the queue
+        if (log_queue_.pop(entry)) { // Use non-blocking pop
+            // Write to console (standard output).
+            std::cout << "[" << entry.level.data() << "] " << entry.message.data() << std::endl;
 
-        // If shutting down and the queue is empty, exit the loop
-        if (!running_ && log_queue_.empty()) {
-            break;
+            // Write to file in JSON format.
+            if (standard_log_file_.is_open()) {
+                standard_log_file_ << "{\"timestamp\":\"" << get_current_iso_time() << "\", \"level\":\"" << entry.level.data() << "\", \"message\":\"" << entry.message.data() << "\"}" << std::endl;
+            }
+            // Basic log rotation check. Currently, rotation only happens on startup.
+            // To implement runtime rotation (e.g., hourly or by size), this section
+            // would check `std::chrono::duration_cast<std::chrono::hours>(now - last_rotation_time_).count() > 1`
+            // or file size, and then call `rotate_standard_log_file()`.
+        } else {
+            // If queue is empty, sleep for a short period to avoid busy-waiting
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-
-        // Retrieve and remove the oldest log entry.
-        LogEntry entry = std::move(log_queue_.front());
-        log_queue_.pop();
-        lock.unlock(); // Release lock before writing to allow other threads to log.
-
-        // Write to console (standard output).
-        std::cout << "[" << entry.level << "] " << entry.message << std::endl;
-
-        // Write to file in JSON format.
-        if (standard_log_file_.is_open()) {
-            // Escape special characters in message if necessary for proper JSON,
-            // but for simplicity, assuming message content is safe or will be escaped upstream.
-            standard_log_file_ << "{\"timestamp\":\"" << get_current_iso_time() << "\", \"level\":\"" << entry.level << "\", \"message\":\"" << entry.message << "\"}" << std::endl;
-        }
-        
-        // Basic log rotation check. Currently, rotation only happens on startup.
-        // To implement runtime rotation (e.g., hourly or by size), this section
-        // would check `std::chrono::duration_cast<std::chrono::hours>(now - last_rotation_time_).count() > 1`
-        // or file size, and then call `rotate_standard_log_file()`. // Corrected comment
     }
+    // Process any remaining messages in the queue before exiting
+    while (log_queue_.pop(entry)) {
+        std::cout << "[" << entry.level.data() << "] " << entry.message.data() << std::endl;
+        if (standard_log_file_.is_open()) {
+            standard_log_file_ << "{\"timestamp\":\"" << get_current_iso_time() << "\", \"level\":\"" << entry.level.data() << "\", \"message\":\"" << entry.message.data() << "\"}" << std::endl;
+        }
+    }
+    APP_LOG_INFO("Logger: Standard writer thread finished.");
 }
 
 /**
@@ -354,35 +337,48 @@ void Logger::writer_thread_func() {
  */
 void Logger::csv_writer_thread_func() {
     APP_LOG_INFO("Logger: CSV writer thread started.");
-    while (true) {
-        std::unique_lock<std::mutex> lock(csv_log_mutex_);
-        csv_cond_var_.wait(lock, [this] { return !csv_log_queue_.empty() || !running_; });
-
-        if (!running_ && csv_log_queue_.empty()) {
-            break;
+    CsvLogEntry entry; // Declare outside loop to avoid re-allocation
+    while (running_.load()) {
+        if (csv_log_queue_.pop(entry)) {
+            // Retrieve the correct CsvLogger for this module
+            auto it = csv_loggers_.find(std::string(entry.module.data()));
+            if (it != csv_loggers_.end()) {
+                // Check for log rotation based on current minute
+                auto now_check = std::chrono::system_clock::now();
+                std::time_t now_c_check = std::chrono::system_clock::to_time_t(now_check);
+                std::tm* now_tm_check = std::localtime(&now_c_check);
+                
+                // Use getter methods to access CsvLogger members
+                if (now_tm_check->tm_min != it->second.get_current_log_minute() || !it->second.is_file_open()) {
+                    it->second.rotate_log_file();
+                }
+                
+                it->second.write_entry(entry);
+            } else {
+                std::cerr << "Warning: CsvLogger not found for module: " << entry.module.data() << ". Entry dropped." << std::endl;
+            }
+        } else {
+            // If queue is empty, sleep for a short period to avoid busy-waiting
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-
-        CsvLogEntry entry = std::move(csv_log_queue_.front());
-        csv_log_queue_.pop();
-        
-        // Retrieve the correct CsvLogger for this module
-        auto it = csv_loggers_.find(entry.module);
+    }
+    // Process any remaining messages in the queue before exiting
+    while (csv_log_queue_.pop(entry)) {
+        auto it = csv_loggers_.find(std::string(entry.module.data()));
         if (it != csv_loggers_.end()) {
-            // Check for log rotation based on current minute
             auto now_check = std::chrono::system_clock::now();
             std::time_t now_c_check = std::chrono::system_clock::to_time_t(now_check);
             std::tm* now_tm_check = std::localtime(&now_c_check);
             
-            // Use getter methods to access CsvLogger members
             if (now_tm_check->tm_min != it->second.get_current_log_minute() || !it->second.is_file_open()) {
                 it->second.rotate_log_file();
             }
-            
             it->second.write_entry(entry);
         } else {
-            std::cerr << "Warning: CsvLogger not found for module: " << entry.module << ". Entry dropped." << std::endl;
+            std::cerr << "Warning: CsvLogger not found for module: " << entry.module.data() << ". Entry dropped." << std::endl;
         }
     }
+    APP_LOG_INFO("Logger: CSV writer thread finished.");
 }
 
 /**
@@ -391,7 +387,7 @@ void Logger::csv_writer_thread_func() {
  * The new log file's name includes a timestamp to ensure uniqueness.
  */
 void Logger::rotate_standard_log_file() {
-    std::lock_guard<std::mutex> lock(log_mutex_); // Protect file operations
+
     if (standard_log_file_.is_open()) {
         standard_log_file_.close(); // Close the old log file.
     }

@@ -49,9 +49,9 @@ void SystemMonitor::worker_thread_func() {
 
         CsvLogEntry entry;
         entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        entry.module = "SystemMonitor";
+        copy_to_array(entry.module, "SystemMonitor");
         entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-        entry.event = "sysmon_metrics";
+        copy_to_array(entry.event, "sysmon_metrics");
         entry.call_ts_epoch_ms = call_ts;
         entry.sysmon_cpu_temp_c = cpu_temp;
         entry.sysmon_cpu_usage_percent = cpu_usage;
@@ -169,9 +169,9 @@ void SystemMonitor::get_performance_metrics() {
                                   std::chrono::system_clock::now().time_since_epoch()).count();
     CsvLogEntry entry;
     entry.produced_ts_epoch_ms = current_time_ms;
-    entry.module = "SystemMonitor";
+    copy_to_array(entry.module, "SystemMonitor");
     entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    entry.event = "PerformanceMetrics";
+    copy_to_array(entry.event, "PerformanceMetrics");
     entry.call_ts_epoch_ms = current_time_ms; // Use current_time_ms as call_ts for summary metrics
     entry.sysmon_cpu_temp_c = cpu_temp;
     entry.sysmon_cpu_usage_percent = cpu_usage;

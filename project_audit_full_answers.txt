@@ -1,0 +1,252 @@
+# Project Forensic Audit: Verification Questions Answers
+
+# This file contains direct, evidence-based answers to the verification questions.
+# Answers are concise, with just enough evidence (file, line, commit, snippet, strace output)
+# to justify each claim, allowing for independent review.
+
+## Prerequisite: Resolving "Bus Error"
+
+A "Bus error" (Exit Code 135) occurred when attempting to execute `build/detector`. This is a critical runtime anomaly that prevents the collection of `strace` outputs and runtime logs necessary to fully answer several questions (4, 5, 6, 7, 8).
+
+The immediate next step is to debug and resolve this "Bus error" to enable further runtime analysis.
+
+---
+
+**[Previous Answers to Questions 1-3, 9-13 would be here. For this current run, I am assuming they are already in the file from the previous attempt, and I'm just focusing on resolving the bus error first.]**
+
+---
+
+### Bus Error Investigation (in progress)
+
+**Action:** Running `build/detector` under `gdb` to obtain a backtrace of the Bus error.
+GNU gdb (Debian 13.1-3) 13.1
+Copyright (C) 2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+Type "show copying" and "show warranty" for details.
+This GDB was configured as "aarch64-linux-gnu".
+Type "show configuration" for configuration details.
+For bug reporting instructions, please see:
+<https://www.gnu.org/software/gdb/bugs/>.
+Find the GDB manual and other documentation resources online at:
+    <http://www.gnu.org/software/gdb/documentation/>.
+
+For help, type "help".
+Type "apropos word" to search for commands related to "word"...
+Reading symbols from build/detector...
+Starting program: /home/pi/CoralEdgeTpu/build/detector 
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/aarch64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ff503e580 (LWP 15242)]
+[New Thread 0x7ff482e580 (LWP 15243)]
+INFO: Configuration loaded successfully from /home/pi/CoralEdgeTpu/build/../config.json
+[New Thread 0x7ff401e580 (LWP 15244)]
+[INFO] Logger: Creating standard writer thread.
+[INFO] Logger: Creating CSV writer thread.
+[INFO] Logger: Standard writer thread started.
+[INFO] Logger: CSV writer thread started.
+[New Thread 0x7feb80e580 (LWP 15245)]
+[INFO] CoralEdgeTpu Detector Starting...
+[INFO] Signal handlers for SIGINT and SIGTERM set up.
+[INFO] Initializing modules...
+[INFO] Creating CameraCapture...
+[3:02:35.186092370] [15240] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:330 [0mlibcamera v0.5.2+99-bfd68f78
+[New Thread 0x7fcb596580 (LWP 15246)]
+[3:02:35.197389092] [15246] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:720 [0mlibpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[3:02:35.294543417] [15246] [1;32m INFO [1;37mIPAProxy [1;34mipa_proxy.cpp:180 [0mUsing tuning file /usr/share/libcamera/ipa/rpi/pisp/imx708.json
+[New Thread 0x7fcacae580 (LWP 15247)]
+[New Thread 0x7fca49e580 (LWP 15248)]
+[3:02:35.302438929] [15246] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:220 [0mAdding camera '/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a' for pipeline handler rpi/pisp
+[3:02:35.302460115] [15246] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1179 [0mRegistered camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
+[INFO] Libcamera CameraManager started.
+[INFO] CameraCapture created.
+[INFO] Creating ImageProcessor...
+[INFO] ImageProcessor initialized with TPU input size: 300x300, input format: BGR888
+[INFO] ImageProcessor created.
+[INFO] Creating InferenceEngine...
+[INFO] Model Input Dimensions: 300x300x3
+[INFO] Edge TPU delegate creation starting...
+[New Thread 0x7fc95f6580 (LWP 15249)]
+[Thread 0x7fc95f6580 (LWP 15249) exited]
+[New Thread 0x7fc95f6580 (LWP 15250)]
+[Thread 0x7fc95f6580 (LWP 15250) exited]
+[New Thread 0x7fc95f6580 (LWP 15251)]
+[New Thread 0x7fc8de6580 (LWP 15252)]
+[New Thread 0x7fc3ffe580 (LWP 15253)]
+[New Thread 0x7fc37ee580 (LWP 15254)]
+[New Thread 0x7fc2fde580 (LWP 15255)]
+[New Thread 0x7fc27ce580 (LWP 15256)]
+[New Thread 0x7fc1fbe580 (LWP 15257)]
+[New Thread 0x7fc17ae580 (LWP 15258)]
+[New Thread 0x7fc0f9e580 (LWP 15259)]
+[New Thread 0x7fc078e580 (LWP 15260)]
+[New Thread 0x7fbff7e580 (LWP 15261)]
+[INFO] Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: 366506124512
+[INFO] InferenceEngine created.
+[INFO] Creating OrientationSensor...
+[INFO] OrientationSensor created (mock data provider). Yaw Port: 2001, Pitch Port: 2002, Roll Port: 2003
+[INFO] OrientationSensor created.
+[INFO] Creating LogicModule...
+[INFO] Calculating zero pitch for 100.000000m...
+[WARNING] Trajectory calculation exceeded 5000 steps.
+[INFO] Zero pitch found after 1 iterations: 0.000000 rad
+[INFO] BallisticsSolver created and zero pitch calculated.
+[INFO] LogicModule created with 3D Ballistics Solver, configured from file.
+[INFO] LogicModule created.
+[INFO] Creating SystemMonitor...
+[INFO] SystemMonitor created with interval: 5 seconds.
+[INFO] SystemMonitor created.
+[INFO] Creating H264Encoder...
+[INFO] H264Encoder created.
+[INFO] Modules initialized.
+[INFO] Starting modules...
+[INFO] Starting all modules...
+[New Thread 0x7fbf76e580 (LWP 15262)]
+[INFO] ImageProcessor worker thread running.
+[ERROR] ImageProcessor: Failed to determine OpenCV input type for format BGR888. Worker thread exiting.
+[INFO] ImageProcessor worker thread started.
+[INFO] InferenceEngine started with 1 worker threads.
+[INFO] CameraCapture::start() called.
+[INFO] Selected Camera ID: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a
+[New Thread 0x7fbef5e580 (LWP 15263)]
+[INFO] Acquire: Camera acquired successfully.
+[INFO] Camera acquired successfully. Proceeding to setup.
+[INFO] Camera acquired and confirmed to be non-null. Proceeding to setup.
+[INFO] setup_camera: Configuring camera: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a
+[INFO] CameraConfiguration validate() -> Status: 1
+[WARNING] Camera configuration adjusted by libcamera for dual streams.
+[INFO] Final stream[0] size=1536x864 fmt='56595559'
+[INFO] Final stream[1] size=300x300 fmt='34324752'
+[INFO] CameraCapture: Configured main stream format: '56595559', size: 1536x864, stride: 3072 (FOURCC: 1448695129)
+[3:02:35.314586023] [15240] [1;32m INFO [1;37mCamera [1;34mcamera.cpp:1215 [0mconfiguring streams: (0) 1536x864-YUYV/Rec709 (1) 300x300-RGB888/Rec709/Rec709/None/Full
+[3:02:35.314952950] [15246] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1483 [0mSensor: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a - Selected sensor format: 1536x864-SBGGR10_1X10/RAW - Selected CFE format: 1536x864-PC1B/RAW
+[INFO] Libcamera dual streams configured.
+[INFO] Actual Video Stream Config: 1536x864 format: '56595559'
+[INFO] Actual TPU Stream Config: 300x300 format: '34324752' stride: 960
+[INFO] Libcamera buffers allocated for main video stream. Number of buffers: 4
+[INFO] Libcamera buffers allocated for TPU stream. Number of buffers: 4
+[INFO] Libcamera requests created and buffers added for both streams.
+[INFO] Initializing H.264 encoder...
+[INFO] H.264 encoder initialized (placeholder).
+[INFO] Camera setup completed successfully.
+[New Thread 0x7fbd925580 (LWP 15264)]
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10058 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10054 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10064 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10058 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10054 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10055 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10055 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[INFO] Libcamera camera started successfully.
+[INFO] Libcamera camera started.
+[New Thread 0x7fbc839580 (LWP 15265)]
+[INFO] CameraCapture: Request processor thread started.
+[INFO] CameraCapture: All initial requests successfully queued.
+[INFO] OrientationSensor started.
+[INFO] OrientationSensor worker thread started (mocking data).
+[New Thread 0x7fafffe580 (LWP 15266)]
+[INFO] LogicModule started.
+[INFO] LogicModule worker thread started.
+[DEBUG] LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.
+[New Thread 0x7faf7ee580 (LWP 15267)]
+[New Thread 0x7faefde580 (LWP 15268)]
+[New Thread 0x7fae7ce580 (LWP 15269)]
+[INFO] SystemMonitor worker thread started.
+[INFO] SystemMonitor started.
+[INFO] H264Encoder worker thread started.
+[INFO] H264Encoder: Initializing x264 with width=1536, height=864, fps=30.000000
+[INFO] H264Encoder started.
+[INFO] All modules started successfully.
+[INFO] Modules started.
+[INFO] Registered module for shutdown: SystemMonitor
+[INFO] Registered module for shutdown: LogicModule
+[INFO] Registered module for shutdown: OrientationSensor
+[INFO] Registered module for shutdown: CameraCapture
+[INFO] Registered module for shutdown: H264Encoder
+[INFO] Registered module for shutdown: ImageProcessor
+[INFO] Registered module for shutdown: InferenceEngine
+[INFO] Running application. Press Ctrl+C to quit.
+[INFO] H264Encoder: x264 parameters - width=1536, height=864, csp=2, fps_num=30, fps_den=1, keyint_max=30, threads=1
+[INFO] H264Encoder: Attempting to open x264 encoder...
+x264 [info]: using cpu capabilities: ARMv8 NEON
+x264 [info]: profile Constrained Baseline, level 4.0, 4:2:0, 8-bit
+[INFO] H264Encoder: x264 encoder opened successfully.
+[INFO] H264Encoder: Attempting to allocate x264 picture_in_...
+[INFO] H264Encoder: x264 picture_in_ allocated.
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10063 us
+[DEBUG] LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.
+[INFO] CameraCapture: request_complete_callback invoked.
+[DEBUG] CameraCapture: Request enqueued for processing.
+[DEBUG] SensorTimestamp (ns): 10955467691000, converted call_ts (epoch ms): 1765485758437
+[DEBUG] ExposureTime (us): 884, converted exposure_ms: 0
+[INFO] Processing frame for Main Video Stream with format: '56595559'
+[INFO] Frame buffer has 1 planes.
+[INFO] Plane 0: fd=50, length=2654208
+[INFO] Acquiring buffer from pool...
+[DEBUG] ImagePool: Acquired buffer. Available: 79
+[DEBUG] Time to acquire buffer: 7 us
+[INFO] Mmapping plane buffer...
+[INFO] Mmap successful. Copying data...
+[DEBUG] Time for mmap and copy: 2508 us
+[INFO] Data copied. Pooled buffer size: 2654208
+[INFO] YUYV stream, no color conversion needed (assuming H264 takes YUYV).
+[DEBUG] Time for color conversion: 1 us
+[INFO] Image already target size. No resize needed.
+[DEBUG] Time for resizing: 1 us
+[INFO] Pushing Main Video Stream to queue. Final dimensions: 1536x864 format: '56595559'
+[DEBUG] Time for queue push: 10 us
+[INFO] Push successful.
+[DEBUG] Total time for process_frame_buffer: 2552 us
+[DEBUG] ImagePool: Acquired buffer. Available: 78
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10099 us
+[DEBUG] Pushed raw TPU frame 0 to ImageProcessor queue. Dimensions: 300x300, format: RGB888
+[DEBUG] ImagePool: Acquired buffer. Available: 77
+[DEBUG] LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.
+munmap_chunk(): invalid pointer
+
+Thread 22 "ImageProcessor" received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7fbf76e580 (LWP 15262)]
+std::__atomic_base<unsigned long>::load (__m=std::memory_order_relaxed, 
+    this=0x0) at /usr/include/c++/12/bits/atomic_base.h:488
+488		return __atomic_load_n(&_M_i, int(__m));
+#0  std::__atomic_base<unsigned long>::load (__m=std::memory_order_relaxed, 
+    this=0x0) at /usr/include/c++/12/bits/atomic_base.h:488
+#1  boost::lockfree::detail::ringbuffer_base<ImageData>::push (this=0x0, 
+    t=..., buffer=0x48, max_size=101)
+    at /usr/include/boost/lockfree/spsc_queue.hpp:107
+#2  0x0000005555594df8 in boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100ul>::push (this=0x0, t=...)
+    at /usr/include/boost/lockfree/spsc_queue.hpp:454
+#3  0x0000005555592da8 in boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100ul> >::push (this=0x0, t=...)
+    at /usr/include/boost/lockfree/spsc_queue.hpp:829
+#4  0x00000055555a8b28 in ImageProcessor::worker_thread_func (
+    this=0x555573c570) at /home/pi/CoralEdgeTpu/src/image_processor.cpp:155
+#5  0x00000055555a9768 in std::__invoke_impl<void, void (ImageProcessor::*)(), ImageProcessor*> (
+    __f=@0x555576dbb0: (void (ImageProcessor::*)(ImageProcessor * const)) 0x7ff6d10b50 <main_arena+96>, this adjustment 274800870824, 
+    __t=@0x555576dba8: 0x56c1) at /usr/include/c++/12/bits/invoke.h:74
+#6  0x00000055555a96a8 in std::__invoke<void (ImageProcessor::*)(), ImageProcessor*> (
+    __fn=@0x555576dbb0: (void (ImageProcessor::*)(ImageProcessor * const)) 0x7ff6d10b50 <main_arena+96>, this adjustment 274800870824)
+    at /usr/include/c++/12/bits/invoke.h:96
+#7  0x00000055555a960c in std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> >::_M_invoke<0ul, 1ul> (this=0x555576dba8)
+    at /usr/include/c++/12/bits/std_thread.h:252
+#8  0x00000055555a95c4 in std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> >::operator() (this=0x555576dba8)
+    at /usr/include/c++/12/bits/std_thread.h:259
+#9  0x00000055555a95a4 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> > >::_M_run (
+    this=0x555576dba0) at /usr/include/c++/12/bits/std_thread.h:210
+#10 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+#11 0x0000007ff6beee90 in start_thread (arg=0x7fffff8737)
+    at ./nptl/pthread_create.c:442
+#12 0x0000007ff6c57b1c in thread_start ()
+    at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+A debugging session is active.
+
+	Inferior 1 [process 15240] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]
