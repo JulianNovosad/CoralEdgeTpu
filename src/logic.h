@@ -164,6 +164,8 @@ private:
     long long total_predictions_ = 0;
     std::chrono::time_point<std::chrono::high_resolution_clock> performance_start_time_;
     FallbackMode current_fallback_mode_;
+    int current_hit_scan_count_ = 0;      // New: Count of successful hit-scan predictions in the last interval
+    int current_servo_command_count_ = 0; // New: Count of servo commands issued in the last interval
 
     void perform_sensor_fusion(const OrientationData& imu_data);
     void update_object_tracks(const std::vector<DetectionResult>& detections);

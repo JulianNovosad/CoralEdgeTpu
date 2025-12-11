@@ -150,6 +150,13 @@ private:
      */
     std::shared_ptr<DetectionResultBuffer> get_output_tensor(tflite::Interpreter* interpreter);
 
+    /**
+     * @brief Reads the Edge TPU temperature from the system.
+     *
+     * @return The temperature in degrees Celsius, or a negative value on error.
+     */
+    float get_tpu_temperature();
+
     std::string model_path_; ///< Path to the TensorFlow Lite model file.
     ImageQueue& input_queue_; ///< Reference to the input queue for image data.
     DetectionResultsQueue& detection_results_for_overlay_queue_; ///< Reference to the output queue for detection results to overlay.

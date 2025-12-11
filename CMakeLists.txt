@@ -49,8 +49,9 @@ add_executable(detector
     src/application.cpp
     src/camera_capture.cpp
     src/inference.cpp
+    src/image_processor.cpp # New source file
     src/util_logging.cpp
-    src/config_loader.cpp # Added ConfigLoader source file
+    src/config_loader.cpp
     src/logic.cpp
 
     src/h264_encoder.cpp
@@ -59,6 +60,7 @@ add_executable(detector
     src/system_monitor.cpp
     civetweb/src/civetweb.c
 )
+add_definitions(-DDEBUG_MODE)
 set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS USE_WEBSOCKET)
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})
@@ -111,6 +113,7 @@ target_include_directories(config_loader_test PRIVATE
     src
     civetweb/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    /usr/include/libcamera # Added for libcamera headers
 )
 
 add_executable(dlopen_test tests/dlopen_test.cpp)

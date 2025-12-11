@@ -320,7 +320,9 @@ CMakeFiles/config_loader_test.dir/tests/config_loader_test.cpp.o: \
  /usr/include/c++/12/codecvt /usr/include/c++/12/bits/fs_dir.h \
  /usr/include/c++/12/bits/fs_ops.h /usr/include/c++/12/numeric \
  /usr/include/c++/12/bits/stl_numeric.h \
- /usr/include/c++/12/pstl/glue_numeric_defs.h /usr/include/c++/12/fstream \
+ /usr/include/c++/12/pstl/glue_numeric_defs.h \
+ /usr/include/libcamera/libcamera/pixel_format.h \
+ /usr/include/libcamera/libcamera/formats.h /usr/include/c++/12/fstream \
  /usr/include/aarch64-linux-gnu/c++/12/bits/basic_file.h \
  /usr/include/aarch64-linux-gnu/c++/12/bits/c++io.h \
  /usr/include/c++/12/bits/fstream.tcc

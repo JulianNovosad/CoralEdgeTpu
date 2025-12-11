@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 
 // Edge TPU delegate C API functions
 extern "C" {
@@ -15,6 +16,29 @@ extern "C" {
 // Custom error reporting function for the Edge TPU delegate
 void edgetpu_error_reporter(const char* msg) {
     APP_LOG_ERROR("Edge TPU Delegate: " + std::string(msg));
+}
+
+float InferenceEngine::get_tpu_temperature() {
+    std::ifstream temp_file("/sys/class/apex/apex_0/temp");
+    if (!temp_file.is_open()) {
+        // This warning can be noisy if the driver is not loaded or the device is not present.
+        // It might be better to log this once at startup.
+        // APP_LOG_WARNING("Could not open TPU temperature file.");
+        return -1.0f;
+    }
+    std::string line;
+    if (std::getline(temp_file, line)) {
+        try {
+            return std::stof(line) / 1000.0f;
+        } catch (const std::invalid_argument& ia) {
+            APP_LOG_ERROR("Invalid argument while parsing TPU temperature: " + std::string(ia.what()));
+            return -2.0f;
+        } catch (const std::out_of_range& oor) {
+            APP_LOG_ERROR("Out of range while parsing TPU temperature: " + std::string(oor.what()));
+            return -3.0f;
+        }
+    }
+    return -4.0f; // Error reading line
 }
 
 InferenceEngine::InferenceEngine(const std::string& model_path, 
@@ -148,29 +172,49 @@ void InferenceEngine::worker_thread_func() {
     
     ImageData input_image;
     while (running_) {
+        auto total_loop_start = std::chrono::high_resolution_clock::now();
+        // 1. Pop from input queue
+        auto pop_start = std::chrono::high_resolution_clock::now();
         if (input_queue_.pop(input_image)) {
+            auto pop_end = std::chrono::high_resolution_clock::now();
+            APP_LOG_DEBUG("InferenceEngine: Time to pop from queue: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(pop_end - pop_start).count()) + " us");
+
             if (!input_image.buffer) {
                 APP_LOG_ERROR("InferenceEngine received an image with no buffer. Skipping.");
                 continue;
             }
             
-            long long call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  input_image.timestamp.time_since_epoch()).count();
+            long long call_ts = input_image.timestamp_epoch_ms;
 
+            // 2. Set input tensor
+            auto set_input_start = std::chrono::high_resolution_clock::now();
             set_input_tensor(interpreter.get(), input_image);
             input_image.buffer.reset(); // Explicitly release the buffer here!
+            auto set_input_end = std::chrono::high_resolution_clock::now();
+            APP_LOG_DEBUG("InferenceEngine: Time to set input tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(set_input_end - set_input_start).count()) + " us");
 
-            auto inference_start_time = std::chrono::high_resolution_clock::now();
+
+            // 3. Invoke interpreter
+            auto invoke_start_time = std::chrono::high_resolution_clock::now();
             if (interpreter->Invoke() != kTfLiteOk) {
                 APP_LOG_ERROR("Failed to invoke interpreter. Skipping frame.");
                 continue;
             }
-            auto inference_end_time = std::chrono::high_resolution_clock::now();
-            long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(inference_end_time - inference_start_time).count();
+            auto invoke_end_time = std::chrono::high_resolution_clock::now();
+            long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(invoke_end_time - invoke_start_time).count();
+            APP_LOG_DEBUG("InferenceEngine: Time to invoke interpreter (inference_done): " + std::to_string(duration_ms) + " ms");
             
-            std::stringstream custom_metrics;
-            custom_metrics << "{\"inference_ms\":" << duration_ms << "}";
-            APP_LOG_CSV("InferenceEngine", "inference_done", call_ts, custom_metrics.str());
+            CsvLogEntry entry;
+            entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            entry.module = "InferenceEngine";
+            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+            entry.event = "inference_done";
+            entry.call_ts_epoch_ms = call_ts;
+            entry.tpu_inference_ms = static_cast<float>(duration_ms);
+            entry.tpu_input_w = input_width_;
+            entry.tpu_input_h = input_height_;
+            entry.tpu_temp_c = get_tpu_temperature();
+            Logger::getInstance().log_csv(entry);
 
             {
                 std::lock_guard<std::mutex> lock(inference_times_mutex_);
@@ -178,15 +222,29 @@ void InferenceEngine::worker_thread_func() {
                 total_inferences_++;
             }
             
+            // 4. Get output tensor
+            auto get_output_start = std::chrono::high_resolution_clock::now();
             auto results_buffer = get_output_tensor(interpreter.get());
-            
+            auto get_output_end = std::chrono::high_resolution_clock::now();
+            APP_LOG_DEBUG("InferenceEngine: Time to get output tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(get_output_end - get_output_start).count()) + " us");
+
+            // 5. Push results to output queues
+            auto push_output_start = std::chrono::high_resolution_clock::now();
             if (results_buffer && results_buffer->size > 0) {
+                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to overlay queue.");
                 detection_results_for_overlay_queue_.push(results_buffer);
+                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to logic queue.");
                 detection_results_for_logic_queue_.push(results_buffer);
+            } else {
+                APP_LOG_WARNING("InferenceEngine: No detections to push or results_buffer is null.");
             }
+            auto push_output_end = std::chrono::high_resolution_clock::now();
+            APP_LOG_DEBUG("InferenceEngine: Time to push results to queues: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(push_output_end - push_output_start).count()) + " us");
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        auto total_loop_end = std::chrono::high_resolution_clock::now();
+        APP_LOG_DEBUG("InferenceEngine: Total worker thread loop iteration time: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_loop_end - total_loop_start).count()) + " us");
     }
 }
 
@@ -276,16 +334,22 @@ void InferenceEngine::get_performance_metrics() {
     long long p95_latency_ms = inference_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_inferences_ - 1))];
     long long p50_latency_ms = inference_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_inferences_ - 1))];
 
-    std::ostringstream json_metrics;
-    json_metrics << "{\"p50_latency_ms\":" << std::fixed << std::setprecision(3) << static_cast<double>(p50_latency_ms)
-                 << ",\"p95_latency_ms\":" << static_cast<double>(p95_latency_ms)
-                 << ",\"p99_latency_ms\":" << static_cast<double>(p99_latency_ms)
-                 << ",\"average_fps\":" << average_fps
-                 << ",\"std_dev_ms\":" << std_dev_ms
-                 << ",\"total_inferences\":" << total_inferences_
-                 << "}";
-
-    APP_LOG_CSV("InferenceEngine", "PerformanceMetrics", 0LL, json_metrics.str());
+    // Populate the new CsvLogEntry fields directly
+    CsvLogEntry entry; // Declare entry here
+    entry.p50_latency_ms = static_cast<float>(p50_latency_ms);
+    entry.p95_latency_ms = static_cast<float>(p95_latency_ms);
+    entry.p99_latency_ms = static_cast<float>(p99_latency_ms);
+    entry.average_fps = static_cast<float>(average_fps);
+    entry.total_frames_processed_or_inferences = total_inferences_;
+    entry.average_latency_ms = static_cast<float>(average_duration_ms);
+    // Clear details field as it is now structured
+    entry.details = "";
+    // Preserve other specific metrics for the InferenceEngine module
+    entry.tpu_input_w = input_width_;
+    entry.tpu_input_h = input_height_;
+    // tpu_temp_c remains -1.0f as per current capabilities
+    
+    Logger::getInstance().log_csv(entry);
     APP_LOG_INFO("--- Inference Performance Metrics ---");
     APP_LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
     APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));

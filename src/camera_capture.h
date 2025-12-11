@@ -52,7 +52,7 @@ public:
                   unsigned int target_tpu_width, unsigned int target_tpu_height,
                   std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
                   std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
-                  ImageQueue& tpu_output_queue,
+                  ImageQueue& image_processor_input_queue, // Change here
                   std::chrono::seconds watchdog_timeout);
     ~CameraCapture();
 
@@ -119,7 +119,7 @@ public:
     unsigned int target_tpu_height_; ///< Doelhoogte voor TPU-inferentie na resizing.
 
     std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_;  ///< Wachtrijen voor BGR-frames bestemd voor de live stream.
-    ImageQueue& tpu_output_queue_;  ///< Wachtrij voor BGR-frames bestemd voor de TPU.
+    ImageQueue& image_processor_input_queue_;  ///< Wachtrij voor ruwe frames bestemd voor de ImageProcessor.
     std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool_; ///< Pool voor het beheren van image buffers.
     std::chrono::seconds watchdog_timeout_; ///< Timeout voor de camera-watchdog.
 
@@ -147,19 +147,21 @@ public:
     std::mutex frame_latencies_mutex_; ///< Mutex voor thread-veilige toegang tot de latencies vector.
     long long total_frames_processed_ = 0; ///< Totaal aantal verwerkte frames voor prestatieberekening.
 
-private:
-    void process_main_video_stream(libcamera::Request* request, std::chrono::high_resolution_clock::time_point capture_timestamp);
-    void process_tpu_inference_stream(libcamera::Request* request, std::chrono::high_resolution_clock::time_point capture_timestamp);
-    void update_frame_metrics(std::chrono::high_resolution_clock::time_point processing_start_time, std::chrono::high_resolution_clock::time_point processing_end_time);
-    void requeue_camera_request(libcamera::Request* request);
-    bool process_frame_buffer_helper(const libcamera::FrameBuffer* fb,
-                                     const libcamera::StreamConfiguration& cfg,
-                                     ImageQueue& queue,
-                                     const char* stream_name,
-                                     unsigned int target_width,
-                                     unsigned int target_height,
-                                     std::chrono::high_resolution_clock::time_point capture_timestamp);
+    // Members for dedicated request processing thread
+    std::thread request_processor_thread_;
+    std::queue<libcamera::Request*> request_queue_;
+    std::mutex request_queue_mutex_;
+    std::condition_variable request_queue_cond_var_;
+    std::atomic<bool> processing_running_ = false;
 
+private:
+    void request_processor_thread_func(); // New thread function
+    // New helper to process raw TPU frames
+    bool process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* fb,
+                                      const libcamera::StreamConfiguration& cfg,
+                                      long long call_ts_epoch_ms,
+                                      long long frame_id,
+                                      long long exposure_ms);
 };
 
 #endif // CAMERA_CAPTURE_H

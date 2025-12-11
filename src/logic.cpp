@@ -159,6 +159,8 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
 
     APP_LOG_INFO("LogicModule created with 3D Ballistics Solver, configured from file.");
     performance_start_time_ = std::chrono::high_resolution_clock::now();
+    current_hit_scan_count_ = 0;
+    current_servo_command_count_ = 0;
 }
 
 LogicModule::~LogicModule() { stop(); APP_LOG_INFO("LogicModule destroyed."); }
@@ -177,11 +179,22 @@ void LogicModule::stop() {
 }
 
 void LogicModule::worker_thread_func() {
+    APP_LOG_INFO("LogicModule worker thread started.");
     while (running_) {
         std::shared_ptr<DetectionResultBuffer> detections_buffer;
         if (detection_input_queue_.pop(detections_buffer)) {
-            long long call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+            APP_LOG_INFO("LogicModule: Pop successful. Detections buffer received.");
+            long long call_ts = 0;
+            if (detections_buffer && detections_buffer->size > 0) {
+                APP_LOG_INFO("LogicModule: Detections buffer is valid with size: " + std::to_string(detections_buffer->size));
+                // Use the timestamp of the first detection as the call_ts
+                call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            detections_buffer->data[0].timestamp.time_since_epoch()).count();
+            } else {
+                APP_LOG_WARNING("LogicModule: Pop successful, but detections_buffer is null or empty. Using current time for call_ts.");
+                call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
                                   std::chrono::system_clock::now().time_since_epoch()).count();
+            }
 
             if (detections_buffer && detections_buffer->size > 0) {
                 OrientationData current_imu_data = orientation_sensor_->get_latest_orientation_data();
@@ -192,22 +205,55 @@ void LogicModule::worker_thread_func() {
                 
                 long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
                 
-                std::stringstream custom_metrics;
-                custom_metrics << "{\"processing_ms\":" << duration_ms << "}";
-                APP_LOG_CSV("LogicModule", "logic_done", call_ts, custom_metrics.str());
+                CsvLogEntry entry;
+                entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                entry.module = "LogicModule";
+                entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                entry.event = "logic_done";
+                entry.call_ts_epoch_ms = call_ts;
+                entry.logic_metric_ballistics = static_cast<float>(duration_ms); // Map processing_ms to ballistics metric
+                entry.logic_metric_hit_scan = static_cast<float>(current_hit_scan_count_);
+                entry.logic_metric_servo_actuation = static_cast<float>(current_servo_command_count_);
+                Logger::getInstance().log_csv(entry);
             }
+        } else {
+            // Log that pop failed, and sleep to prevent busy-waiting
+            if (running_) { // Only log if still intended to be running
+                APP_LOG_DEBUG("LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.");
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
+    APP_LOG_INFO("LogicModule worker thread stopped.");
 }
 
 void LogicModule::process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data) {
-    auto t_start = std::chrono::high_resolution_clock::now();
+    auto total_process_start = std::chrono::high_resolution_clock::now();
+
+    auto start_sensor_fusion = std::chrono::high_resolution_clock::now();
     perform_sensor_fusion(imu_data);
+    auto end_sensor_fusion = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("LogicModule: Time for sensor fusion: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_sensor_fusion - start_sensor_fusion).count()) + " us");
+
+    auto start_update_tracks = std::chrono::high_resolution_clock::now();
     update_object_tracks(detections);
+    auto end_update_tracks = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("LogicModule: Time to update object tracks: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_update_tracks - start_update_tracks).count()) + " us");
+
+    auto start_ballistics = std::chrono::high_resolution_clock::now();
     calculate_ballistics_for_tracks(imu_data);
+    auto end_ballistics = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("LogicModule: Time for ballistic calculations: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_ballistics - start_ballistics).count()) + " us");
+
+    auto start_safety = std::chrono::high_resolution_clock::now();
     perform_safety_and_actuation(imu_data);
-    auto t_end = std::chrono::high_resolution_clock::now();
-    long long dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+    auto end_safety = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("LogicModule: Time for safety and actuation: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_safety - start_safety).count()) + " us");
+
+    auto total_process_end = std::chrono::high_resolution_clock::now();
+    long long dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(total_process_end - total_process_start).count();
+    APP_LOG_DEBUG("LogicModule: Total time for process function: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_process_end - total_process_start).count()) + " us");
+    
     std::lock_guard<std::mutex> lock(prediction_times_mutex_);
     prediction_times_ms_.push_back(dur_ms);
     total_predictions_++;
@@ -270,6 +316,7 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 
                 // Calculate impact point and send as telemetry instead of servo commands
                 if (predict_impact_point(track, imu_data, impact_point)) {
+                    current_hit_scan_count_++; // Increment hit scan count
                     // Format the impact point as JSON for telemetry
                     // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
                     std::string telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
@@ -365,7 +412,64 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
     char log_buffer[256];
     snprintf(log_buffer, sizeof(log_buffer), "Issuing servo commands for target: (%.2f, %.2f, %.2f)", target_x, target_y, target_z);
     APP_LOG_INFO(log_buffer);
+    current_servo_command_count_++; // Increment servo command count
 }
 
-void LogicModule::get_performance_metrics() { /* Implement performance metrics logging */ }
+void LogicModule::get_performance_metrics() {
+    std::lock_guard<std::mutex> lock(prediction_times_mutex_);
+
+    if (total_predictions_ == 0) {
+        APP_LOG_INFO("LogicModule: No predictions recorded for performance metrics.");
+        return;
+    }
+
+    double average_duration_ms = 0;
+    for (long long duration : prediction_times_ms_) {
+        average_duration_ms += static_cast<double>(duration);
+    }
+    average_duration_ms /= total_predictions_;
+    double average_fps = 1000.0 / average_duration_ms;
+
+    std::sort(prediction_times_ms_.begin(), prediction_times_ms_.end());
+    size_t percentile_99_index = static_cast<size_t>(std::round(total_predictions_ * 0.99));
+    size_t percentile_95_index = static_cast<size_t>(std::round(total_predictions_ * 0.95));
+    size_t percentile_50_index = static_cast<size_t>(std::round(total_predictions_ * 0.50));
+
+    long long p99_latency_ms = prediction_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_predictions_ - 1))];
+    long long p95_latency_ms = prediction_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_predictions_ - 1))];
+    long long p50_latency_ms = prediction_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_predictions_ - 1))];
+
+    // Populate the new CsvLogEntry fields directly
+    CsvLogEntry entry;
+    entry.p50_latency_ms = static_cast<float>(p50_latency_ms);
+    entry.p95_latency_ms = static_cast<float>(p95_latency_ms);
+    entry.p99_latency_ms = static_cast<float>(p99_latency_ms);
+    entry.average_fps = static_cast<float>(average_fps);
+    entry.total_frames_processed_or_inferences = total_predictions_;
+    entry.average_latency_ms = static_cast<float>(average_duration_ms);
+    // Clear details field as it is now structured
+    entry.details = "";
+
+    // The logic_metric_ballistics field is already being used for average_duration_ms in the existing code.
+    // We should keep this for now, but ensure its meaning is clear.
+    // If the intention is to log total processing duration for 'logic_done' event, then this is fine.
+    // For 'PerformanceMetrics' event, we now have more specific fields.
+    // entry.logic_metric_ballistics = static_cast<float>(average_duration_ms); 
+    
+    Logger::getInstance().log_csv(entry);
+    APP_LOG_INFO("--- LogicModule Performance Metrics ---");
+    APP_LOG_INFO("  Total Predictions: " + std::to_string(total_predictions_));
+    APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));
+    APP_LOG_INFO("  Average Latency: " + std::to_string(average_duration_ms) + " ms");
+    APP_LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
+    APP_LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
+    APP_LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
+    APP_LOG_INFO("-------------------------------------");
+
+    prediction_times_ms_.clear();
+    total_predictions_ = 0;
+    current_hit_scan_count_ = 0; // Reset for the next interval
+    current_servo_command_count_ = 0; // Reset for the next interval
+    performance_start_time_ = std::chrono::high_resolution_clock::now();
+}
 void LogicModule::perform_sensor_fusion(const OrientationData& /*imu_data*/) { /* Implement sensor fusion logic */ }

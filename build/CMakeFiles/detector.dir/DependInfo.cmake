@@ -14,6 +14,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/pi/CoralEdgeTpu/src/camera_capture.cpp" "CMakeFiles/detector.dir/src/camera_capture.cpp.o" "gcc" "CMakeFiles/detector.dir/src/camera_capture.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/config_loader.cpp" "CMakeFiles/detector.dir/src/config_loader.cpp.o" "gcc" "CMakeFiles/detector.dir/src/config_loader.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/h264_encoder.cpp" "CMakeFiles/detector.dir/src/h264_encoder.cpp.o" "gcc" "CMakeFiles/detector.dir/src/h264_encoder.cpp.o.d"
+  "/home/pi/CoralEdgeTpu/src/image_processor.cpp" "CMakeFiles/detector.dir/src/image_processor.cpp.o" "gcc" "CMakeFiles/detector.dir/src/image_processor.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/inference.cpp" "CMakeFiles/detector.dir/src/inference.cpp.o" "gcc" "CMakeFiles/detector.dir/src/inference.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/logic.cpp" "CMakeFiles/detector.dir/src/logic.cpp.o" "gcc" "CMakeFiles/detector.dir/src/logic.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/main.cpp" "CMakeFiles/detector.dir/src/main.cpp.o" "gcc" "CMakeFiles/detector.dir/src/main.cpp.o.d"

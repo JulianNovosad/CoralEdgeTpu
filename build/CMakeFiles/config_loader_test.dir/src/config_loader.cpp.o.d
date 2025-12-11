@@ -244,6 +244,8 @@ CMakeFiles/config_loader_test.dir/src/config_loader.cpp.o: \
  /usr/include/c++/12/optional /usr/include/c++/12/numeric \
  /usr/include/c++/12/bits/stl_numeric.h \
  /usr/include/c++/12/pstl/glue_numeric_defs.h /usr/include/c++/12/any \
+ /usr/include/libcamera/libcamera/pixel_format.h \
+ /usr/include/libcamera/libcamera/formats.h \
  /home/pi/CoralEdgeTpu/src/util_logging.h \
  /usr/include/aarch64-linux-gnu/sys/time.h /usr/include/c++/12/fstream \
  /usr/include/aarch64-linux-gnu/c++/12/bits/basic_file.h \

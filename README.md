@@ -96,41 +96,36 @@ CoralEdgeTpu/
 
 * FPS, berekeningen/s en latentie per subsystem gemeten
 * Kernel-aanpassingen (PCIe, IRQ-affiniteiten, MSI-X) gedocumenteerd met lspci -vvv , sudo dmesg | grep -i apex , etc.
-* **Logging per Subsystem:**
-    *   Elk kernsubsystem (Camera, TPU, Encoder, Logic, System Monitor) moet zijn eigen CSV-logbestanden hebben.
-    *   Deze logbestanden moeten worden opgeslagen in een subdirectory onder de geconfigureerde `log_path`, met de naam van het subsystem (bijv. `/logs/camera/`, `/logs/tpu/`).
-    *   De bestandsnaamconventie moet `module_YYYY_MM_DD_HH:MM.csv` zijn.
+*   **Logging per Subsystem:**
+    *   Elk kernsubsystem (Camera, TPU, Encoder, Logic, System Monitor) genereert zijn eigen CSV-logbestanden.
+    *   Deze logbestanden worden opgeslagen in een subdirectory onder de geconfigureerde `log_path`, met de naam van de module (bijv. `/logs/camera/`, `/logs/tpu/`).
+    *   De bestandsnaamconventie is `ModuleName_YYYY_MM_DD_HH:MM.csv`.
     *   Er mogen maximaal 3 rotaties van logbestanden per subsystem worden bewaard.
+    *   Alle logbestanden gebruiken een **universele header** die alle mogelijke metrische kolommen bevat, ongeacht de module. Niet-relevante kolommen worden opgevuld met een standaardwaarde (bijv. `-1`).
 
 #### Logging format (Stage 0)
 
-Stage-0 logging moet een uniforme prefix van kolommen gebruiken (dezelfde eerste velden voor elke subsystem CSV), gevolgd door module-specifieke metrics.
+Stage-0 logging gebruikt een **universele header** over alle modules heen. Dit betekent dat elk logbestand dezelfde set kolommen bevat, ongeacht de module die de log produceert. Niet-relevante metrische kolommen worden opgevuld met een standaardwaarde (bijv. `-1`).
+
+De header bevat een uniforme prefix van kolommen, gevolgd door alle mogelijke module-specifieke metrics van het hele systeem.
 
 **Unified prefix columns (epoch UTC in milliseconden):**
    - `produced_ts_epoch_ms`  — timestamp wanneer deze logregel werd geproduceerd (epoch ms, UTC)
-   - `module`                — module naam: `camera`|`tpu`|`encoder`|`logic`|`sysmon`
+   - `module`                — module naam: `CameraCapture`|`InferenceEngine`|`H264Encoder`|`LogicModule`|`SystemMonitor`
    - `thread_id`             — numerieke OS thread id (TID)
    - `event`                 — korte label (bijv. `frame_captured`, `inference_done`, `encode_done`)
    - `call_ts_epoch_ms`      — timestamp wanneer de module *gevraagd/geïnitieerd* werd om te beginnen met werken (epoch ms, UTC)
 
-**Latentie (per-module):** `produced_ts_epoch_ms` − `call_ts_epoch_ms`.
+**Latentie:** `produced_ts_epoch_ms` − `call_ts_epoch_ms`.
 Dit is de duur tussen het moment dat een subsystem werd gevraagd om te beginnen met werken (call) en het moment dat het een resultaat produceerde. Gebruik **geen** inter-frame intervallen of tijd tussen logs als latency.
 Modules moeten `call_ts_epoch_ms` emitteren op het moment dat werk in de wachtrij wordt geplaatst/aangevraagd (bijv. camera: wanneer de opnameaanvraag wordt gepost; inferentie: wanneer een frame de inferentie-wachtrij binnenkomt).
 
-**Voorbeeld CSV header & sample lines:**
+**Voorbeeld Universele CSV header & sample lines (vergelijkbaar voor alle modules):**
 
-Common prefix: `produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,<module-specifieke-kolommen...>`
-
-Camera voorbeeld:
 ```csv
-produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,frame_id,width,height,exposure_ms,copy_time_ms
-1712681235123,camera,2234,frame_available,1712681235120,12345,1536,864,25,0.12
-```
-
-TPU voorbeeld:
-```csv
-produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,inference_ms,input_w,input_h,tpu_temp_c
-1712681235789,tpu,2299,inference_done,1712681235787,2.1,300,300,45.3
+produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,camera_frame_id,camera_width,camera_height,camera_exposure_ms,camera_copy_time_ms,tpu_inference_ms,tpu_input_w,tpu_input_h,tpu_temp_c,encoder_encode_ms,encoder_total_encoded_frames,encoder_average_fps,logic_metric_ballistics,logic_metric_hit_scan,logic_metric_servo_actuation,sysmon_cpu_temp_c,sysmon_cpu_usage_percent,sysmon_mem_usage_percent,p50_latency_ms,p95_latency_ms,p99_latency_ms,average_fps,total_frames_processed_or_inferences,average_latency_ms,details
+1765476550098,CameraCapture,520472000761713998,main_frame_processed,1765476549812,0,1536,864,0,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,""
+1765476550131,InferenceEngine,-2932907159835259584,inference_done,1765476549812,-1,-1,-1,-1,-1,25,300,300,32.05,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,""
 ```
 
 **Plaatsing & bestandsnaam regels:**

@@ -53,6 +53,8 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     size_t length = plane.length;
     APP_LOG_INFO("Plane 0: fd=" + std::to_string(fd) + ", length=" + std::to_string(length));
 
+    auto start_time_process_frame_buffer = std::chrono::high_resolution_clock::now();
+
     // Determine expected bytes per pixel based on the actual format
     size_t expected_bytes_per_pixel = 0;
     if (actual_format == libcamera::formats::YUYV) {
@@ -67,13 +69,15 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     size_t expected_payload_size = cfg.size.width * cfg.size.height * expected_bytes_per_pixel;
 
     // 1. Acquire a buffer from the pool.
+    auto start_time_acquire_buffer = std::chrono::high_resolution_clock::now();
     APP_LOG_INFO("Acquiring buffer from pool...");
     auto pooled_buffer = buffer_pool->acquire();
     if (!pooled_buffer) {
         APP_LOG_WARNING(std::string(stream_name) + " failed to acquire a buffer. Dropping frame.");
         return false;
     }
-    APP_LOG_INFO("Buffer acquired.");
+    auto end_time_acquire_buffer = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("Time to acquire buffer: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_time_acquire_buffer - start_time_acquire_buffer).count()) + " us");
 
     if (expected_payload_size > pooled_buffer->data.capacity()) {
         APP_LOG_ERROR(std::string(stream_name) + " Expected frame size (" + std::to_string(expected_payload_size) +
@@ -82,6 +86,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     }
     
     // 2. Mmap and copy the frame data.
+    auto start_time_mmap_copy = std::chrono::high_resolution_clock::now();
     APP_LOG_INFO("Mmapping plane buffer...");
     void* mmap_ptr = mmap(NULL, length, PROT_READ, MAP_SHARED, fd, 0);
     if (mmap_ptr == MAP_FAILED) {
@@ -90,9 +95,6 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     }
     APP_LOG_INFO("Mmap successful. Copying data...");
     
-    // Timing for data copy
-    auto copy_start_time = std::chrono::high_resolution_clock::now();
-
     // Copying logic adapted for different pixel formats and stride.
     size_t bytes_per_line_src = cfg.stride;
     size_t bytes_per_line_dst = cfg.size.width * expected_bytes_per_pixel;
@@ -112,18 +114,22 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     pooled_buffer->size = expected_payload_size;
 
     auto copy_end_time = std::chrono::high_resolution_clock::now();
-    long long copy_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(copy_end_time - copy_start_time).count();
+    long long copy_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(copy_end_time - start_time_mmap_copy).count();
 
     munmap(mmap_ptr, length);
+    auto end_time_mmap_copy = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("Time for mmap and copy: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_time_mmap_copy - start_time_mmap_copy).count()) + " us");
     APP_LOG_INFO("Data copied. Pooled buffer size: " + std::to_string(pooled_buffer->size));
 
-    ImageData image_data{std::chrono::high_resolution_clock::time_point(std::chrono::milliseconds(call_ts_epoch_ms))}; // Use call_ts_epoch_ms for ImageData constructor
+    // Construct ImageData directly with the new constructor
+    ImageData image_data(call_ts_epoch_ms, frame_id); // Pass frame_id as well
     image_data.width = cfg.size.width;
     image_data.height = cfg.size.height;
     image_data.buffer = std::move(pooled_buffer);
     image_data.format = actual_format; // Store the actual format
 
     // 3. Conditional color conversion
+    auto start_time_color_conversion = std::chrono::high_resolution_clock::now();
     if (actual_format == libcamera::formats::BGR888 && actual_format != libcamera::formats::RGB888) { 
         // If BGR888 is received for TPU stream, convert to RGB.
         // This condition implies that libcamera might still output BGR even if RGB was requested.
@@ -140,9 +146,12 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     } else if (actual_format == libcamera::formats::YUYV) {
         APP_LOG_INFO("YUYV stream, no color conversion needed (assuming H264 takes YUYV).");
     }
+    auto end_time_color_conversion = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("Time for color conversion: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_time_color_conversion - start_time_color_conversion).count()) + " us");
 
 
     // 4. Resize if necessary.
+    auto start_time_resize = std::chrono::high_resolution_clock::now();
     // This resizing path currently creates cv::Mat from the buffer.
     // If the input format is YUYV, cv::resize might need special handling
     // or a conversion to BGR/RGB before resizing and then back.
@@ -211,8 +220,14 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     } else {
         APP_LOG_INFO("Image already target size. No resize needed.");
     }
+    auto end_time_resize = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("Time for resizing: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_time_resize - start_time_resize).count()) + " us");
+
 
     // 5. Push data to the queue.
+
+    // 5. Push data to the queue.
+    auto start_time_queue_push = std::chrono::high_resolution_clock::now();
     APP_LOG_INFO("Pushing " + std::string(stream_name) + " to queue. Final dimensions: " +
               std::to_string(image_data.width) + "x" + std::to_string(image_data.height) + 
               " format: " + pixelFormatToString(image_data.format));
@@ -222,21 +237,26 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
         image_data.buffer.reset(); 
         return false; // Indicate that the frame was dropped
     }
+    auto end_time_queue_push = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("Time for queue push: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_time_queue_push - start_time_queue_push).count()) + " us");
     APP_LOG_INFO("Push successful.");
 
     // Log the CSV entry for this processed frame
-    std::stringstream custom_metrics_stream;
-    custom_metrics_stream << "{\"frame_id\":" << frame_id
-                   << ", \"width\":" << cfg.size.width
-                   << ", \"height\":" << cfg.size.height
-                   << ", \"exposure_ms\":" << exposure_ms
-                   << ", \"copy_time_ms\":" << copy_time_ms
-                   << "}";
+    CsvLogEntry entry;
+    entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    entry.module = "CameraCapture";
+    entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    entry.event = (std::string(stream_name) == "Main Video Stream" ? "main_frame_processed" : "tpu_frame_processed");
+    entry.call_ts_epoch_ms = call_ts_epoch_ms;
+    entry.camera_frame_id = frame_id;
+    entry.camera_width = cfg.size.width;
+    entry.camera_height = cfg.size.height;
+    entry.camera_exposure_ms = static_cast<float>(exposure_ms); // Cast to float
+    entry.camera_copy_time_ms = static_cast<float>(copy_time_ms); // Cast to float
+    Logger::getInstance().log_csv(entry);
 
-    APP_LOG_CSV("CameraCapture", // Module name is always CameraCapture for this function
-                (std::string(stream_name) == "Main Video Stream" ? "main_frame_processed" : "tpu_frame_processed"), // Event name based on stream
-                call_ts_epoch_ms,
-                custom_metrics_stream.str());
+    auto end_time_process_frame_buffer = std::chrono::high_resolution_clock::now();
+    APP_LOG_DEBUG("Total time for process_frame_buffer: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_time_process_frame_buffer - start_time_process_frame_buffer).count()) + " us");
 
     return true;
 }
@@ -247,7 +267,7 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
                              unsigned int target_tpu_width, unsigned int target_tpu_height,
                              std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
                              std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
-                             ImageQueue& tpu_output_queue,
+                             ImageQueue& image_processor_input_queue, // New parameter
                              std::chrono::seconds watchdog_timeout)
     : width_(main_width),
       height_(main_height),
@@ -256,7 +276,7 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
       target_tpu_width_(target_tpu_width),
       target_tpu_height_(target_tpu_height),
       main_output_queues_(main_output_queues),
-      tpu_output_queue_(tpu_output_queue),
+      image_processor_input_queue_(image_processor_input_queue), // New initializer
       image_buffer_pool_(image_buffer_pool),
       watchdog_timeout_(watchdog_timeout),
       camera_manager_(std::make_unique<libcamera::CameraManager>()), // Initialize here
@@ -363,6 +383,8 @@ bool CameraCapture::start() {
     APP_LOG_INFO("Libcamera camera started.");
 
     running_ = true;
+    processing_running_ = true; // Set new flag for processing thread
+    request_processor_thread_ = std::thread(&CameraCapture::request_processor_thread_func, this);
     
     // 5. Queue initial requests
     frame_count_ = 0;
@@ -383,10 +405,17 @@ bool CameraCapture::start() {
 
 void CameraCapture::stop() {
     // 1. Signal shutdown to threads
-    if (!running_.exchange(false)) {
+    if (!running_.exchange(false)) { // Signal main thread to stop
         return;
     }
     APP_LOG_INFO("Stopping CameraCapture...");
+
+    processing_running_ = false; // Signal processing thread to stop
+    request_queue_cond_var_.notify_one(); // Wake up processing thread
+
+    if (request_processor_thread_.joinable()) {
+        request_processor_thread_.join(); // Wait for processing thread to finish
+    }
 
     if (camera_) {
         // 3. CRITICAL: Disconnect the callback first.
@@ -574,140 +603,47 @@ bool CameraCapture::setup_camera() {
 }
 
 void CameraCapture::request_complete_callback(libcamera::Request* request) {
-    long long produced_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              std::chrono::system_clock::now().time_since_epoch()).count();
-
     APP_LOG_INFO("CameraCapture: request_complete_callback invoked.");
-    if (!running_) {
+    // If the main CameraCapture is stopping, or processing thread is stopping, just re-queue and return.
+    // The processing_running_ flag controls the processing thread.
+    if (!running_.load() || !processing_running_.load()) {
+        if (request->status() != libcamera::Request::RequestCancelled) {
+            request->reuse(libcamera::Request::ReuseBuffers);
+            if (camera_ && camera_->queueRequest(request)) {
+                APP_LOG_ERROR("Failed to re-queue request during CameraCapture shutdown.");
+            }
+        }
         return;
     }
 
     if (request->status() == libcamera::Request::RequestCancelled) {
         APP_LOG_DEBUG("CameraCapture: Request cancelled (likely flushing).");
+        request->reuse(libcamera::Request::ReuseBuffers); 
+        if (camera_ && camera_->queueRequest(request)) {
+            APP_LOG_ERROR("Failed to re-queue cancelled request.");
+        }
         return;
     }
     
     if (request->status() != libcamera::Request::RequestComplete) {
         APP_LOG_ERROR("CameraCapture: Request failed with status: " + std::to_string(request->status()));
-        // Allow requeueing even on failure to recover
+        request->reuse(libcamera::Request::ReuseBuffers); 
+        if (camera_ && camera_->queueRequest(request)) {
+            APP_LOG_ERROR("Failed to re-queue failed request.");
+        }
+        return;
     }
 
-        // Get the hardware capture timestamp from the request metadata
-
-        long long call_ts = 0;
-
-        auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
-
-        if (md_timestamp) {
-
-            // The timestamp is in nanoseconds, convert to milliseconds
-
-            call_ts = *md_timestamp / 1000000;
-
-        } else {
-
-            APP_LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
-
-            call_ts = produced_ts;
-
-        }
-
-        
-
-        // NEW: Extract frame_id and exposure_ms
-
-        long long frame_id = request->sequence();
-
-    
-
-        long long exposure_ms = 0;
-
-        auto md_exposure_us = request->metadata().get(libcamera::controls::ExposureTime);
-
-        if (md_exposure_us) {
-
-            exposure_ms = *md_exposure_us / 1000; // Convert microseconds to milliseconds
-
-        }
-
-    
-
-        // --- PROCESSING START ---
-
-        auto processing_start_time = std::chrono::high_resolution_clock::now();
-
-        
-
-        // Capture buffer map BEFORE calling reuse()
-
-        libcamera::Request::BufferMap captured_buffers = request->buffers();
-
-    
-
-        // Process Main Video Stream (only if there's a consumer queue)
-
-        if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
-
-            const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
-
-            const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
-
-            
-
-            process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, call_ts, video_stream_->configuration().pixelFormat, frame_id, exposure_ms);
-
-        } else if (captured_buffers.count(video_stream_)) {
-
-            APP_LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
-
-        } else {
-
-            APP_LOG_WARNING("CameraCapture: Video stream buffer missing from completed request.");
-
-        }
-
-    
-
-        // Process TPU Stream
-
-        if (captured_buffers.count(tpu_stream_)) {
-
-            const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
-
-            const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
-
-            
-
-            process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, call_ts, tpu_stream_->configuration().pixelFormat, frame_id, exposure_ms);
-
-        } else {
-
-            APP_LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
-
-        }
-    
-    // --- PERFORMANCE METRICS ---
-    auto processing_end_time = std::chrono::high_resolution_clock::now();
-    long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(processing_end_time - processing_start_time).count();
+    // Enqueue the request for processing by the dedicated thread
     {
-        std::lock_guard<std::mutex> lock(frame_latencies_mutex_);
-        frame_latencies_ms_.push_back(duration_ms);
-        total_frames_processed_++;
+        std::lock_guard<std::mutex> lock(request_queue_mutex_);
+        request_queue_.push(request);
     }
-    
-    // --- REQUEUE ---
-    // CRITICAL FIX: Use ReuseBuffers flag for efficient buffer recycling.
-    // This preserves the buffers attached to the request, avoiding the need to
-    // manually call request->addBuffer() again, which would crash.
-    request->reuse(libcamera::Request::ReuseBuffers); 
+    request_queue_cond_var_.notify_one(); // Notify the processing thread
+    APP_LOG_DEBUG("CameraCapture: Request enqueued for processing.");
 
-    // Requeue only if still running
-    if (running_) {
-        if (camera_->queueRequest(request)) {
-            APP_LOG_ERROR("Failed to re-queue request. Stopping capture.");
-            stop();
-        }
-    }
+    // IMPORTANT: Do NOT call request->reuse() or queueRequest() here.
+    // That will be handled by the request_processor_thread_func after processing.
 }
 
 void CameraCapture::get_performance_metrics() {
@@ -740,24 +676,29 @@ void CameraCapture::get_performance_metrics() {
     long long p95_latency_ms = frame_latencies_ms_[std::min(percentile_95_index, static_cast<size_t>(total_frames_processed_ - 1))];
     long long p50_latency_ms = frame_latencies_ms_[std::min(percentile_50_index, static_cast<size_t>(total_frames_processed_ - 1))];
 
-    std::ostringstream json_metrics;
-    json_metrics << "{\"p50_latency_ms\":" << std::fixed << std::setprecision(3) << static_cast<double>(p50_latency_ms)
-                 << ",\"p95_latency_ms\":" << static_cast<double>(p95_latency_ms)
-                 << ",\"p99_latency_ms\":" << static_cast<double>(p99_latency_ms)
-                 << ",\"average_fps\":" << average_fps
-                 << ",\"total_frames_processed\":" << total_frames_processed_
-                 << ",\"average_latency_ms\":" << average_latency_ms
-                 << "}";
+    // Populate the new CsvLogEntry fields directly
+    CsvLogEntry entry; // Declare entry here
+    entry.p50_latency_ms = static_cast<float>(p50_latency_ms);
+    entry.p95_latency_ms = static_cast<float>(p95_latency_ms);
+    entry.p99_latency_ms = static_cast<float>(p99_latency_ms);
+    entry.average_fps = static_cast<float>(average_fps);
+    entry.total_frames_processed_or_inferences = total_frames_processed_;
+    entry.average_latency_ms = static_cast<float>(average_latency_ms);
+    // Clear details field as it is now structured
+    entry.details = "";
 
-    long long current_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  std::chrono::system_clock::now().time_since_epoch()).count();
-    APP_LOG_CSV("CameraCapture", "PerformanceMetrics", current_time_ms, json_metrics.str());
-    APP_LOG_DEBUG("--- CameraCapture Performance Metrics (Frame Latency) ---");
-    APP_LOG_DEBUG("  Total Frames Processed: " + std::to_string(total_frames_processed_));
-    APP_LOG_DEBUG("  Average FPS: " + std::to_string(average_fps));
-    APP_LOG_DEBUG("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
-    APP_LOG_DEBUG("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
-    APP_LOG_DEBUG("  95th Percentile Latency: " + std.to_string(p95_latency_ms) + " ms");
+    Logger::getInstance().log_csv(entry);
+    std::string header_msg = "--- CameraCapture Performance Metrics (Frame Latency) ---";
+    APP_LOG_DEBUG(header_msg);
+    std::string total_frames_msg = "  Total Frames Processed: " + std::to_string(total_frames_processed_);
+    APP_LOG_DEBUG(total_frames_msg);
+    std::string average_fps_msg = "  Average FPS: " + std::to_string(average_fps);
+    APP_LOG_DEBUG(average_fps_msg);
+    std::string average_latency_msg = "  Average Latency: " + std::to_string(average_latency_ms) + " ms";
+    APP_LOG_DEBUG(average_latency_msg);
+    std::string p50_latency_msg = "  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms";
+    APP_LOG_DEBUG(p50_latency_msg);
+    APP_LOG_DEBUG("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
     APP_LOG_DEBUG("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
     APP_LOG_DEBUG("---------------------------------------------------------");
 
@@ -771,4 +712,201 @@ bool CameraCapture::init_video_encoder() {
     // For now, we'll just log that it's initialized.
     APP_LOG_INFO("H.264 encoder initialized (placeholder).");
     return true;
+}
+
+// This function will be placed in src/camera_capture.cpp
+bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* fb,
+                                                 const libcamera::StreamConfiguration& cfg,
+                                                 long long call_ts_epoch_ms,
+                                                 long long frame_id,
+                                                 long long exposure_ms) {
+    if (fb->planes().empty()) {
+        APP_LOG_ERROR("TPU raw FrameBuffer has no planes.");
+        return false;
+    }
+
+    const libcamera::FrameBuffer::Plane& plane = fb->planes()[0];
+    int fd = plane.fd.get();
+    size_t length = plane.length;
+
+    // 1. Acquire a buffer from the pool.
+    auto pooled_buffer = image_buffer_pool_->acquire();
+    if (!pooled_buffer) {
+        APP_LOG_WARNING("Failed to acquire a buffer for raw TPU frame. Dropping frame.");
+        return false;
+    }
+
+    // This should handle YUYV, RGB888, BGR888, RGBA8888, BGRA8888 formats from libcamera
+    size_t expected_bytes_per_pixel = 0;
+    if (cfg.pixelFormat == libcamera::formats::YUYV) {
+        expected_bytes_per_pixel = 2; // YUYV (YUV 4:2:2) is 2 bytes per pixel
+    } else if (cfg.pixelFormat == libcamera::formats::RGB888 || cfg.pixelFormat == libcamera::formats::BGR888) {
+        expected_bytes_per_pixel = 3; // RGB888/BGR888 is 3 bytes per pixel
+    } else if (cfg.pixelFormat == libcamera::formats::RGBA8888 || cfg.pixelFormat == libcamera::formats::BGRA8888) {
+        expected_bytes_per_pixel = 4; // RGBA8888/BGRA8888 is 4 bytes per pixel
+    } else {
+        {
+        std::stringstream ss;
+        ss << "Unsupported pixel format " << cfg.pixelFormat.toString().c_str() << " for raw TPU processing.";
+        APP_LOG_ERROR(ss.str());
+    }
+        // Release the acquired buffer before returning false
+        pooled_buffer.reset();
+        return false;
+    }
+    size_t expected_payload_size = cfg.size.width * cfg.size.height * expected_bytes_per_pixel;
+
+    if (expected_payload_size > pooled_buffer->data.capacity()) {
+            {
+                std::stringstream ss;
+                ss << "Expected raw TPU frame size (" << expected_payload_size << ") exceeds buffer pool capacity (" << pooled_buffer->data.capacity() << "). Dropping frame.";
+                APP_LOG_ERROR(ss.str());
+            }        // Release the acquired buffer before returning false
+        pooled_buffer.reset();
+        return false;
+    }
+
+    // 2. Mmap and copy the frame data.
+    void* mmap_ptr = mmap(NULL, length, PROT_READ, MAP_SHARED, fd, 0);
+    if (mmap_ptr == MAP_FAILED) {
+        {
+        std::stringstream ss;
+        ss << "Failed to mmap raw TPU plane buffer: " << strerror(errno);
+        APP_LOG_ERROR(ss.str());
+    }
+        // Release the acquired buffer before returning false
+        pooled_buffer.reset();
+        return false;
+    }
+
+    size_t bytes_per_line_src = cfg.stride;
+    size_t bytes_per_line_dst = cfg.size.width * expected_bytes_per_pixel;
+    
+    uint8_t* dst = pooled_buffer->data.data();
+    uint8_t* src = static_cast<uint8_t*>(mmap_ptr);
+
+    if (bytes_per_line_src == bytes_per_line_dst) { // No padding per line, copy in one go
+        std::memcpy(dst, src, expected_payload_size);
+    } else { // Padding exists, copy line by line
+        for (unsigned int i = 0; i < cfg.size.height; i++) {
+            std::memcpy(dst, src, bytes_per_line_dst);
+            dst += bytes_per_line_dst;
+            src += bytes_per_line_src;
+        }
+    }
+    pooled_buffer->size = expected_payload_size;
+
+    munmap(mmap_ptr, length);
+    
+    // Construct ImageData directly with the new constructor
+    ImageData image_data(call_ts_epoch_ms, frame_id);
+    image_data.width = cfg.size.width;
+    image_data.height = cfg.size.height;
+    image_data.buffer = std::move(pooled_buffer);
+    image_data.format = cfg.pixelFormat;
+    // frame_id is now set via constructor
+
+    if (!image_processor_input_queue_.push(std::move(image_data))) {
+        APP_LOG_WARNING("ImageProcessor input queue is full for raw TPU frame. Dropping frame and returning buffer to pool.");
+        image_data.buffer.reset();
+        return false;
+    }
+    {
+        std::stringstream ss;
+        ss << "Pushed raw TPU frame " << frame_id << " to ImageProcessor queue. Dimensions: " << image_data.width << "x" << image_data.height << ", format: " << image_data.format.toString().c_str();
+        APP_LOG_DEBUG(ss.str());
+    }
+
+    return true;
+}
+
+void CameraCapture::request_processor_thread_func() {
+    APP_LOG_INFO("CameraCapture: Request processor thread started.");
+    while (processing_running_.load()) {
+        std::unique_lock<std::mutex> lock(request_queue_mutex_);
+        request_queue_cond_var_.wait(lock, [this] { 
+            return !request_queue_.empty() || !processing_running_.load(); 
+        });
+
+        if (!processing_running_.load() && request_queue_.empty()) {
+            break; // Exit if shutting down and queue is empty
+        }
+
+        if (request_queue_.empty()) {
+            continue; // Spurious wakeup, wait again
+        }
+
+        libcamera::Request* request = request_queue_.front();
+        request_queue_.pop();
+        lock.unlock(); // Release lock before processing
+
+        // --- Actual processing of the frame ---
+        long long produced_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::system_clock::now().time_since_epoch()).count();
+        long long monotonic_raw_now_ns = Logger::getInstance().get_raw_monotonic_time_ns();
+
+        // Calculate the offset between CLOCK_REALTIME (epoch UTC) and CLOCK_MONOTONIC_RAW (nanoseconds since boot)
+        long long epoch_offset_ms = produced_ts - (monotonic_raw_now_ns / 1000000);
+
+        long long call_ts = 0;
+        auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
+        if (md_timestamp) {
+            call_ts = (*md_timestamp / 1000000) + epoch_offset_ms;
+            APP_LOG_DEBUG("SensorTimestamp (ns): " + std::to_string(*md_timestamp) + ", converted call_ts (epoch ms): " + std::to_string(call_ts));
+        } else {
+            APP_LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
+            call_ts = produced_ts;
+        }
+        
+        long long frame_id = request->sequence();
+
+        long long exposure_ms = 0;
+        auto md_exposure_us = request->metadata().get(libcamera::controls::ExposureTime);
+        if (md_exposure_us) {
+            exposure_ms = *md_exposure_us / 1000; // Convert microseconds to milliseconds
+            APP_LOG_DEBUG("ExposureTime (us): " + std::to_string(*md_exposure_us) + ", converted exposure_ms: " + std::to_string(exposure_ms));
+        } else {
+            APP_LOG_DEBUG("CameraCapture: ExposureTime not found in request metadata.");
+        }
+
+        auto processing_start_time = std::chrono::high_resolution_clock::now();
+        libcamera::Request::BufferMap captured_buffers = request->buffers();
+
+        if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
+            const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
+            const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
+            process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, call_ts, video_stream_->configuration().pixelFormat, frame_id, exposure_ms);
+        } else if (captured_buffers.count(video_stream_)) {
+            APP_LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
+        } else {
+            APP_LOG_WARNING("CameraCapture: Video stream buffer missing from completed request.");
+        }
+
+        if (captured_buffers.count(tpu_stream_)) {
+            const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
+            const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
+            this->process_tpu_raw_frame_buffer(tpu_fb, tpu_cfg, call_ts, frame_id, exposure_ms);
+        } else {
+            APP_LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
+        }
+    
+        // --- PERFORMANCE METRICS ---
+        auto processing_end_time = std::chrono::high_resolution_clock::now();
+        long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(processing_end_time - processing_start_time).count();
+        {
+            std::lock_guard<std::mutex> perf_lock(frame_latencies_mutex_);
+            frame_latencies_ms_.push_back(duration_ms);
+            total_frames_processed_++;
+        }
+
+        // --- REQUEUE ---
+        request->reuse(libcamera::Request::ReuseBuffers); 
+        if (running_.load()) { // Check main running_ flag for libcamera interaction
+            if (camera_->queueRequest(request)) {
+                APP_LOG_ERROR("Failed to re-queue request from processor thread. Stopping capture.");
+                running_ = false; // Set main running flag to false
+            }
+        }
+    }
+    APP_LOG_INFO("CameraCapture: Request processor thread stopped.");
 }

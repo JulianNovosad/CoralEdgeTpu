@@ -44,6 +44,27 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 
     // --- Module Creation ---
     try {
+        unsigned int inf_w = config_loader_.get_tpu_target_width();
+        unsigned int inf_h = config_loader_.get_tpu_target_height();
+
+        main_image_output_queues_.push_back(overlaid_video_queue_); 
+        
+        APP_LOG_INFO("Creating CameraCapture...");
+        // Pass raw_image_for_processor_queue_ as the output for TPU frames
+        primary_camera_ = std::make_unique<CameraCapture>(
+            cam_w, cam_h, // Main stream width/height
+            config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
+            config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
+            image_pool_, main_image_output_queues_, raw_image_for_processor_queue_, camera_watchdog_timeout);
+        APP_LOG_INFO("CameraCapture created.");
+
+        APP_LOG_INFO("Creating ImageProcessor...");
+        image_processor_ = std::make_unique<ImageProcessor>(
+            raw_image_for_processor_queue_, tpu_inference_queue_, image_pool_,
+            config_loader_.get_tpu_stream_pixel_format(), // Pass configured format
+            inf_w, inf_h); // Pass target width/height
+        APP_LOG_INFO("ImageProcessor created.");
+
         APP_LOG_INFO("Creating InferenceEngine...");
         inference_engine_ = std::make_unique<InferenceEngine>(
             model_path, tpu_inference_queue_, detection_results_for_overlay_queue_, 
@@ -52,14 +73,17 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             config_loader_.get_inference_worker_threads());
         APP_LOG_INFO("InferenceEngine created.");
         
-        unsigned int inf_w = inference_engine_->get_input_width();
-        unsigned int inf_h = inference_engine_->get_input_height();
-
-        main_image_output_queues_.push_back(overlaid_video_queue_); 
-        
-        APP_LOG_INFO("Creating CameraCapture...");
-        primary_camera_ = std::make_unique<CameraCapture>(cam_w, cam_h, inf_w, inf_h, inf_w, inf_h, image_pool_, main_image_output_queues_, tpu_inference_queue_, camera_watchdog_timeout);
-        APP_LOG_INFO("CameraCapture created.");
+        // Assert that InferenceEngine's actual input dimensions match the configured target.
+        // This is a sanity check to ensure the model matches configuration.
+        if (static_cast<unsigned int>(inference_engine_->get_input_width()) != inf_w || static_cast<unsigned int>(inference_engine_->get_input_height()) != inf_h) {
+             {
+                 std::stringstream ss;
+                 ss << "InferenceEngine input dimensions (" << inference_engine_->get_input_width() << "x" << inference_engine_->get_input_height()
+                    << ") from model do not match configured TPU target dimensions (" << inf_w << "x" << inf_h << "). This will cause errors.";
+                 APP_LOG_ERROR(ss.str());
+             }
+             return false;
+        }
 
         APP_LOG_INFO("Creating OrientationSensor...");
         orientation_sensor_ = std::make_shared<OrientationSensor>(config_loader_.get_phone_orientation_yaw_port(), config_loader_.get_phone_orientation_pitch_port(), config_loader_.get_phone_orientation_roll_port());
@@ -88,6 +112,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 bool Application::start_modules() {
     APP_LOG_INFO("Starting all modules...");
     bool start_ok = true;
+    start_ok &= image_processor_->start(); // Start ImageProcessor first
     start_ok &= inference_engine_->start();
     start_ok &= primary_camera_->start();
     start_ok &= orientation_sensor_->start();
@@ -102,6 +127,7 @@ bool Application::start_modules() {
         if (orientation_sensor_->is_running()) orientation_sensor_->stop();
         if (primary_camera_->is_running()) primary_camera_->stop();
         if (h264_encoder_->is_running()) h264_encoder_->stop(); // Stop the H264 encoder
+        if (image_processor_->is_running()) image_processor_->stop(); // Stop ImageProcessor
         if (inference_engine_->is_running()) inference_engine_->stop();
         return false;
     }
@@ -115,6 +141,7 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("OrientationSensor", [&]() { orientation_sensor_->stop(); });
     supervisor_.register_module_stop("CameraCapture", [&]() { primary_camera_->stop(); });
     supervisor_.register_module_stop("H264Encoder", [&]() { h264_encoder_->stop(); }); // Register H264 encoder for shutdown
+    supervisor_.register_module_stop("ImageProcessor", [&]() { image_processor_->stop(); }); // Register ImageProcessor for shutdown
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
 }
 
