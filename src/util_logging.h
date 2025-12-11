@@ -45,22 +45,7 @@ class CsvLogger;
 // Function to set thread name (for easier debugging)
 void set_thread_name(const std::string& name);
 
-// --- Global Logging Macros for Convenience ---
 
-/// @brief Logs an informational message.
-#define APP_LOG_INFO(msg) Logger::getInstance().log("INFO", msg)
-/// @brief Logs a warning message.
-#define APP_LOG_WARNING(msg) Logger::getInstance().log("WARNING", msg)
-/// @brief Logs an error message.
-#define APP_LOG_ERROR(msg) Logger::getInstance().log("ERROR", msg)
-#ifdef DEBUG_MODE
-/// @brief Logs a debug message.
-#define APP_LOG_DEBUG(msg) Logger::getInstance().log("DEBUG", msg)
-#else
-#define APP_LOG_DEBUG(msg) (void)0 // No-op in release mode
-#endif
-/// @brief Logs a structured JSON message.
-#define APP_LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
 
 
 

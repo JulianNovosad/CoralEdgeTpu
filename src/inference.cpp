@@ -249,6 +249,11 @@ void InferenceEngine::worker_thread_func() {
 }
 
 void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const ImageData& image) {
+    if (!image.buffer) {
+        APP_LOG_ERROR("InferenceEngine::set_input_tensor received an ImageData with a null buffer. Skipping frame.");
+        return;
+    }
+
     int input_tensor_idx = interpreter->inputs()[0];
     TfLiteTensor* input_tensor = interpreter->tensor(input_tensor_idx);
 
@@ -258,6 +263,25 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
     }
 
     uint8_t* tensor_data = interpreter->typed_input_tensor<uint8_t>(0);
+
+    // Validate buffer sizes before memcpy
+    size_t expected_tensor_size = input_tensor->bytes;
+    size_t image_buffer_actual_size = image.buffer->data.size(); // Use .data.size() for actual vector size
+
+    if (image_buffer_actual_size != expected_tensor_size) {
+        APP_LOG_ERROR("Mismatch in input tensor size (" + std::to_string(expected_tensor_size) + 
+                      " bytes) and image buffer size (" + std::to_string(image_buffer_actual_size) + 
+                      " bytes). Skipping frame to prevent memcpy crash.");
+        return;
+    }
+    if (image.buffer->size != expected_tensor_size) {
+        APP_LOG_ERROR("Mismatch in input tensor size (" + std::to_string(expected_tensor_size) + 
+                      " bytes) and image.buffer->size (" + std::to_string(image.buffer->size) + 
+                      " bytes). This indicates an internal buffer management issue. Skipping frame.");
+        return;
+    }
+
+    APP_LOG_DEBUG("Copying " + std::to_string(image.buffer->size) + " bytes from image buffer to input tensor.");
     memcpy(tensor_data, image.buffer->data.data(), image.buffer->size);
 }
 
@@ -342,6 +366,9 @@ void InferenceEngine::get_performance_metrics() {
     entry.average_fps = static_cast<float>(average_fps);
     entry.total_frames_processed_or_inferences = total_inferences_;
     entry.average_latency_ms = static_cast<float>(average_duration_ms);
+    // Set module and event for CsvLogger
+    copy_to_array(entry.module, "InferenceEngine");
+    copy_to_array(entry.event, "PerformanceMetrics");
     // Clear details field as it is now structured
     copy_to_array(entry.details, "");
     // Preserve other specific metrics for the InferenceEngine module

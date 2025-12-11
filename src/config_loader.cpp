@@ -151,6 +151,7 @@ libcamera::PixelFormat ConfigLoader::get_tpu_stream_pixel_format() const {
     if (format_str == "RGB888") return libcamera::formats::RGB888;
     if (format_str == "BGRA8888") return libcamera::formats::BGRA8888;
     if (format_str == "RGBA8888") return libcamera::formats::RGBA8888;
+    if (format_str == "YUYV") return libcamera::formats::YUYV;
     // Add other formats as needed
     {
         std::stringstream ss;

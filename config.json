@@ -39,6 +39,11 @@
     "camera_fps": 120.0,
     "detection_score_threshold": 0.5,
     "log_path": "/home/pi/CoralEdgeTpu/logs",
+    "tpu_stream": {
+      "width": 300,
+      "height": 300,
+      "pixel_format": "YUYV"
+    },
     "video_stream": {
       "protocol": "RTP",
       "address": "10.17.49.122",
