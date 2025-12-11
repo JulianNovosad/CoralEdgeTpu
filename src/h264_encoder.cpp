@@ -234,7 +234,7 @@ void H264Encoder::worker_thread_func() {
             
             std::stringstream custom_metrics;
             custom_metrics << "{\"encode_ms\":" << duration_ms << "}";
-            APP_LOG_CSV("encoder", "encode_done", call_ts, custom_metrics.str());
+            APP_LOG_CSV("H264Encoder", "encode_done", call_ts, custom_metrics.str());
 
             {
                 std::lock_guard<std::mutex> lock(encoding_times_mutex_);

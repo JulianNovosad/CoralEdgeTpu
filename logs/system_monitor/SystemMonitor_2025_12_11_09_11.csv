@@ -1,0 +1,12 @@
+produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data
+1765440674797,SystemMonitor,2002139212938216817,sysmon_metrics,1765440674794,{"cpu_temp_c":36.95, "cpu_usage_percent":11.29, "mem_usage_percent":61.88}
+1765440679800,SystemMonitor,2002139212938216817,sysmon_metrics,1765440679797,{"cpu_temp_c":42.45, "cpu_usage_percent":40.65, "mem_usage_percent":62.11}
+1765440679931,SystemMonitor,-9018811509794563686,PerformanceMetrics,0,{"cpu_usage":40.00,"cpu_temp":41.90,"memory_usage_percent":62.11}
+1765440684875,SystemMonitor,2002139212938216817,sysmon_metrics,1765440684872,{"cpu_temp_c":42.45, "cpu_usage_percent":39.34, "mem_usage_percent":62.12}
+1765440685065,SystemMonitor,-9018811509794563686,PerformanceMetrics,0,{"cpu_usage":26.67,"cpu_temp":42.45,"memory_usage_percent":62.12}
+1765440690005,SystemMonitor,-9018811509794563686,PerformanceMetrics,0,{"cpu_usage":44.09,"cpu_temp":45.20,"memory_usage_percent":62.14}
+1765440690066,SystemMonitor,2002139212938216817,sysmon_metrics,1765440690063,{"cpu_temp_c":44.65, "cpu_usage_percent":52.00, "mem_usage_percent":62.14}
+1765440695035,SystemMonitor,-9018811509794563686,PerformanceMetrics,0,{"cpu_usage":43.67,"cpu_temp":45.75,"memory_usage_percent":62.14}
+1765440695073,SystemMonitor,2002139212938216817,sysmon_metrics,1765440695070,{"cpu_temp_c":45.75, "cpu_usage_percent":35.71, "mem_usage_percent":62.14}
+1765440700053,SystemMonitor,-9018811509794563686,PerformanceMetrics,0,{"cpu_usage":39.51,"cpu_temp":45.75,"memory_usage_percent":62.15}
+1765440700076,SystemMonitor,2002139212938216817,sysmon_metrics,1765440700073,{"cpu_temp_c":45.20, "cpu_usage_percent":50.00, "mem_usage_percent":62.15}

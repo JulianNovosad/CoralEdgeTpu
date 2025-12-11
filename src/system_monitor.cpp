@@ -52,7 +52,7 @@ void SystemMonitor::worker_thread_func() {
                             << ", \"cpu_usage_percent\":" << cpu_usage
                             << ", \"mem_usage_percent\":" << memory_usage_percent
                             << "}";
-        APP_LOG_CSV("sysmon", "sysmon_metrics", call_ts, json_metrics_worker.str());
+        APP_LOG_CSV("SystemMonitor", "sysmon_metrics", call_ts, json_metrics_worker.str());
 
         std::this_thread::sleep_for(interval_s_);
     }

@@ -1,6 +1,0 @@
-produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data
-1765434643494,H264Encoder,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":8.000,"p95_latency_ms":11.000,"p99_latency_ms":15.000,"average_fps":124.601,"total_encoded_frames":78,"average_latency_ms":8.026}
-1765434648507,H264Encoder,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":8.000,"p95_latency_ms":16.000,"p99_latency_ms":16.000,"average_fps":117.347,"total_encoded_frames":23,"average_latency_ms":8.522}
-1765434653522,H264Encoder,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":7.000,"p95_latency_ms":9.000,"p99_latency_ms":9.000,"average_fps":135.135,"total_encoded_frames":5,"average_latency_ms":7.400}
-1765434658528,H264Encoder,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":8.000,"p95_latency_ms":8.000,"p99_latency_ms":8.000,"average_fps":131.579,"total_encoded_frames":5,"average_latency_ms":7.600}
-1765434663535,H264Encoder,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":7.000,"p95_latency_ms":7.000,"p99_latency_ms":7.000,"average_fps":142.857,"total_encoded_frames":5,"average_latency_ms":7.000}

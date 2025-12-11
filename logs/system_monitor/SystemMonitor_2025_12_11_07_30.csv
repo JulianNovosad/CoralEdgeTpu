@@ -1,6 +1,0 @@
-produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data
-1765434643485,SystemMonitor,-5306587759493946272,PerformanceMetrics,0,{"cpu_usage":38.30,"cpu_temp":45.20,"memory_usage_percent":52.50}
-1765434648507,SystemMonitor,-5306587759493946272,PerformanceMetrics,0,{"cpu_usage":29.63,"cpu_temp":44.65,"memory_usage_percent":52.50}
-1765434653522,SystemMonitor,-5306587759493946272,PerformanceMetrics,0,{"cpu_usage":29.31,"cpu_temp":45.20,"memory_usage_percent":52.50}
-1765434658528,SystemMonitor,-5306587759493946272,PerformanceMetrics,0,{"cpu_usage":30.00,"cpu_temp":45.75,"memory_usage_percent":52.50}
-1765434663534,SystemMonitor,-5306587759493946272,PerformanceMetrics,0,{"cpu_usage":29.51,"cpu_temp":46.85,"memory_usage_percent":52.52}

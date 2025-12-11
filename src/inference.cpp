@@ -158,6 +158,7 @@ void InferenceEngine::worker_thread_func() {
                                   input_image.timestamp.time_since_epoch()).count();
 
             set_input_tensor(interpreter.get(), input_image);
+            input_image.buffer.reset(); // Explicitly release the buffer here!
 
             auto inference_start_time = std::chrono::high_resolution_clock::now();
             if (interpreter->Invoke() != kTfLiteOk) {
@@ -169,7 +170,7 @@ void InferenceEngine::worker_thread_func() {
             
             std::stringstream custom_metrics;
             custom_metrics << "{\"inference_ms\":" << duration_ms << "}";
-            APP_LOG_CSV("tpu", "inference_done", call_ts, custom_metrics.str());
+            APP_LOG_CSV("InferenceEngine", "inference_done", call_ts, custom_metrics.str());
 
             {
                 std::lock_guard<std::mutex> lock(inference_times_mutex_);

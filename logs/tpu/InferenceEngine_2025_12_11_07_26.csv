@@ -1,3 +1,0 @@
-produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data
-1765434421124,InferenceEngine,5324545826530341144,PerformanceMetrics,0,{"p50_latency_ms":6.000,"p95_latency_ms":10.000,"p99_latency_ms":24.000,"average_fps":141.324,"std_dev_ms":2.282,"total_inferences":79}
-1765434426139,InferenceEngine,5324545826530341144,PerformanceMetrics,0,{"p50_latency_ms":6.000,"p95_latency_ms":10.000,"p99_latency_ms":11.000,"average_fps":155.440,"std_dev_ms":1.101,"total_inferences":60}

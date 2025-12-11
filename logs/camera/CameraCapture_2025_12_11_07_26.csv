@@ -1,6 +1,0 @@
-produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data
-1765434421124,CameraCapture,5324545826530341144,PerformanceMetrics,0,{"p50_latency_ms":2.000,"p95_latency_ms":7.000,"p99_latency_ms":9.000,"average_fps":360.731,"total_frames_processed":79,"average_latency_ms":2.772}
-1765434426139,CameraCapture,5324545826530341144,PerformanceMetrics,0,{"p50_latency_ms":5.000,"p95_latency_ms":3472838262656139264.000,"p99_latency_ms":1855425873312.000,"average_fps":334.940,"total_frames_processed":139,"average_latency_ms":2.986}
-1765434431147,CameraCapture,5324545826530341144,PerformanceMetrics,0,{"p50_latency_ms":5.000,"p95_latency_ms":0.000,"p99_latency_ms":7421703488427.000,"average_fps":139.442,"total_frames_processed":140,"average_latency_ms":7.171}
-1765434436153,CameraCapture,5324545826530341144,PerformanceMetrics,0,{"p50_latency_ms":5.000,"p95_latency_ms":0.000,"p99_latency_ms":7421703488427.000,"average_fps":inf,"total_frames_processed":140,"average_latency_ms":0.000}
-1765434441159,CameraCapture,5324545826530341144,PerformanceMetrics,0,{"p50_latency_ms":5.000,"p95_latency_ms":0.000,"p99_latency_ms":7421703488427.000,"average_fps":inf,"total_frames_processed":140,"average_latency_ms":0.000}
