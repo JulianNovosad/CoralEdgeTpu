@@ -44,21 +44,38 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 
     // --- Module Creation ---
     try {
+        APP_LOG_INFO("Creating InferenceEngine...");
         inference_engine_ = std::make_unique<InferenceEngine>(
             model_path, tpu_inference_queue_, detection_results_for_overlay_queue_, 
             detection_results_for_logic_queue_, detection_pool_, 
             config_loader_.get_detection_score_threshold(), 
             config_loader_.get_inference_worker_threads());
+        APP_LOG_INFO("InferenceEngine created.");
         
         unsigned int inf_w = inference_engine_->get_input_width();
         unsigned int inf_h = inference_engine_->get_input_height();
 
-        main_image_output_queues_.push_back(overlaid_video_queue_); // Main video stream to H264 encoder
+        main_image_output_queues_.push_back(overlaid_video_queue_); 
+        
+        APP_LOG_INFO("Creating CameraCapture...");
         primary_camera_ = std::make_unique<CameraCapture>(cam_w, cam_h, inf_w, inf_h, inf_w, inf_h, image_pool_, main_image_output_queues_, tpu_inference_queue_, camera_watchdog_timeout);
+        APP_LOG_INFO("CameraCapture created.");
+
+        APP_LOG_INFO("Creating OrientationSensor...");
         orientation_sensor_ = std::make_shared<OrientationSensor>(config_loader_.get_phone_orientation_yaw_port(), config_loader_.get_phone_orientation_pitch_port(), config_loader_.get_phone_orientation_roll_port());
+        APP_LOG_INFO("OrientationSensor created.");
+
+        APP_LOG_INFO("Creating LogicModule...");
         logic_module_ = std::make_unique<LogicModule>(detection_results_for_logic_queue_, orientation_sensor_, config_loader_);
+        APP_LOG_INFO("LogicModule created.");
+
+        APP_LOG_INFO("Creating SystemMonitor...");
         system_monitor_ = std::make_unique<SystemMonitor>();
+        APP_LOG_INFO("SystemMonitor created.");
+
+        APP_LOG_INFO("Creating H264Encoder...");
         h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
+        APP_LOG_INFO("H264Encoder created.");
 
     } catch (const std::exception& e) {
         APP_LOG_ERROR("Failed to initialize modules: " + std::string(e.what()));
@@ -127,6 +144,7 @@ int Application::run() {
         return 1;
     }
 
+    std::cerr << "Extracting logging configuration..." << std::endl;
     // Extract CSV logging configurations - MUST be done BEFORE Logger::init
     std::vector<SubsystemLogConfig> csv_log_configs;
     if (config_loader_.get_json_config().contains("logging") && config_loader_.get_json_config()["logging"].contains("subsystems")) {
@@ -138,15 +156,16 @@ int Application::run() {
             });
         }
     }
+    std::cerr << "Logging configuration extracted." << std::endl;
 
     // Initialize logger immediately after successful config load, and before any LOG_ calls
     Logger::init("run", config_loader_.get_log_path(), csv_log_configs);
     Logger::getInstance().start_writer_thread();
-    APP_LOG_INFO("CoralEdgeTpu Detector Starting..."); // Now this call is safe
+    APP_LOG_INFO("CoralEdgeTpu Detector Starting..."); 
 
     signal(SIGPIPE, SIG_IGN);
-    supervisor_.setup_signal_handlers(); // Now this call is safe
-    APP_LOG_INFO("Signal handlers for SIGINT and SIGTERM set up."); // Moved from ApplicationSupervisor
+    supervisor_.setup_signal_handlers(); 
+    APP_LOG_INFO("Signal handlers for SIGINT and SIGTERM set up."); 
 
 
     const std::string model_path = (config_path.parent_path() / config_loader_.get_model_path()).string();
@@ -154,13 +173,17 @@ int Application::run() {
 
     setup_pools_and_queues();
 
+    APP_LOG_INFO("Initializing modules...");
     if (!initialize_modules(model_path, labels_path)) {
         return 1;
     }
+    APP_LOG_INFO("Modules initialized.");
     
+    APP_LOG_INFO("Starting modules...");
     if (!start_modules()) {
         return 1;
     }
+    APP_LOG_INFO("Modules started.");
 
     register_shutdown_handlers();
     main_loop();

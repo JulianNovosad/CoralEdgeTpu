@@ -26,6 +26,8 @@
 #include <map>            // For std::map<std::string, CsvLogger>
 #include <filesystem>     // For std::filesystem
 #include <vector>         // For std::vector
+#include <execinfo.h>     // For backtrace
+#include <cxxabi.h>       // For __cxa_demangle
 
 // --- Logging Configuration Struct ---
 struct SubsystemLogConfig {
@@ -55,8 +57,15 @@ class CsvLogger;
 #define APP_LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
 
 // Macro for convenience to log CSV performance metrics
-#define APP_LOG_CSV(module, stage, p50, p95, p99, temp, fps) \
-    Logger::getInstance().log_csv({Logger::getInstance().get_raw_monotonic_time_ns(), module, stage, p50, p95, p99, temp, fps})
+#define APP_LOG_CSV(module_name, event_name, call_ts_ms, custom_json_metrics) \
+    Logger::getInstance().log_csv({ \
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), \
+        module_name, \
+        static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id())), \
+        event_name, \
+        call_ts_ms, \
+        custom_json_metrics \
+    })
 
 /**
  * @brief Structure to hold a single log entry.
@@ -75,14 +84,12 @@ struct LogEntry {
  * Each entry includes module, stage, and various performance statistics.
  */
 struct CsvLogEntry {
-    long long monotonic_time_ns; ///< Monotonic timestamp in nanoseconds using CLOCK_MONOTONIC_RAW.
-    std::string module;          ///< Name of the module (e.g., "Camera", "Inference", "Logic").
-    std::string stage;           ///< Name of the stage (e.g., "Frame Capture", "Inference", "Prediction").
-    double p50;                  ///< 50th percentile latency in ms.
-    double p95;                  ///< 95th percentile latency in ms.
-    double p99;                  ///< 99th percentile latency in ms.
-    double temp;                 ///< Temperature reading (e.g., CPU temperature).
-    double fps;                  ///< Frames per second or equivalent throughput.
+    long long produced_ts_epoch_ms; ///< Timestamp when this log line was produced (epoch ms, UTC)
+    std::string module;             ///< Module name: camera|tpu|encoder|logic|sysmon
+    long long thread_id;            ///< Numeric OS thread id (TID)
+    std::string event;              ///< Short label (e.g. frame_captured, inference_done, encode_done)
+    long long call_ts_epoch_ms;     ///< Timestamp when the module was *called/issued* to start work (epoch ms, UTC)
+    std::string custom_data;        ///< Module-specific metrics as a JSON string
 };
 
 /**
@@ -102,7 +109,7 @@ private:
     std::string log_dir_;
     int max_log_files_;
     std::ofstream current_log_file_;
-    std::mutex file_mutex_; // Protects access to the file
+    std::recursive_mutex file_mutex_; // Protects access to the file
 };
 
 
@@ -136,7 +143,9 @@ public:
      */
     static Logger& getInstance();
     
-    // Public default constructor for debugging dummy logger (declared here)
+    // Public default constructor. Used only for the "dummy" logger instance
+    // that is returned by getInstance() when init() has not been called,
+    // to prevent crashes. Logs a warning and potentially a stack trace.
     Logger(); 
 
     // Delete copy constructor and assignment operator to enforce singleton pattern.
@@ -296,8 +305,15 @@ public: // Changed to public
 #define APP_LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
 
 // Macro for convenience to log CSV performance metrics
-#define APP_LOG_CSV(module, stage, p50, p95, p99, temp, fps) \
-    Logger::getInstance().log_csv({Logger::getInstance().get_raw_monotonic_time_ns(), module, stage, p50, p95, p99, temp, fps})
+#define APP_LOG_CSV(module_name, event_name, call_ts_ms, custom_json_metrics) \
+    Logger::getInstance().log_csv({ \
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), \
+        module_name, \
+        static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id())), \
+        event_name, \
+        call_ts_ms, \
+        custom_json_metrics \
+    })
 
 
 #endif // UTIL_LOGGING_H

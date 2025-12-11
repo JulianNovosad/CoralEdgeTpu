@@ -148,21 +148,14 @@ void InferenceEngine::worker_thread_func() {
     
     ImageData input_image;
     while (running_) {
-        // Use a non-blocking pop with a short delay to allow checking the running_ flag
         if (input_queue_.pop(input_image)) {
-            APP_LOG_INFO("InferenceEngine worker thread: Successfully popped image from queue.");
             if (!input_image.buffer) {
                 APP_LOG_ERROR("InferenceEngine received an image with no buffer. Skipping.");
                 continue;
             }
-            APP_LOG_INFO("InferenceEngine received image - Dimensions: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Data size: " + std::to_string(input_image.buffer->size));
             
-            int expected_input_size = input_width_ * input_height_ * input_channels_;
-            if (input_image.buffer->size != static_cast<size_t>(expected_input_size)) {
-                 APP_LOG_ERROR("Input RGB image data size (" + std::to_string(input_image.buffer->size) + 
-                           ") does not match expected model input size (" + std::to_string(expected_input_size) + "). Skipping frame.");
-                 continue;
-            }
+            long long call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  input_image.timestamp.time_since_epoch()).count();
 
             set_input_tensor(interpreter.get(), input_image);
 
@@ -173,6 +166,10 @@ void InferenceEngine::worker_thread_func() {
             }
             auto inference_end_time = std::chrono::high_resolution_clock::now();
             long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(inference_end_time - inference_start_time).count();
+            
+            std::stringstream custom_metrics;
+            custom_metrics << "{\"inference_ms\":" << duration_ms << "}";
+            APP_LOG_CSV("tpu", "inference_done", call_ts, custom_metrics.str());
 
             {
                 std::lock_guard<std::mutex> lock(inference_times_mutex_);
@@ -183,11 +180,10 @@ void InferenceEngine::worker_thread_func() {
             auto results_buffer = get_output_tensor(interpreter.get());
             
             if (results_buffer && results_buffer->size > 0) {
-                detection_results_for_overlay_queue_.push(results_buffer); // Push to overlay queue
-                detection_results_for_logic_queue_.push(results_buffer); // Push to logic queue
+                detection_results_for_overlay_queue_.push(results_buffer);
+                detection_results_for_logic_queue_.push(results_buffer);
             }
         } else {
-            // If the queue is empty, sleep for a short duration to avoid busy-waiting
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
@@ -279,7 +275,16 @@ void InferenceEngine::get_performance_metrics() {
     long long p95_latency_ms = inference_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_inferences_ - 1))];
     long long p50_latency_ms = inference_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_inferences_ - 1))];
 
-    APP_LOG_CSV("InferenceEngine", "Inference", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
+    std::ostringstream json_metrics;
+    json_metrics << "{\"p50_latency_ms\":" << std::fixed << std::setprecision(3) << static_cast<double>(p50_latency_ms)
+                 << ",\"p95_latency_ms\":" << static_cast<double>(p95_latency_ms)
+                 << ",\"p99_latency_ms\":" << static_cast<double>(p99_latency_ms)
+                 << ",\"average_fps\":" << average_fps
+                 << ",\"std_dev_ms\":" << std_dev_ms
+                 << ",\"total_inferences\":" << total_inferences_
+                 << "}";
+
+    APP_LOG_CSV("InferenceEngine", "PerformanceMetrics", 0LL, json_metrics.str());
     APP_LOG_INFO("--- Inference Performance Metrics ---");
     APP_LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
     APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));

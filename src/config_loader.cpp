@@ -2,21 +2,22 @@
 #include "util_logging.h"
 #include <fstream>
 #include <stdexcept>
+#include <iostream>
 
 bool ConfigLoader::load(const std::string& config_file_path) {
     std::ifstream file(config_file_path);
     if (!file.is_open()) {
-        APP_LOG_ERROR("Failed to open config file: " + config_file_path);
+        std::cerr << "ERROR: Failed to open config file: " << config_file_path << std::endl;
         return false;
     }
 
     try {
         file >> config_data_;
     } catch (const nlohmann::json::parse_error& e) {
-        APP_LOG_ERROR("Failed to parse config file: " + std::string(e.what()));
+        std::cerr << "ERROR: Failed to parse config file: " << e.what() << std::endl;
         return false;
     }
-    APP_LOG_INFO("Configuration loaded successfully from " + config_file_path);
+    std::cerr << "INFO: Configuration loaded successfully from " << config_file_path << std::endl;
     return true;
 }
 

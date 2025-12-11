@@ -4,6 +4,7 @@
 #include "orientation_sensor.h"
 #include <algorithm>
 #include <cmath>
+#include <iostream> // Added for std::cerr/cout
 
 // --- Fysieke en wiskundige constanten ---
 constexpr float GRAVITY_CONST = 9.81f;      // Zwaartekrachtversnelling in m/s^2
@@ -179,9 +180,21 @@ void LogicModule::worker_thread_func() {
     while (running_) {
         std::shared_ptr<DetectionResultBuffer> detections_buffer;
         if (detection_input_queue_.pop(detections_buffer)) {
+            long long call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::system_clock::now().time_since_epoch()).count();
+
             if (detections_buffer && detections_buffer->size > 0) {
                 OrientationData current_imu_data = orientation_sensor_->get_latest_orientation_data();
+                
+                auto t_start = std::chrono::high_resolution_clock::now();
                 process(detections_buffer->data, current_imu_data);
+                auto t_end = std::chrono::high_resolution_clock::now();
+                
+                long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
+                
+                std::stringstream custom_metrics;
+                custom_metrics << "{\"processing_ms\":" << duration_ms << "}";
+                APP_LOG_CSV("logic", "logic_done", call_ts, custom_metrics.str());
             }
         }
     }

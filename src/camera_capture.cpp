@@ -289,6 +289,7 @@ bool CameraCapture::acquire_camera() {
 }
 
 bool CameraCapture::start() {
+    APP_LOG_INFO("CameraCapture::start() called.");
     if (running_) {
         APP_LOG_ERROR("CameraCapture is already running.");
         return false;
@@ -296,11 +297,10 @@ bool CameraCapture::start() {
     
     // 1. Acquire the camera 
     if (!acquire_camera()) {
-        // This log should be printed if acquire_camera() returns false. 
-        // If this log is missing, it suggests the program is skipping checks or execution flow is flawed.
         APP_LOG_ERROR("CameraCapture failed to acquire camera. Cannot proceed.");
         return false;
     }
+    APP_LOG_INFO("Camera acquired successfully. Proceeding to setup.");
 
     // CRITICAL SECONDARY CHECK: Should not be necessary, but defensively prevents a nullptr crash.
     if (!camera_) {
@@ -322,6 +322,7 @@ bool CameraCapture::start() {
         camera_.reset();
         return false;
     }
+    APP_LOG_INFO("Camera setup completed successfully.");
     
     // 3. Connect request completed signal
     camera_->requestCompleted.connect(this, &CameraCapture::request_complete_callback);
@@ -335,6 +336,7 @@ bool CameraCapture::start() {
         camera_.reset();
         return false;
     }
+    APP_LOG_INFO("Libcamera camera started successfully.");
     APP_LOG_INFO("Libcamera camera started.");
 
     running_ = true;
@@ -352,7 +354,7 @@ bool CameraCapture::start() {
             return false;
         }
     }
-    APP_LOG_INFO("CameraCapture: Initial requests queued.");
+    APP_LOG_INFO("CameraCapture: All initial requests successfully queued.");
     return true;
 }
 
@@ -549,6 +551,9 @@ bool CameraCapture::setup_camera() {
 }
 
 void CameraCapture::request_complete_callback(libcamera::Request* request) {
+    long long produced_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::system_clock::now().time_since_epoch()).count();
+
     APP_LOG_INFO("CameraCapture: request_complete_callback invoked.");
     if (!running_) {
         return;
@@ -565,14 +570,20 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
     }
 
     // Get the hardware capture timestamp from the request metadata
-    std::chrono::high_resolution_clock::time_point hardware_capture_timestamp;
+    long long call_ts = 0;
     auto md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
     if (md_timestamp) {
-        hardware_capture_timestamp = std::chrono::high_resolution_clock::time_point(std::chrono::nanoseconds(*md_timestamp));
+        // The timestamp is in nanoseconds, convert to milliseconds
+        call_ts = *md_timestamp / 1000000;
     } else {
         APP_LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time.");
-        hardware_capture_timestamp = std::chrono::high_resolution_clock::now();
+        call_ts = produced_ts;
     }
+    
+    std::stringstream custom_metrics;
+    custom_metrics << "{\"width\":" << width_ << ", \"height\":" << height_ << "}";
+    APP_LOG_CSV("camera", "frame_captured", call_ts, custom_metrics.str());
+
 
     // --- PROCESSING START ---
     auto processing_start_time = std::chrono::high_resolution_clock::now();
@@ -585,7 +596,7 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
         const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
         
-        process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, hardware_capture_timestamp, video_stream_->configuration().pixelFormat);
+        process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, std::chrono::high_resolution_clock::time_point(std::chrono::milliseconds(call_ts)), video_stream_->configuration().pixelFormat);
     } else if (captured_buffers.count(video_stream_)) {
         APP_LOG_DEBUG("CameraCapture: Main Video Stream frame received but no output queues configured. Dropping frame.");
     } else {
@@ -597,7 +608,7 @@ void CameraCapture::request_complete_callback(libcamera::Request* request) {
         const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
         const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
         
-        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, hardware_capture_timestamp, tpu_stream_->configuration().pixelFormat);
+        process_frame_buffer(tpu_fb, tpu_cfg, image_buffer_pool_, tpu_output_queue_, "TPU Stream", target_tpu_width_, target_tpu_height_, std::chrono::high_resolution_clock::time_point(std::chrono::milliseconds(call_ts)), tpu_stream_->configuration().pixelFormat);
     } else {
         APP_LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
     }
@@ -656,7 +667,16 @@ void CameraCapture::get_performance_metrics() {
     long long p95_latency_ms = frame_latencies_ms_[std::min(percentile_95_index, static_cast<size_t>(total_frames_processed_ - 1))];
     long long p50_latency_ms = frame_latencies_ms_[std::min(percentile_50_index, static_cast<size_t>(total_frames_processed_ - 1))];
 
-    APP_LOG_CSV("CameraCapture", "FrameCapture", static_cast<double>(p50_latency_ms), static_cast<double>(p95_latency_ms), static_cast<double>(p99_latency_ms), 0.0, average_fps);
+    std::ostringstream json_metrics;
+    json_metrics << "{\"p50_latency_ms\":" << std::fixed << std::setprecision(3) << static_cast<double>(p50_latency_ms)
+                 << ",\"p95_latency_ms\":" << static_cast<double>(p95_latency_ms)
+                 << ",\"p99_latency_ms\":" << static_cast<double>(p99_latency_ms)
+                 << ",\"average_fps\":" << average_fps
+                 << ",\"total_frames_processed\":" << total_frames_processed_
+                 << ",\"average_latency_ms\":" << average_latency_ms
+                 << "}";
+
+    APP_LOG_CSV("CameraCapture", "PerformanceMetrics", 0LL, json_metrics.str());
     APP_LOG_DEBUG("--- CameraCapture Performance Metrics (Frame Latency) ---");
     APP_LOG_DEBUG("  Total Frames Processed: " + std::to_string(total_frames_processed_));
     APP_LOG_DEBUG("  Average FPS: " + std::to_string(average_fps));

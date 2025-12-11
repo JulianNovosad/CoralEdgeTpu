@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <iostream> // Added for std::cerr/cout
 #include "util_logging.h"
 
 // This is a global flag checked by the main loop and set by the ApplicationSupervisor.
