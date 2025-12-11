@@ -128,6 +128,39 @@ unsigned short ConfigLoader::get_phone_orientation_roll_port() const {
     return config_data_.value("/application/network_ports/2003/port"_json_pointer, 2003);
 }
 
+// --- TPU Stream Configuration Getters ---
+unsigned int ConfigLoader::get_tpu_stream_width() const {
+    return config_data_.value("/application/tpu_stream/width"_json_pointer, 300);
+}
+
+unsigned int ConfigLoader::get_tpu_stream_height() const {
+    return config_data_.value("/application/tpu_stream/height"_json_pointer, 300);
+}
+
+unsigned int ConfigLoader::get_tpu_target_width() const {
+    return config_data_.value("/application/tpu_target/width"_json_pointer, 300);
+}
+
+unsigned int ConfigLoader::get_tpu_target_height() const {
+    return config_data_.value("/application/tpu_target/height"_json_pointer, 300);
+}
+
+libcamera::PixelFormat ConfigLoader::get_tpu_stream_pixel_format() const {
+    std::string format_str = config_data_.value("/application/tpu_stream/pixel_format"_json_pointer, "BGR888");
+    if (format_str == "BGR888") return libcamera::formats::BGR888;
+    if (format_str == "RGB888") return libcamera::formats::RGB888;
+    if (format_str == "BGRA8888") return libcamera::formats::BGRA8888;
+    if (format_str == "RGBA8888") return libcamera::formats::RGBA8888;
+    // Add other formats as needed
+    {
+        std::stringstream ss;
+        ss << "Configured TPU stream pixel format '" << format_str << "' not recognized. Defaulting to BGR888.";
+        APP_LOG_WARNING(ss.str());
+    }
+    return libcamera::formats::BGR888; // Default
+}
+
+
 const nlohmann::json& ConfigLoader::get_json_config() const {
     return config_data_;
 }

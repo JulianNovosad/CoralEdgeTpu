@@ -11,6 +11,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/detector.dir/src/config_loader.cpp.o.d"
   "CMakeFiles/detector.dir/src/h264_encoder.cpp.o"
   "CMakeFiles/detector.dir/src/h264_encoder.cpp.o.d"
+  "CMakeFiles/detector.dir/src/image_processor.cpp.o"
+  "CMakeFiles/detector.dir/src/image_processor.cpp.o.d"
   "CMakeFiles/detector.dir/src/inference.cpp.o"
   "CMakeFiles/detector.dir/src/inference.cpp.o.d"
   "CMakeFiles/detector.dir/src/logic.cpp.o"

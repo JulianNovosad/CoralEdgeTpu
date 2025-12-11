@@ -8,6 +8,8 @@
 #include <string>
 #include <chrono>
 #include "json.hpp" // nlohmann/json header
+#include <libcamera/pixel_format.h> // For libcamera::PixelFormat
+#include <libcamera/formats.h>    // For libcamera::formats
 
 /**
  * @brief Laadt configuratie-instellingen uit een JSON-bestand.
@@ -36,6 +38,13 @@ public:
     double get_camera_fps() const;
     float get_detection_score_threshold() const;
     std::string get_log_path() const;
+
+    // --- TPU Stream Configuration ---
+    unsigned int get_tpu_stream_width() const;
+    unsigned int get_tpu_stream_height() const;
+    unsigned int get_tpu_target_width() const;
+    unsigned int get_tpu_target_height() const;
+    libcamera::PixelFormat get_tpu_stream_pixel_format() const;
 
     // --- Video & Telemetry ---
     std::string get_video_stream_protocol() const;

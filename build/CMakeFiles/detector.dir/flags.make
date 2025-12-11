@@ -3,13 +3,13 @@
 
 # compile C with /usr/bin/cc
 # compile CXX with /usr/bin/c++
-C_DEFINES = -DOPENSSL_API_3_0
+C_DEFINES = -DDEBUG_MODE -DOPENSSL_API_3_0
 
 C_INCLUDES = -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/include/mit-krb5 -I/usr/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
 
 C_FLAGS =  -Wall -Wextra -Werror -g
 
-CXX_DEFINES = -DOPENSSL_API_3_0
+CXX_DEFINES = -DDEBUG_MODE -DOPENSSL_API_3_0
 
 CXX_INCLUDES = -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/include/mit-krb5 -I/usr/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
 

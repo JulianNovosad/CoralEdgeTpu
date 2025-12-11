@@ -1,0 +1,12 @@
+produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,camera_frame_id,camera_width,camera_height,camera_exposure_ms,camera_copy_time_ms,tpu_inference_ms,tpu_input_w,tpu_input_h,tpu_temp_c,encoder_encode_ms,encoder_total_encoded_frames,encoder_average_fps,logic_metric_ballistics,logic_metric_hit_scan,logic_metric_servo_actuation,sysmon_cpu_temp_c,sysmon_cpu_usage_percent,sysmon_mem_usage_percent,p50_latency_ms,p95_latency_ms,p99_latency_ms,average_fps,total_frames_processed_or_inferences,average_latency_ms,details
+1765476550052,SystemMonitor,6327148850074917766,sysmon_metrics,1765476550048,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,45.2,23.8095,73.7442,-1,-1,-1,-1,-1,-1,""
+1765476555055,SystemMonitor,6327148850074917766,sysmon_metrics,1765476555052,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,48.5,29.471,74.4734,-1,-1,-1,-1,-1,-1,""
+1765476555162,SystemMonitor,5399665071713899591,PerformanceMetrics,1765476555162,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,48.5,33.3333,74.4734,-1,-1,-1,-1,-1,-1,""
+1765476560058,SystemMonitor,6327148850074917766,sysmon_metrics,1765476560055,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,51.8,40.4933,73.5958,-1,-1,-1,-1,-1,-1,""
+1765476560182,SystemMonitor,5399665071713899591,PerformanceMetrics,1765476560182,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,52.35,60,73.5958,-1,-1,-1,-1,-1,-1,""
+1765476565063,SystemMonitor,6327148850074917766,sysmon_metrics,1765476565059,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,54.55,63.1606,73.6744,-1,-1,-1,-1,-1,-1,""
+1765476565241,SystemMonitor,5399665071713899591,PerformanceMetrics,1765476565241,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,55.1,59.1549,73.6744,-1,-1,-1,-1,-1,-1,""
+1765476570066,SystemMonitor,6327148850074917766,sysmon_metrics,1765476570063,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,55.1,50.4966,73.6865,-1,-1,-1,-1,-1,-1,""
+1765476570258,SystemMonitor,5399665071713899591,PerformanceMetrics,1765476570258,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,55.1,55.2632,73.6865,-1,-1,-1,-1,-1,-1,""
+1765476575074,SystemMonitor,6327148850074917766,sysmon_metrics,1765476575071,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,55.65,51.118,73.6978,-1,-1,-1,-1,-1,-1,""
+1765476575284,SystemMonitor,5399665071713899591,PerformanceMetrics,1765476575284,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,55.65,46.4286,73.6978,-1,-1,-1,-1,-1,-1,""

@@ -302,6 +302,30 @@ src/h264_encoder.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/h264_encoder.cpp.s
 .PHONY : src/h264_encoder.cpp.s
 
+src/image_processor.o: src/image_processor.cpp.o
+.PHONY : src/image_processor.o
+
+# target to build an object file
+src/image_processor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/image_processor.cpp.o
+.PHONY : src/image_processor.cpp.o
+
+src/image_processor.i: src/image_processor.cpp.i
+.PHONY : src/image_processor.i
+
+# target to preprocess a source file
+src/image_processor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/image_processor.cpp.i
+.PHONY : src/image_processor.cpp.i
+
+src/image_processor.s: src/image_processor.cpp.s
+.PHONY : src/image_processor.s
+
+# target to generate assembly for a file
+src/image_processor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/image_processor.cpp.s
+.PHONY : src/image_processor.cpp.s
+
 src/inference.o: src/inference.cpp.o
 .PHONY : src/inference.o
 
@@ -526,6 +550,9 @@ help:
 	@echo "... src/h264_encoder.o"
 	@echo "... src/h264_encoder.i"
 	@echo "... src/h264_encoder.s"
+	@echo "... src/image_processor.o"
+	@echo "... src/image_processor.i"
+	@echo "... src/image_processor.s"
 	@echo "... src/inference.o"
 	@echo "... src/inference.i"
 	@echo "... src/inference.s"

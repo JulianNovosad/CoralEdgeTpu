@@ -16,6 +16,10 @@
 #include <iomanip>        // For std::put_time
 #include <algorithm>      // For std::sort
 
+#ifdef __linux__
+#include <sys/prctl.h> // For prctl(PR_SET_NAME)
+#endif
+
 namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity.
 
 // Static members initialization
@@ -43,7 +47,14 @@ CsvLogger::~CsvLogger() {
 void CsvLogger::write_header() {
     std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
-        current_log_file_ << "produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data\n";
+        // Universal header as defined in README.md and CsvLogEntry struct
+        current_log_file_ << "produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,"
+                          << "camera_frame_id,camera_width,camera_height,camera_exposure_ms,camera_copy_time_ms,"
+                          << "tpu_inference_ms,tpu_input_w,tpu_input_h,tpu_temp_c,"
+                          << "encoder_encode_ms,encoder_total_encoded_frames,encoder_average_fps,"
+                          << "logic_metric_ballistics,logic_metric_hit_scan,logic_metric_servo_actuation,"
+                          << "sysmon_cpu_temp_c,sysmon_cpu_usage_percent,sysmon_mem_usage_percent,"
+                          << "p50_latency_ms,p95_latency_ms,p99_latency_ms,average_fps,total_frames_processed_or_inferences,average_latency_ms,details\n";
         current_log_file_.flush();
     }
 }
@@ -56,7 +67,31 @@ void CsvLogger::write_entry(const CsvLogEntry& entry) {
                           << entry.thread_id << ","
                           << entry.event << ","
                           << entry.call_ts_epoch_ms << ","
-                          << entry.custom_data << "\n";
+                          << entry.camera_frame_id << ","
+                          << entry.camera_width << ","
+                          << entry.camera_height << ","
+                          << entry.camera_exposure_ms << ","
+                          << entry.camera_copy_time_ms << ","
+                          << entry.tpu_inference_ms << ","
+                          << entry.tpu_input_w << ","
+                          << entry.tpu_input_h << ","
+                          << entry.tpu_temp_c << ","
+                          << entry.encoder_encode_ms << ","
+                          << entry.encoder_total_encoded_frames << ","
+                          << entry.encoder_average_fps << ","
+                          << entry.logic_metric_ballistics << ","
+                          << entry.logic_metric_hit_scan << ","
+                          << entry.logic_metric_servo_actuation << ","
+                          << entry.sysmon_cpu_temp_c << ","
+                          << entry.sysmon_cpu_usage_percent << ","
+                          << entry.sysmon_mem_usage_percent << ","
+                          << entry.p50_latency_ms << ","
+                          << entry.p95_latency_ms << ","
+                          << entry.p99_latency_ms << ","
+                          << entry.average_fps << ","
+                          << entry.total_frames_processed_or_inferences << ","
+                          << entry.average_latency_ms << ","
+                          << entry.details << "\n"; // Ensure details is the last field
         current_log_file_.flush();
     }
 }
@@ -423,4 +458,17 @@ long long Logger::get_raw_monotonic_time_ns() {
         return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
     return static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+}
+
+// set_thread_name implementation
+void set_thread_name(const std::string& name) {
+#ifdef __linux__
+    // Only set if running on Linux and name fits PR_SET_NAME limit (16 chars including null terminator)
+    if (name.length() < 16) {
+        prctl(PR_SET_NAME, name.c_str(), 0, 0, 0);
+    }
+#else
+    // No-op on other platforms
+    (void)name; // Suppress unused parameter warning
+#endif // __linux__
 }

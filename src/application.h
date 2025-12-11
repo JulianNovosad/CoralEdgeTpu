@@ -10,6 +10,7 @@
 #include "orientation_sensor.h"
 #include "pipeline_structs.h"
 #include "system_monitor.h"
+#include "image_processor.h" // New include
 
 #include "buffer_pool.h"
 
@@ -58,6 +59,7 @@ private:
     std::shared_ptr<BufferPool<uint8_t>> h264_pool_;
 
     // Queues
+    ImageQueue raw_image_for_processor_queue_; // New queue
     ImageQueue tpu_inference_queue_;
 
     DetectionResultsQueue detection_results_for_overlay_queue_;
@@ -67,6 +69,7 @@ private:
     std::list<std::reference_wrapper<ImageQueue>> main_image_output_queues_;
 
     // Modules
+    std::unique_ptr<ImageProcessor> image_processor_; // New module
     std::unique_ptr<InferenceEngine> inference_engine_;
     std::unique_ptr<CameraCapture> primary_camera_;
     // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;

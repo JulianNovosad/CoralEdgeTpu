@@ -27,10 +27,11 @@ struct ImageData {
     size_t width;                                  ///< Width of the image in pixels.
     size_t height;                                 ///< Height of the image in pixels.
     libcamera::PixelFormat format;                 ///< Pixel format of the image data.
-    std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of image capture.
+    long long timestamp_epoch_ms = 0; ///< Timestamp of image capture in epoch milliseconds UTC.
+    int frame_id = -1;                             ///< Monotonically increasing frame ID.
 
-    // Constructor to allow explicit setting of timestamp
-    ImageData(std::chrono::high_resolution_clock::time_point ts = std::chrono::high_resolution_clock::now()) : timestamp(ts) {}
+    // Constructor to allow explicit setting of timestamp and frame_id
+    ImageData(long long ts_ms = 0, int id = -1) : timestamp_epoch_ms(ts_ms), frame_id(id) {}
 };
 
 /**

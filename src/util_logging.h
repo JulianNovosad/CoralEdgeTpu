@@ -39,6 +39,9 @@ struct SubsystemLogConfig {
 // Forward declare CsvLogger to avoid circular dependency
 class CsvLogger;
 
+// Function to set thread name (for easier debugging)
+void set_thread_name(const std::string& name);
+
 // --- Global Logging Macros for Convenience ---
 
 /// @brief Logs an informational message.
@@ -56,16 +59,7 @@ class CsvLogger;
 /// @brief Logs a structured JSON message.
 #define APP_LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
 
-// Macro for convenience to log CSV performance metrics
-#define APP_LOG_CSV(module_name, event_name, call_ts_ms, custom_json_metrics) \
-    Logger::getInstance().log_csv({ \
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), \
-        module_name, \
-        static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id())), \
-        event_name, \
-        call_ts_ms, \
-        custom_json_metrics \
-    })
+
 
 /**
  * @brief Structure to hold a single log entry.
@@ -89,7 +83,44 @@ struct CsvLogEntry {
     long long thread_id;            ///< Numeric OS thread id (TID)
     std::string event;              ///< Short label (e.g. frame_captured, inference_done, encode_done)
     long long call_ts_epoch_ms;     ///< Timestamp when the module was *called/issued* to start work (epoch ms, UTC)
-    std::string custom_data;        ///< Module-specific metrics as a JSON string
+
+    // Camera-specific metrics
+    long long camera_frame_id = -1;
+    int camera_width = -1;
+    int camera_height = -1;
+    float camera_exposure_ms = -1.0f;
+    float camera_copy_time_ms = -1.0f;
+
+    // TPU-specific metrics
+    float tpu_inference_ms = -1.0f;
+    int tpu_input_w = -1;
+    int tpu_input_h = -1;
+    float tpu_temp_c = -1.0f;
+
+    // Encoder-specific metrics
+    float encoder_encode_ms = -1.0f;
+    long long encoder_total_encoded_frames = -1;
+    float encoder_average_fps = -1.0f;
+
+    // Logic-specific metrics (placeholders for now)
+    float logic_metric_ballistics = -1.0f;
+    float logic_metric_hit_scan = -1.0f;
+    float logic_metric_servo_actuation = -1.0f;
+
+    // System Monitor-specific metrics
+    float sysmon_cpu_temp_c = -1.0f;
+    float sysmon_cpu_usage_percent = -1.0f;
+    float sysmon_mem_usage_percent = -1.0f;
+
+    // Generic Performance Metrics (for PerformanceMetrics event type)
+    float p50_latency_ms = -1.0f;
+    float p95_latency_ms = -1.0f;
+    float p99_latency_ms = -1.0f;
+    float average_fps = -1.0f;
+    long long total_frames_processed_or_inferences = -1;
+    float average_latency_ms = -1.0f;
+
+    std::string details; ///< Optional: Any additional details as a string (e.g., error messages, JSON if necessary for very complex data)
 };
 
 /**
@@ -114,6 +145,7 @@ private:
     std::ofstream current_log_file_;
     std::recursive_mutex file_mutex_; // Protects access to the file
     int current_log_minute_; // New member to store the minute of the current log file
+    std::string escape_csv_string(const std::string& str);
 };
 
 
@@ -305,19 +337,4 @@ public: // Changed to public
 #else
 #define APP_LOG_DEBUG(msg) (void)0 // No-op in release mode
 #endif
-/// @brief Logs a structured JSON message.
-#define APP_LOG_JSON(key, value) Logger::getInstance().log_json(key, value)
-
-// Macro for convenience to log CSV performance metrics
-#define APP_LOG_CSV(module_name, event_name, call_ts_ms, custom_json_metrics) \
-    Logger::getInstance().log_csv({ \
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), \
-        module_name, \
-        static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id())), \
-        event_name, \
-        call_ts_ms, \
-        custom_json_metrics \
-    })
-
-
 #endif // UTIL_LOGGING_H
