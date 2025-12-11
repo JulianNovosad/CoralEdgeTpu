@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <regex> // For regex parsing of /proc/meminfo
+#include <iostream>
 
 SystemMonitor::SystemMonitor(std::chrono::seconds interval_s)
     : interval_s_(interval_s) {
@@ -39,14 +40,19 @@ void SystemMonitor::stop() {
 void SystemMonitor::worker_thread_func() {
     APP_LOG_INFO("SystemMonitor worker thread started.");
     while (running_) {
+        long long call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::system_clock::now().time_since_epoch()).count();
+
         float cpu_temp = read_cpu_temperature();
         float memory_usage_percent = read_memory_usage();
         float cpu_usage = read_cpu_usage();
 
-        // LOG_CSV(module, stage, p50, p95, p99, temp, fps)
-        // For SystemMonitor, p95, p99, fps are not directly applicable or meaningful in the same way.
-        // We'll use cpu_usage for p50, and 0 for p95, p99. temp for CPU temp and fps for memory usage.
-        APP_LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
+        std::ostringstream json_metrics_worker;
+        json_metrics_worker << "{\"cpu_temp_c\":" << std::fixed << std::setprecision(2) << cpu_temp
+                            << ", \"cpu_usage_percent\":" << cpu_usage
+                            << ", \"mem_usage_percent\":" << memory_usage_percent
+                            << "}";
+        APP_LOG_CSV("sysmon", "sysmon_metrics", call_ts, json_metrics_worker.str());
 
         std::this_thread::sleep_for(interval_s_);
     }
@@ -154,7 +160,12 @@ void SystemMonitor::get_performance_metrics() {
     float cpu_usage = read_cpu_usage();
     
     // Log using the CSV format (p50 for CPU usage, temp for CPU temp, fps for memory usage percent)
-    APP_LOG_CSV("SystemMonitor", "Metrics", cpu_usage, 0.0, 0.0, cpu_temp, memory_usage_percent);
+    std::ostringstream json_metrics_perf;
+    json_metrics_perf << "{\"cpu_usage\":" << std::fixed << std::setprecision(2) << cpu_usage
+                      << ",\"cpu_temp\":" << cpu_temp
+                      << ",\"memory_usage_percent\":" << memory_usage_percent
+                      << "}";
+    APP_LOG_CSV("SystemMonitor", "PerformanceMetrics", 0LL, json_metrics_perf.str());
     APP_LOG_INFO("--- SystemMonitor Performance Metrics ---");
     APP_LOG_INFO("  CPU Usage: " + std::to_string(cpu_usage) + "%");
     APP_LOG_INFO("  CPU Temperature: " + std::to_string(cpu_temp) + " C");

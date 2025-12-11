@@ -26,6 +26,7 @@ std::once_flag Logger::once_flag_;
 CsvLogger::CsvLogger(const std::string& module_name, const std::string& log_dir, int max_log_files)
     : module_name_(module_name), log_dir_(log_dir), max_log_files_(max_log_files) {
     
+    std::cerr << "CsvLogger constructor for " << module_name_ << " in " << log_dir_ << std::endl;
     // Ensure log directory exists
     if (!fs::exists(log_dir_)) {
         fs::create_directories(log_dir_);
@@ -34,37 +35,36 @@ CsvLogger::CsvLogger(const std::string& module_name, const std::string& log_dir,
 }
 
 CsvLogger::~CsvLogger() {
-    std::lock_guard<std::mutex> lock(file_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
         current_log_file_.close();
     }
 }
 
 void CsvLogger::write_header() {
-    std::lock_guard<std::mutex> lock(file_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
-        current_log_file_ << "monotonic_time_ns,module,stage,p50,p95,p99,temp,fps\n";
+        current_log_file_ << "produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data\n";
         current_log_file_.flush();
     }
 }
 
 void CsvLogger::write_entry(const CsvLogEntry& entry) {
-    std::lock_guard<std::mutex> lock(file_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
-        current_log_file_ << entry.monotonic_time_ns << ","
+        current_log_file_ << entry.produced_ts_epoch_ms << ","
                           << entry.module << ","
-                          << entry.stage << ","
-                          << std::fixed << std::setprecision(3) << entry.p50 << ","
-                          << std::fixed << std::setprecision(3) << entry.p95 << ","
-                          << std::fixed << std::setprecision(3) << entry.p99 << ","
-                          << std::fixed << std::setprecision(2) << entry.temp << ","
-                          << std::fixed << std::setprecision(3) << entry.fps << "\n";
+                          << entry.thread_id << ","
+                          << entry.event << ","
+                          << entry.call_ts_epoch_ms << ","
+                          << entry.custom_data << "\n";
         current_log_file_.flush();
     }
 }
 
 void CsvLogger::rotate_log_file() {
-    std::lock_guard<std::mutex> lock(file_mutex_);
+    std::cerr << "CsvLogger::rotate_log_file for " << module_name_ << std::endl;
+    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
         current_log_file_.close();
     }
@@ -85,29 +85,44 @@ void CsvLogger::rotate_log_file() {
     
     fs::path new_log_filepath = fs::path(log_dir_) / new_log_filename;
 
+    std::cerr << "Opening CSV log file: " << new_log_filepath << std::endl;
     // Open new primary log file
     current_log_file_.open(new_log_filepath.string(), std::ios_base::out | std::ios_base::app); // Use app to append if file already exists for current minute
     if (!current_log_file_.is_open()) {
         std::cerr << "Failed to open CSV log file: " << new_log_filepath << std::endl;
     } else {
+        std::cerr << "Successfully opened CSV log file: " << new_log_filepath << std::endl;
         // Only write header if file was newly created or is empty
+        std::cerr << "Checking file size of " << new_log_filepath << std::endl;
         if (fs::file_size(new_log_filepath) == 0) {
+            std::cerr << "File is new. Writing header." << std::endl;
             write_header();
+            std::cerr << "Finished writing header." << std::endl;
         }
 
         // Manage old log files (keep max_log_files)
         std::vector<fs::path> log_files;
-        for (const auto& entry : fs::directory_iterator(log_dir_)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".csv" && entry.path().stem().string().rfind(module_name_, 0) == 0) {
-                log_files.push_back(entry.path());
+        std::cerr << "Iterating directory: " << log_dir_ << std::endl;
+        try {
+            for (const auto& entry : fs::directory_iterator(log_dir_)) {
+                std::cerr << "Found entry: " << entry.path() << std::endl;
+                if (entry.is_regular_file() && entry.path().extension() == ".csv" && entry.path().stem().string().rfind(module_name_, 0) == 0) {
+                    log_files.push_back(entry.path());
+                }
             }
+        } catch (const fs::filesystem_error& e) {
+            std::cerr << "Filesystem error during directory iteration for " << module_name_ << ": " << e.what() << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "General error during directory iteration for " << module_name_ << ": " << e.what() << std::endl;
         }
+        std::cerr << "Finished iterating directory." << std::endl;
         std::sort(log_files.begin(), log_files.end()); // Sort by name, which should naturally sort by date/time
 
         while (log_files.size() > static_cast<size_t>(max_log_files_)) {
             fs::remove(log_files.front()); // Remove the oldest log file
             log_files.erase(log_files.begin());
         }
+// ... (rest of the file)
     }
 }
 
@@ -156,15 +171,21 @@ Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_d
     rotate_standard_log_file();
 
     // Initialize CsvLogger instances for each subsystem
+    std::cerr << "Logger: Starting CsvLogger initialization loop." << std::endl;
     for (const auto& config : csv_subsystem_configs_) {
+        std::cerr << "Logger: Processing subsystem config for: " << config.name << std::endl;
         fs::path sub_log_dir = fs::path(base_log_dir_) / config.log_dir_suffix;
+        std::cerr << "Logger: Attempting to emplace CsvLogger for " << config.name << std::endl;
         csv_loggers_.try_emplace(config.name, config.name, sub_log_dir.string(), config.max_log_files);
         // Proactively create subdirectory and rotate log file to write header
         if (!fs::exists(sub_log_dir)) {
             fs::create_directories(sub_log_dir);
         }
+        std::cerr << "Logger: Rotating log file for " << config.name << std::endl;
         csv_loggers_.at(config.name).rotate_log_file();
     }
+    std::cerr << "Logger: Finished CsvLogger initialization loop." << std::endl;
+    std::cerr << "Logger constructor finished." << std::endl;
 }
 
 /**
@@ -187,11 +208,12 @@ Logger::~Logger() {
  * threads to asynchronously write log messages.
  */
 void Logger::start_writer_thread() {
-    if (!running_.exchange(true)) { // Atomically set to true and check old value
-        standard_writer_thread_ = std::thread(&Logger::writer_thread_func, this);
-        csv_writer_thread_ = std::thread(&Logger::csv_writer_thread_func, this);
-    }
-}
+            if (!running_.exchange(true)) { // Atomically set to true and check old value
+                APP_LOG_INFO("Logger: Creating standard writer thread.");
+                standard_writer_thread_ = std::thread(&Logger::writer_thread_func, this);
+                APP_LOG_INFO("Logger: Creating CSV writer thread.");
+                csv_writer_thread_ = std::thread(&Logger::csv_writer_thread_func, this);
+            }}
 
 /**
  * @brief Stops the asynchronous writer threads.
@@ -267,6 +289,7 @@ void Logger::log_csv(const CsvLogEntry& entry) {
  * as long as `running_` is true or there are messages still in the queue.
  */
 void Logger::writer_thread_func() {
+    APP_LOG_INFO("Logger: Standard writer thread started.");
     while (true) {
         std::unique_lock<std::mutex> lock(log_mutex_);
         // Wait until the queue is not empty or the logger is shutting down
@@ -306,6 +329,7 @@ void Logger::writer_thread_func() {
  * their respective module-specific CSV log files, handling rotation.
  */
 void Logger::csv_writer_thread_func() {
+    APP_LOG_INFO("Logger: CSV writer thread started.");
     while (true) {
         std::unique_lock<std::mutex> lock(csv_log_mutex_);
         csv_cond_var_.wait(lock, [this] { return !csv_log_queue_.empty() || !running_; });
@@ -319,6 +343,7 @@ void Logger::csv_writer_thread_func() {
         lock.unlock(); // Release lock before writing to allow other threads to log.
 
         // Retrieve the correct CsvLogger for this module
+        std::lock_guard<std::mutex> lock_map(csv_log_mutex_);
         auto it = csv_loggers_.find(entry.module);
         if (it != csv_loggers_.end()) {
             it->second.write_entry(entry);

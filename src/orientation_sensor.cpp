@@ -1,5 +1,6 @@
 #include "orientation_sensor.h"
 #include "util_logging.h"
+#include <iostream>
 
 OrientationSensor::OrientationSensor(unsigned short yaw_port, unsigned short pitch_port, unsigned short roll_port)
     : yaw_port_(yaw_port), pitch_port_(pitch_port), roll_port_(roll_port) {

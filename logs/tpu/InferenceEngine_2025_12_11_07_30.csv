@@ -1,0 +1,4 @@
+produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,custom_data
+1765434643481,InferenceEngine,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":6.000,"p95_latency_ms":10.000,"p99_latency_ms":24.000,"average_fps":139.785,"std_dev_ms":2.386,"total_inferences":78}
+1765434648504,InferenceEngine,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":6.000,"p95_latency_ms":10.000,"p99_latency_ms":10.000,"average_fps":151.741,"std_dev_ms":1.179,"total_inferences":61}
+1765434653514,InferenceEngine,-5306587759493946272,PerformanceMetrics,0,{"p50_latency_ms":6.000,"p95_latency_ms":6.000,"p99_latency_ms":6.000,"average_fps":166.667,"std_dev_ms":0.000,"total_inferences":1}

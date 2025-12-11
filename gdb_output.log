@@ -1,0 +1,21 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/aarch64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ff503e580 (LWP 36640)]
+[New Thread 0x7ff482e580 (LWP 36641)]
+INFO: Configuration loaded successfully from /home/pi/CoralEdgeTpu/build/../config.json
+Extracting logging configuration...
+Logging configuration extracted.
+Logger: Starting CsvLogger initialization loop.
+Logger: Processing subsystem config for: CameraCapture
+Logger: Attempting to emplace CsvLogger for CameraCapture
+CsvLogger constructor for CameraCapture in /home/pi/CoralEdgeTpu/logs/camera
+Logger: Rotating log file for CameraCapture
+CsvLogger::rotate_log_file for CameraCapture
+Opening CSV log file: "/home/pi/CoralEdgeTpu/logs/camera/CameraCapture_2025_12_11_07_14.csv"
+Successfully opened CSV log file: "/home/pi/CoralEdgeTpu/logs/camera/CameraCapture_2025_12_11_07_14.csv"
+Exception ignored in: <gdb._GdbFile object at 0x7f787a4e90>
+Traceback (most recent call last):
+  File "/usr/share/gdb/python/gdb/__init__.py", line 56, in flush
+    def flush(self):
+
+KeyboardInterrupt: 

@@ -10,6 +10,7 @@
 #include <functional> // For std::function
 
 #include "util_logging.h" // Include logging utilities
+#include <iostream>
 
 
 // A generic buffer object that can be pooled.
