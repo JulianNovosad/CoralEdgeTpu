@@ -6,17 +6,18 @@
 // Helper function to convert libcamera::PixelFormat to OpenCV Mat type
 // This needs to be robust. For now, assuming common formats.
 int libcamera_pixel_format_to_opencv_type(const libcamera::PixelFormat& format) {
-    if (format == libcamera::formats::BGRA8888) return CV_8UC4;
-    if (format == libcamera::formats::BGR888) return CV_8UC3;
-    if (format == libcamera::formats::RGBA8888) return CV_8UC4;
-    if (format == libcamera::formats::RGB888) return CV_8UC3;
+    if (format.fourcc() == libcamera::formats::BGRA8888.fourcc()) return CV_8UC4;
+    if (format.fourcc() == libcamera::formats::BGR888.fourcc()) return CV_8UC3;
+    if (format.fourcc() == libcamera::formats::RGBA8888.fourcc()) return CV_8UC4;
+    if (format.fourcc() == libcamera::formats::RGB888.fourcc()) return CV_8UC3;
     // Add other formats as needed, or throw an error for unsupported ones
     {
         std::stringstream ss;
-        ss << "Unsupported libcamera::PixelFormat encountered: " << format.toString().c_str() << ". Defaulting to CV_8UC4.";
-        APP_LOG_ERROR(ss.str());
+        ss << "Unsupported libcamera::PixelFormat encountered (FOURCC: " << std::hex << format.fourcc() << "). Worker thread will exit.";
+        std::string log_message = ss.str(); // Make explicit string
+        APP_LOG_ERROR(log_message);
     }
-    return CV_8UC4; // Default to BGRA
+    return -1; // Indicate an unsupported format
 }
 
 // Constructor
@@ -30,7 +31,8 @@ ImageProcessor::ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue
     {
         std::stringstream ss;
         ss << "ImageProcessor initialized with TPU input size: " << tpu_input_width_ << "x" << tpu_input_height_ << ", input format: " << input_pixel_format_.toString().c_str();
-        APP_LOG_INFO(ss.str());
+        std::string log_message = ss.str(); // Make explicit string
+        APP_LOG_INFO(log_message);
     }
 }
 
@@ -71,10 +73,12 @@ void ImageProcessor::worker_thread_func() {
     set_thread_name("ImageProcessor");
 
     int opencv_input_type = libcamera_pixel_format_to_opencv_type(input_pixel_format_);
-    {
+    if (opencv_input_type == -1) {
         std::stringstream ss;
         ss << "ImageProcessor: Failed to determine OpenCV input type for format " << input_pixel_format_.toString().c_str() << ". Worker thread exiting.";
         APP_LOG_ERROR(ss.str());
+        running_ = false; // Signal that the thread is stopping
+        return; // Exit the worker thread
     }
 
     while (running_.load()) {

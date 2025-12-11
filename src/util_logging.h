@@ -14,20 +14,23 @@
 
 #include <sys/time.h> // For clock_gettime, CLOCK_MONOTONIC_RAW
 #include <time.h>     // For timespec
+
 #include <string>
 #include <fstream>
-#include <mutex>          // For std::mutex
-#include <condition_variable> // Required for std::condition_variable
 #include <chrono>         // For std::chrono::system_clock, time_point
-#include <queue>          // For std::queue<LogEntry>
 #include <thread>         // For std::thread
 #include <atomic>         // For std::atomic<bool>
+#include <array>          // For std::array
 #include <iomanip>        // For std::put_time
 #include <map>            // For std::map<std::string, CsvLogger>
 #include <filesystem>     // For std::filesystem
 #include <vector>         // For std::vector
 #include <execinfo.h>     // For backtrace
 #include <cxxabi.h>       // For __cxa_demangle
+#include <cstring>        // For strncpy
+#include <mutex>          // For std::recursive_mutex and std::once_flag
+
+#include <boost/lockfree/spsc_queue.hpp> // For lock-free SPSC queues
 
 // --- Logging Configuration Struct ---
 struct SubsystemLogConfig {
@@ -61,6 +64,18 @@ void set_thread_name(const std::string& name);
 
 
 
+
+// Helper function to safely copy a C-style string to a std::array<char, N>
+template<size_t N>
+void copy_to_array(std::array<char, N>& destination, const char* source) {
+    if (source == nullptr) {
+        destination[0] = '\0';
+        return;
+    }
+    strncpy(destination.data(), source, destination.size() - 1);
+    destination[destination.size() - 1] = '\0'; // Ensure null-termination
+}
+
 /**
  * @brief Structure to hold a single log entry.
  *
@@ -68,8 +83,19 @@ void set_thread_name(const std::string& name);
  */
 struct LogEntry {
     std::chrono::system_clock::time_point timestamp; ///< The exact time the log entry was created.
-    std::string level;                               ///< The severity level of the log (e.g., "INFO", "WARNING", "ERROR", "JSON").
-    std::string message;                             ///< The actual message content to be logged.
+    std::array<char, 16> level;                      ///< The severity level of the log (e.g., "INFO", "WARNING", "ERROR", "JSON").
+    std::array<char, 256> message;                   ///< The actual message content to be logged.
+
+    LogEntry() = default; // Default constructor
+
+    // Constructor to safely copy strings into fixed-size arrays
+    LogEntry(std::chrono::system_clock::time_point ts, const std::string& lvl, const std::string& msg)
+        : timestamp(ts) {
+        strncpy(level.data(), lvl.c_str(), level.size() - 1);
+        level[level.size() - 1] = '\0'; // Ensure null-termination
+        strncpy(message.data(), msg.c_str(), message.size() - 1);
+        message[message.size() - 1] = '\0'; // Ensure null-termination
+    }
 };
 
 /**
@@ -79,9 +105,9 @@ struct LogEntry {
  */
 struct CsvLogEntry {
     long long produced_ts_epoch_ms; ///< Timestamp when this log line was produced (epoch ms, UTC)
-    std::string module;             ///< Module name: camera|tpu|encoder|logic|sysmon
+    std::array<char, 32> module;    ///< Module name: camera|tpu|encoder|logic|sysmon
     long long thread_id;            ///< Numeric OS thread id (TID)
-    std::string event;              ///< Short label (e.g. frame_captured, inference_done, encode_done)
+    std::array<char, 64> event;     ///< Short label (e.g. frame_captured, inference_done, encode_done)
     long long call_ts_epoch_ms;     ///< Timestamp when the module was *called/issued* to start work (epoch ms, UTC)
 
     // Camera-specific metrics
@@ -120,7 +146,47 @@ struct CsvLogEntry {
     long long total_frames_processed_or_inferences = -1;
     float average_latency_ms = -1.0f;
 
-    std::string details; ///< Optional: Any additional details as a string (e.g., error messages, JSON if necessary for very complex data)
+    std::array<char, 1024> details; ///< Optional: Any additional details as a string (e.g., error messages, JSON if necessary for very complex data)
+
+    CsvLogEntry() = default; // Default constructor
+
+    // Constructor to safely copy string parts
+    CsvLogEntry(long long ts_prod, const std::string& mod, long long tid, const std::string& evt, long long ts_call)
+        : produced_ts_epoch_ms(ts_prod), thread_id(tid), call_ts_epoch_ms(ts_call) {
+        strncpy(module.data(), mod.c_str(), module.size() - 1);
+        module[module.size() - 1] = '\0';
+        strncpy(event.data(), evt.c_str(), event.size() - 1);
+        event[event.size() - 1] = '\0';
+        details[0] = '\0'; // Initialize details to empty string
+    }
+
+    // Full constructor for convenience (can be extended as needed)
+    CsvLogEntry(long long ts_prod, const std::string& mod, long long tid, const std::string& evt, long long ts_call,
+                long long cam_frame_id, int cam_w, int cam_h, float cam_exp_ms, float cam_copy_ms,
+                float tpu_inf_ms, int tpu_in_w, int tpu_in_h, float tpu_temp,
+                float enc_ms, long long enc_frames, float enc_fps,
+                float logic_ballistics, float logic_hit_scan, float logic_servo,
+                float sysmon_cpu_temp, float sysmon_cpu_usage, float sysmon_mem_usage,
+                float p50_lat, float p95_lat, float p99_lat, float avg_fps, long long total_frames, float avg_lat,
+                const std::string& det)
+        : produced_ts_epoch_ms(ts_prod), thread_id(tid), call_ts_epoch_ms(ts_call),
+          camera_frame_id(cam_frame_id), camera_width(cam_w), camera_height(cam_h),
+          camera_exposure_ms(cam_exp_ms), camera_copy_time_ms(cam_copy_ms),
+          tpu_inference_ms(tpu_inf_ms), tpu_input_w(tpu_in_w), tpu_input_h(tpu_in_h),
+          tpu_temp_c(tpu_temp), encoder_encode_ms(enc_ms), encoder_total_encoded_frames(enc_frames),
+          encoder_average_fps(enc_fps), logic_metric_ballistics(logic_ballistics),
+          logic_metric_hit_scan(logic_hit_scan), logic_metric_servo_actuation(logic_servo),
+          sysmon_cpu_temp_c(sysmon_cpu_temp), sysmon_cpu_usage_percent(sysmon_cpu_usage),
+          sysmon_mem_usage_percent(sysmon_mem_usage), p50_latency_ms(p50_lat),
+          p95_latency_ms(p95_lat), p99_latency_ms(p99_lat), average_fps(avg_fps),
+          total_frames_processed_or_inferences(total_frames), average_latency_ms(avg_lat) {
+        strncpy(module.data(), mod.c_str(), module.size() - 1);
+        module[module.size() - 1] = '\0';
+        strncpy(event.data(), evt.c_str(), event.size() - 1);
+        event[event.size() - 1] = '\0';
+        strncpy(details.data(), det.c_str(), details.size() - 1);
+        details[details.size() - 1] = '\0';
+    }
 };
 
 /**
@@ -145,7 +211,7 @@ private:
     std::ofstream current_log_file_;
     std::recursive_mutex file_mutex_; // Protects access to the file
     int current_log_minute_; // New member to store the minute of the current log file
-    std::string escape_csv_string(const std::string& str);
+
 };
 
 
@@ -305,17 +371,17 @@ public: // Changed to public
     std::string base_log_dir_;                   ///< The base directory where log files are stored.
     std::string log_file_prefix_;                ///< The prefix used for standard log filenames.
     std::ofstream standard_log_file_;            ///< Output file stream for standard logs.
-    std::mutex log_mutex_;                       ///< Mutex to protect access to the standard log queue.
-    std::condition_variable cond_var_;           ///< Condition variable for standard writer thread signaling.
-    std::queue<LogEntry> log_queue_;             ///< Queue for asynchronous standard log processing.
+
+
+    boost::lockfree::spsc_queue<LogEntry, boost::lockfree::capacity<100>> log_queue_;             ///< Queue for asynchronous standard log processing.
     std::thread standard_writer_thread_;         ///< Dedicated thread for writing standard log messages.
     std::chrono::system_clock::time_point last_rotation_time_; ///< Timestamp of the last standard log file rotation.
     int max_standard_log_files_;
 
     // CSV log members
-    std::mutex csv_log_mutex_;                   ///< Mutex to protect access to the CSV log queue.
-    std::condition_variable csv_cond_var_;       ///< Condition variable for CSV writer thread signaling.
-    std::queue<CsvLogEntry> csv_log_queue_;      ///< Queue for asynchronous CSV log processing.
+
+
+    boost::lockfree::spsc_queue<CsvLogEntry, boost::lockfree::capacity<100>> csv_log_queue_;      ///< Queue for asynchronous CSV log processing.
     std::thread csv_writer_thread_;              ///< Dedicated thread for writing CSV log messages.
     std::map<std::string, CsvLogger> csv_loggers_; ///< Map to manage CsvLogger instances per module.
     std::vector<SubsystemLogConfig> csv_subsystem_configs_; ///< Store CSV subsystem configurations

@@ -214,8 +214,8 @@ CMakeFiles/detector.dir/src/h264_encoder.cpp.o: \
  /usr/include/c++/12/bits/fs_ops.h /usr/include/execinfo.h \
  /usr/include/c++/12/cxxabi.h \
  /usr/include/aarch64-linux-gnu/c++/12/bits/cxxabi_tweaks.h \
- /usr/include/c++/12/iostream /usr/include/boost/lockfree/spsc_queue.hpp \
- /usr/include/c++/12/algorithm \
+ /usr/include/c++/12/cstring /usr/include/string.h /usr/include/strings.h \
+ /usr/include/boost/lockfree/spsc_queue.hpp /usr/include/c++/12/algorithm \
  /usr/include/c++/12/pstl/glue_algorithm_defs.h \
  /usr/include/boost/aligned_storage.hpp \
  /usr/include/boost/type_traits/aligned_storage.hpp \
@@ -725,6 +725,7 @@ CMakeFiles/detector.dir/src/h264_encoder.cpp.o: \
  /usr/include/boost/predef/hardware/simd/ppc/versions.h \
  /usr/include/boost/predef/version.h \
  /usr/include/boost/lockfree/lockfree_forward.hpp \
+ /usr/include/c++/12/iostream \
  /usr/include/libcamera/libcamera/pixel_format.h \
  /usr/include/c++/12/optional /usr/include/opencv4/opencv2/opencv.hpp \
  /usr/include/opencv4/opencv2/opencv_modules.hpp \
@@ -745,8 +746,7 @@ CMakeFiles/detector.dir/src/h264_encoder.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/posix2_lim.h \
  /usr/include/aarch64-linux-gnu/bits/xopen_lim.h \
  /usr/include/aarch64-linux-gnu/bits/uio_lim.h \
- /usr/include/opencv4/opencv2/core/cvstd.hpp /usr/include/c++/12/cstring \
- /usr/include/string.h /usr/include/strings.h /usr/include/c++/12/cmath \
+ /usr/include/opencv4/opencv2/core/cvstd.hpp /usr/include/c++/12/cmath \
  /usr/include/math.h /usr/include/aarch64-linux-gnu/bits/math-vector.h \
  /usr/include/aarch64-linux-gnu/bits/libm-simd-decl-stubs.h \
  /usr/include/aarch64-linux-gnu/bits/flt-eval-method.h \

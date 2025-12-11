@@ -207,9 +207,9 @@ void LogicModule::worker_thread_func() {
                 
                 CsvLogEntry entry;
                 entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                entry.module = "LogicModule";
+                copy_to_array(entry.module, "LogicModule");
                 entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                entry.event = "logic_done";
+                copy_to_array(entry.event, "logic_done");
                 entry.call_ts_epoch_ms = call_ts;
                 entry.logic_metric_ballistics = static_cast<float>(duration_ms); // Map processing_ms to ballistics metric
                 entry.logic_metric_hit_scan = static_cast<float>(current_hit_scan_count_);
@@ -448,7 +448,7 @@ void LogicModule::get_performance_metrics() {
     entry.total_frames_processed_or_inferences = total_predictions_;
     entry.average_latency_ms = static_cast<float>(average_duration_ms);
     // Clear details field as it is now structured
-    entry.details = "";
+    copy_to_array(entry.details, "");
 
     // The logic_metric_ballistics field is already being used for average_duration_ms in the existing code.
     // We should keep this for now, but ensure its meaning is clear.

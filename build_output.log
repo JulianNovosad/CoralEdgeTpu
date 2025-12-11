@@ -1,0 +1,267 @@
+Starting build process...
+1. Installing required packages...
+Hit:1 http://deb.debian.org/debian bookworm InRelease
+Hit:2 http://deb.debian.org/debian-security bookworm-security InRelease
+Hit:3 http://archive.raspberrypi.com/debian bookworm InRelease
+Hit:4 http://deb.debian.org/debian bookworm-updates InRelease
+Hit:5 https://storage.googleapis.com/bazel-apt stable InRelease
+Hit:6 https://deb.nodesource.com/node_22.x nodistro InRelease
+Hit:7 https://packages.cloud.google.com/apt coral-edgetpu-stable InRelease
+Reading package lists...
+W: Skipping acquire of configured file 'main/binary-arm64/Packages' as repository 'https://storage.googleapis.com/bazel-apt stable InRelease' doesn't have the component 'main' (component misspelt in sources.list?)
+W: Skipping acquire of configured file 'main/i18n/Translation-en' as repository 'https://storage.googleapis.com/bazel-apt stable InRelease' doesn't have the component 'main' (component misspelt in sources.list?)
+W: https://packages.cloud.google.com/apt/dists/coral-edgetpu-stable/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libcamera-dev is already the newest version (0.5.2+rpt20250903-1~bpo12+1).
+0 upgraded, 0 newly installed, 0 to remove and 244 not upgraded.
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libzmq3-dev is already the newest version (4.3.4-6).
+0 upgraded, 0 newly installed, 0 to remove and 244 not upgraded.
+2. Installing EdgeTPU runtime and checking device...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libedgetpu-dev is already the newest version (16.0).
+0 upgraded, 0 newly installed, 0 to remove and 244 not upgraded.
+crw-rw----  1 root apex    120,   0 Dec 11 18:40 apex_0
+Creating symlinks for libedgetpu.so and libedgetpu.so.1...
+3. Building and installing FlatBuffers v1.12.0...
+-- The C compiler identification is GNU 12.2.0
+-- The CXX compiler identification is GNU 12.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Looking for strtof_l
+-- Looking for strtof_l - found
+-- Looking for strtoull_l
+-- Looking for strtoull_l - found
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/pi/CoralEdgeTpu/flatbuffers-src/build
+[  5%] Built target flathash
+[ 19%] Built target flatbuffers
+[100%] Built target flatc
+3.5. Cloning and copying CivetWeb...
+CivetWeb already cloned.
+4. Building TensorFlow Lite v2.5.0 shared library...
+TensorFlow v2.5.0 already cloned. Ensuring correct version.
+HEAD is now at a4dfb8d1a71 Merge pull request #49124 from tensorflow/mm-cherrypick-tf-data-segfault-fix-to-r2.5
+5. Building final C++ application...
+-- The CXX compiler identification is GNU 12.2.0
+-- The C compiler identification is GNU 12.2.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found PkgConfig: /usr/bin/pkg-config (found version "1.8.1") 
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Checking for module 'libzmq'
+--   Found libzmq, version 4.3.4
+-- Found ZeroMQ: zmq
+-- Found GTest: /usr/lib/aarch64-linux-gnu/cmake/GTest/GTestConfig.cmake (found version "1.12.1")  
+-- Checking for module 'libcamera'
+--   Found libcamera, version 0.5.2
+-- Found libcamera: camera;camera-base
+-- Checking for module 'libjpeg'
+--   Found libjpeg, version 2.1.5
+-- Found OpenCV: /usr (found version "4.6.0") 
+-- Found libjpeg: jpeg
+-- Found OpenCV: opencv_calib3d;opencv_core;opencv_dnn;opencv_features2d;opencv_flann;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_ml;opencv_objdetect;opencv_photo;opencv_stitching;opencv_video;opencv_videoio;opencv_alphamat;opencv_aruco;opencv_barcode;opencv_bgsegm;opencv_bioinspired;opencv_ccalib;opencv_cvv;opencv_datasets;opencv_dnn_objdetect;opencv_dnn_superres;opencv_dpm;opencv_face;opencv_freetype;opencv_fuzzy;opencv_hdf;opencv_hfs;opencv_img_hash;opencv_intensity_transform;opencv_line_descriptor;opencv_mcc;opencv_optflow;opencv_phase_unwrapping;opencv_plot;opencv_quality;opencv_rapid;opencv_reg;opencv_rgbd;opencv_saliency;opencv_shape;opencv_stereo;opencv_structured_light;opencv_superres;opencv_surface_matching;opencv_text;opencv_tracking;opencv_videostab;opencv_viz;opencv_wechat_qrcode;opencv_ximgproc;opencv_xobjdetect;opencv_xphoto
+-- Found x264: x264
+-- Target 'detector' configured. Ready to build.
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/pi/CoralEdgeTpu/build
+[ 20%] Building CXX object CMakeFiles/detector.dir/src/main.cpp.o
+[ 20%] Building CXX object CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o
+[ 20%] Building CXX object CMakeFiles/config_loader_test.dir/src/config_loader.cpp.o
+[ 20%] Building CXX object CMakeFiles/config_loader_test.dir/tests/config_loader_test.cpp.o
+[ 25%] Linking CXX executable dlopen_test
+[ 25%] Built target dlopen_test
+[ 30%] Building CXX object CMakeFiles/config_loader_test.dir/src/util_logging.cpp.o
+[ 35%] Building CXX object CMakeFiles/detector.dir/src/application.cpp.o
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:37,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:16,
+                 from /home/pi/CoralEdgeTpu/src/application.h:8,
+                 from /home/pi/CoralEdgeTpu/src/main.cpp:1:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::EndEvent(uint32_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:34: warning: unused parameter ‘event_handle’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:56: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                                                ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:74:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   74 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::AddEvent(const char*, EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:37: warning: unused parameter ‘tag’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                         ~~~~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:52: warning: unused parameter ‘event_type’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                          ~~~~~~~~~~^~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:73: warning: unused parameter ‘start’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                                                ~~~~~~~~~^~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:34: warning: unused parameter ‘end’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:47: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                                       ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:93:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   93 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:38:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual uint32_t tflite::Subgraph::SubgraphAwareProfiler::BeginEvent(const char*, tflite::Profiler::EventType, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:370:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  370 |                         int64_t event_metadata2) override {
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual void tflite::Subgraph::SubgraphAwareProfiler::AddEvent(const char*, tflite::Profiler::EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:389:27: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  389 |                   int64_t event_metadata2) override {
+      |                   ~~~~~~~~^~~~~~~~~~~~~~~
+[ 40%] Building CXX object CMakeFiles/detector.dir/src/camera_capture.cpp.o
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter_builder.h:28,
+                 from /home/pi/CoralEdgeTpu/include/tensorflow/lite/model.h:21,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:17:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h: In member function ‘virtual tflite::OpResolver::TfLiteDelegatePtrVector tflite::OpResolver::GetDelegates(int) const’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h:44:52: warning: unused parameter ‘num_threads’ [-Wunused-parameter]
+   44 |   virtual TfLiteDelegatePtrVector GetDelegates(int num_threads) const {
+      |                                                ~~~~^~~~~~~~~~~
+[ 45%] Linking CXX executable config_loader_test
+[ 45%] Built target config_loader_test
+[ 50%] Building CXX object CMakeFiles/detector.dir/src/inference.cpp.o
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:37,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:16,
+                 from /home/pi/CoralEdgeTpu/src/application.h:8,
+                 from /home/pi/CoralEdgeTpu/src/application.cpp:1:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::EndEvent(uint32_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:34: warning: unused parameter ‘event_handle’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:56: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                                                ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:74:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   74 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::AddEvent(const char*, EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:37: warning: unused parameter ‘tag’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                         ~~~~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:52: warning: unused parameter ‘event_type’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                          ~~~~~~~~~~^~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:73: warning: unused parameter ‘start’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                                                ~~~~~~~~~^~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:34: warning: unused parameter ‘end’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:47: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                                       ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:93:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   93 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:38:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual uint32_t tflite::Subgraph::SubgraphAwareProfiler::BeginEvent(const char*, tflite::Profiler::EventType, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:370:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  370 |                         int64_t event_metadata2) override {
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual void tflite::Subgraph::SubgraphAwareProfiler::AddEvent(const char*, tflite::Profiler::EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:389:27: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  389 |                   int64_t event_metadata2) override {
+      |                   ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:37,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:16,
+                 from /home/pi/CoralEdgeTpu/src/inference.cpp:1:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::EndEvent(uint32_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:34: warning: unused parameter ‘event_handle’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:56: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                                                ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:74:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   74 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::AddEvent(const char*, EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:37: warning: unused parameter ‘tag’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                         ~~~~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:52: warning: unused parameter ‘event_type’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                          ~~~~~~~~~~^~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:73: warning: unused parameter ‘start’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                                                ~~~~~~~~~^~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:34: warning: unused parameter ‘end’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:47: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                                       ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:93:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   93 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:38:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual uint32_t tflite::Subgraph::SubgraphAwareProfiler::BeginEvent(const char*, tflite::Profiler::EventType, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:370:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  370 |                         int64_t event_metadata2) override {
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual void tflite::Subgraph::SubgraphAwareProfiler::AddEvent(const char*, tflite::Profiler::EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:389:27: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  389 |                   int64_t event_metadata2) override {
+      |                   ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/src/camera_capture.cpp: In member function ‘bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer*, const libcamera::StreamConfiguration&, long long int, long long int, long long int)’:
+/home/pi/CoralEdgeTpu/src/camera_capture.cpp:723:60: warning: unused parameter ‘exposure_ms’ [-Wunused-parameter]
+  723 |                                                  long long exposure_ms) {
+      |                                                  ~~~~~~~~~~^~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter_builder.h:28,
+                 from /home/pi/CoralEdgeTpu/include/tensorflow/lite/model.h:21,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:17:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h: In member function ‘virtual tflite::OpResolver::TfLiteDelegatePtrVector tflite::OpResolver::GetDelegates(int) const’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h:44:52: warning: unused parameter ‘num_threads’ [-Wunused-parameter]
+   44 |   virtual TfLiteDelegatePtrVector GetDelegates(int num_threads) const {
+      |                                                ~~~~^~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter_builder.h:28,
+                 from /home/pi/CoralEdgeTpu/include/tensorflow/lite/model.h:21,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:17:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h: In member function ‘virtual tflite::OpResolver::TfLiteDelegatePtrVector tflite::OpResolver::GetDelegates(int) const’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h:44:52: warning: unused parameter ‘num_threads’ [-Wunused-parameter]
+   44 |   virtual TfLiteDelegatePtrVector GetDelegates(int num_threads) const {
+      |                                                ~~~~^~~~~~~~~~~
+[ 55%] Building CXX object CMakeFiles/detector.dir/src/image_processor.cpp.o
+[ 60%] Building CXX object CMakeFiles/detector.dir/src/util_logging.cpp.o
+[ 65%] Building CXX object CMakeFiles/detector.dir/src/config_loader.cpp.o
+[ 70%] Building CXX object CMakeFiles/detector.dir/src/logic.cpp.o
+[ 75%] Building CXX object CMakeFiles/detector.dir/src/h264_encoder.cpp.o
+[ 80%] Building CXX object CMakeFiles/detector.dir/src/orientation_sensor.cpp.o
+[ 85%] Building CXX object CMakeFiles/detector.dir/src/application_supervisor.cpp.o
+[ 90%] Building CXX object CMakeFiles/detector.dir/src/system_monitor.cpp.o
+[ 95%] Building C object CMakeFiles/detector.dir/civetweb/src/civetweb.c.o
+[100%] Linking CXX executable detector
+[100%] Built target detector
+Build process completed.

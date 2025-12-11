@@ -34,7 +34,7 @@ template <typename T>
 class BufferPool {
 public:
     // Defines a shared_ptr that will automatically return the buffer to the pool.
-    using PooledPtr = std::shared_ptr<PooledBuffer<T>>;
+
 
     BufferPool(size_t num_buffers, size_t buffer_size, std::string pool_name = "BufferPool")
         : name_(std::move(pool_name)) {

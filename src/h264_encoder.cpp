@@ -248,9 +248,9 @@ void H264Encoder::worker_thread_func() {
             
             CsvLogEntry entry;
             entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-            entry.module = "H264Encoder";
+            copy_to_array(entry.module, "H264Encoder");
             entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-            entry.event = "encode_done";
+            copy_to_array(entry.event, "encode_done");
             entry.call_ts_epoch_ms = call_ts;
             entry.encoder_encode_ms = static_cast<float>(duration_ms);
             // total_encoded_frames and average_fps are summary metrics, not per-frame
@@ -321,7 +321,7 @@ void H264Encoder::get_performance_metrics() {
     entry.total_frames_processed_or_inferences = total_encoded_frames_;
     entry.average_latency_ms = static_cast<float>(average_latency_ms);
     // Clear details field as it is now structured
-    entry.details = "";
+    copy_to_array(entry.details, "");
 
     Logger::getInstance().log_csv(entry);
     APP_LOG_INFO("--- H264Encoder Performance Metrics ---");

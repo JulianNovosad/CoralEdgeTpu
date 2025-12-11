@@ -272,7 +272,7 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /usr/include/c++/12/bits/fs_ops.h /usr/include/execinfo.h \
  /usr/include/c++/12/cxxabi.h \
  /usr/include/aarch64-linux-gnu/c++/12/bits/cxxabi_tweaks.h \
- /usr/include/c++/12/iostream /usr/include/boost/lockfree/spsc_queue.hpp \
+ /usr/include/boost/lockfree/spsc_queue.hpp \
  /usr/include/boost/aligned_storage.hpp \
  /usr/include/boost/type_traits/aligned_storage.hpp \
  /usr/include/boost/config.hpp /usr/include/boost/config/user.hpp \
@@ -779,4 +779,5 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /usr/include/boost/predef/hardware/simd/ppc/versions.h \
  /usr/include/boost/predef/version.h \
  /usr/include/boost/lockfree/lockfree_forward.hpp \
+ /usr/include/c++/12/iostream \
  /usr/include/libcamera/libcamera/pixel_format.h

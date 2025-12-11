@@ -1,0 +1,117 @@
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Logger: Creating standard writer thread."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Logger: Standard writer thread started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Logger: Creating CSV writer thread."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CoralEdgeTpu Detector Starting..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Signal handlers for SIGINT and SIGTERM set up."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Logger: CSV writer thread started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Initializing modules..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Creating CameraCapture..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Libcamera CameraManager started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CameraCapture created."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Creating ImageProcessor..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"ImageProcessor initialized with TPU input size: 300x300, input format: BGR888"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"ImageProcessor created."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Creating InferenceEngine..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Model Input Dimensions: 300x300x3"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Edge TPU delegate creation starting..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: 366506170016"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"InferenceEngine created."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Creating OrientationSensor..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"OrientationSensor created (mock data provider). Yaw Port: 2001, Pitch Port: 2002, Roll Port: 2003"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"OrientationSensor created."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Creating LogicModule..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Calculating zero pitch for 100.000000m..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"WARNING", "message":"Trajectory calculation exceeded 5000 steps."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Zero pitch found after 1 iterations: 0.000000 rad"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"BallisticsSolver created and zero pitch calculated."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"LogicModule created with 3D Ballistics Solver, configured from file."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"LogicModule created."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Creating SystemMonitor..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"SystemMonitor created with interval: 5 seconds."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"SystemMonitor created."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Creating H264Encoder..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder created."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Modules initialized."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Starting modules..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Starting all modules..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"ImageProcessor worker thread started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"ImageProcessor worker thread running."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"InferenceEngine started with 1 worker threads."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CameraCapture::start() called."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Selected Camera ID: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Acquire: Camera acquired successfully."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Camera acquired successfully. Proceeding to setup."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Camera acquired and confirmed to be non-null. Proceeding to setup."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"setup_camera: Configuring camera: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CameraConfiguration validate() -> Status: 1"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"WARNING", "message":"Camera configuration adjusted by libcamera for dual streams."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Final stream[0] size=1536x864 fmt='56595559'"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Final stream[1] size=300x300 fmt='34324752'"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CameraCapture: Configured main stream format: '56595559', size: 1536x864, stride: 3072 (FOURCC: 1448695129)"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Libcamera dual streams configured."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Actual Video Stream Config: 1536x864 format: '56595559'"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Actual TPU Stream Config: 300x300 format: '34324752' stride: 960"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Libcamera buffers allocated for main video stream. Number of buffers: 4"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Libcamera buffers allocated for TPU stream. Number of buffers: 4"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Libcamera requests created and buffers added for both streams."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Initializing H.264 encoder..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H.264 encoder initialized (placeholder)."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Camera setup completed successfully."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10064 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10058 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10054 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10042 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10053 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10053 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10060 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10062 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10056 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10062 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10057 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10054 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10053 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10053 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Libcamera camera started successfully."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Libcamera camera started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CameraCapture: All initial requests successfully queued."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CameraCapture: Request processor thread started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"OrientationSensor started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"OrientationSensor worker thread started (mocking data)."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"LogicModule worker thread started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"LogicModule started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"SystemMonitor worker thread started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"SystemMonitor started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder worker thread started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder: Initializing x264 with width=1536, height=864, fps=120.000000"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"All modules started successfully."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Modules started."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Registered module for shutdown: SystemMonitor"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Registered module for shutdown: LogicModule"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Registered module for shutdown: OrientationSensor"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Registered module for shutdown: CameraCapture"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Registered module for shutdown: H264Encoder"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Registered module for shutdown: ImageProcessor"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Registered module for shutdown: InferenceEngine"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Running application. Press Ctrl+C to quit."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder: x264 parameters - width=1536, height=864, csp=2, fps_num=120, fps_den=1, keyint_max=120, threads=1"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder: Attempting to open x264 encoder..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10251 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder: x264 encoder opened successfully."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder: Attempting to allocate x264 picture_in_..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"H264Encoder: x264 picture_in_ allocated."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"CameraCapture: request_complete_callback invoked."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"CameraCapture: Request enqueued for processing."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"SensorTimestamp (ns): 12482605130000, converted call_ts (epoch ms): 1765487285576"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"ExposureTime (us): 884, converted exposure_ms: 0"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Processing frame for Main Video Stream with format: '56595559'"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Frame buffer has 1 planes."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Plane 0: fd=50, length=2654208"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Acquiring buffer from pool..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"ImagePool: Acquired buffer. Available: 79"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"Time to acquire buffer: 7 us"}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Mmapping plane buffer..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"INFO", "message":"Mmap successful. Copying data..."}
+{"timestamp":"2025-12-11T21:08:05Z", "level":"DEBUG", "message":"InferenceEngine: Total worker thread loop iteration time: 10058 us"}

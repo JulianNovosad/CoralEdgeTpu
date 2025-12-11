@@ -1,0 +1,2563 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/aarch64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ff503e580 (LWP 18515)]
+[New Thread 0x7ff482e580 (LWP 18516)]
+[New Thread 0x7ff401e580 (LWP 18517)]
+[New Thread 0x7ff380e580 (LWP 18518)]
+[New Thread 0x7fcb697580 (LWP 18519)]
+[New Thread 0x7fcadae580 (LWP 18520)]
+[New Thread 0x7fca59e580 (LWP 18521)]
+[New Thread 0x7fc96f6580 (LWP 18522)]
+[Thread 0x7fc96f6580 (LWP 18522) exited]
+[New Thread 0x7fc96f6580 (LWP 18523)]
+[Thread 0x7fc96f6580 (LWP 18523) exited]
+[New Thread 0x7fc96f6580 (LWP 18524)]
+[New Thread 0x7fc8ee6580 (LWP 18525)]
+[New Thread 0x7fc3ffe580 (LWP 18526)]
+[New Thread 0x7fc37ee580 (LWP 18527)]
+[New Thread 0x7fc2fde580 (LWP 18528)]
+[New Thread 0x7fc27ce580 (LWP 18529)]
+[New Thread 0x7fc1fbe580 (LWP 18530)]
+[New Thread 0x7fc17ae580 (LWP 18531)]
+[New Thread 0x7fc0f9e580 (LWP 18532)]
+[New Thread 0x7fc078e580 (LWP 18533)]
+[New Thread 0x7fbff7e580 (LWP 18534)]
+[New Thread 0x7fbf76e580 (LWP 18535)]
+[New Thread 0x7fb7ffe580 (LWP 18536)]
+[New Thread 0x7fbe309580 (LWP 18537)]
+[New Thread 0x7fbd04b580 (LWP 18538)]
+[New Thread 0x7fbc83b580 (LWP 18539)]
+[New Thread 0x7fb77ee580 (LWP 18540)]
+
+Thread 4 "detector" received signal SIGABRT, Aborted.
+[Switching to Thread 0x7ff401e580 (LWP 18517)]
+__pthread_kill_implementation (threadid=549554611584, signo=signo@entry=6, no_tid=no_tid@entry=0) at ./nptl/pthread_kill.c:44
+44	./nptl/pthread_kill.c: No such file or directory.
+
+Thread 27 (Thread 0x7fb77ee580 (LWP 18540) "detector"):
+#0  clone () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:64
+No locals.
+#1  0x0000007ff6c58a38 in __GI___clone_internal (cl_args=cl_args@entry=0x7fb77ede90, func=func@entry=0x7ff6beebc0 <start_thread>, arg=arg@entry=0x7fb77ee580) at ../sysdeps/unix/sysv/linux/clone-internal.c:83
+        ret = <optimized out>
+        flags = <optimized out>
+        stack = <optimized out>
+#2  0x0000007ff6beeab4 in create_thread (pd=0x7fb77ee580, attr=0x7fffff87a0, stopped_start=0x7fffff8796, stackaddr=0x7fb6fe0000, stacksize=8445504, thread_ran=0x7fffff8797) at ./nptl/pthread_create.c:295
+        need_setaffinity = false
+        clone_flags = 4001536
+        tp = 0x7fb77eecc0
+        args = {flags = 0, pidfd = 0, child_tid = 0, parent_tid = 0, exit_signal = 0, stack = 0, stack_size = 0, tls = 0, set_tid = 0, set_tid_size = 0, cgroup = 0}
+        ret = <optimized out>
+        __PRETTY_FUNCTION__ = "create_thread"
+#3  0x0000000000000000 in ?? ()
+No symbol table info available.
+Backtrace stopped: previous frame identical to this frame (corrupt stack?)
+
+Thread 26 (Thread 0x7fbc83b580 (LWP 18539) "detector"):
+#0  0x0000007ff6c236f0 in __GI___clock_nanosleep (clock_id=<optimized out>, clock_id@entry=0, flags=flags@entry=0, req=0x7fbc83ab10, rem=0x7fbc83ab10) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:48
+        _x2tmp = 548623592208
+        _x0tmp = <optimized out>
+        _x0 = 0
+        _x2 = 548623592208
+        _x8 = 115
+        _x3tmp = 548623592208
+        _x1tmp = 0
+        _x1 = 0
+        _x3 = 548623592208
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        r = <optimized out>
+#1  0x0000007ff6c2865c in __GI___nanosleep (req=<optimized out>, rem=<optimized out>) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+        ret = <optimized out>
+#2  0x0000005555575000 in std::this_thread::sleep_for<long, std::ratio<1l, 1000l> > (__rtime=...) at /usr/include/c++/12/bits/this_thread_sleep.h:80
+        __s = {__r = 0}
+        __ns = {__r = 100000000}
+        __ts = {tv_sec = 0, tv_nsec = 89219514}
+#3  0x00000055555dce7c in OrientationSensor::worker_thread_func (this=0x5555782d90) at /home/pi/CoralEdgeTpu/src/orientation_sensor.cpp:52
+No locals.
+#4  0x00000055555dd5c0 in std::__invoke_impl<void, void (OrientationSensor::*)(), OrientationSensor*> (__f=@0x5555785d20: (void (OrientationSensor::*)(OrientationSensor * const)) 0x55555dcdc4 <OrientationSensor::worker_thread_func()>, __t=@0x5555785d18: 0x5555782d90) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#5  0x00000055555dd500 in std::__invoke<void (OrientationSensor::*)(), OrientationSensor*> (__fn=@0x5555785d20: (void (OrientationSensor::*)(OrientationSensor * const)) 0x55555dcdc4 <OrientationSensor::worker_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#6  0x00000055555dd464 in std::thread::_Invoker<std::tuple<void (OrientationSensor::*)(), OrientationSensor*> >::_M_invoke<0ul, 1ul> (this=0x5555785d18) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#7  0x00000055555dd41c in std::thread::_Invoker<std::tuple<void (OrientationSensor::*)(), OrientationSensor*> >::operator() (this=0x5555785d18) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#8  0x00000055555dd3fc in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (OrientationSensor::*)(), OrientationSensor*> > >::_M_run (this=0x5555785d10) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#9  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#10 0x0000007ff6beee90 in start_thread (arg=0x7fffff8797) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8797
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548623594880, 549755783072, 549755783062, 0, 8445504, 549755783063, 548615147520, 548623594880, 548615147520, 548623596736, 548623592736, 6847670180204623332, 0, 6847670181378716728, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#11 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 25 (Thread 0x7fbd04b580 (LWP 18538) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x5555754a34) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 366505970228
+        _x0 = 366505970228
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x5555754a34) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5555754a34, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x55557549d8, cond=0x5555754a08) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fbd04a658, __canceltype = 1433750072, __prev = 0x0}
+        cbuffer = {wseq = 3, cond = 0x5555754a08, mutex = 0x55557549d8, private = 0}
+        err = <optimized out>
+        g = 1
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 3
+        seq = 1
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x5555754a08, mutex=0x55557549d8) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x0000005555590a70 in std::condition_variable::wait<CameraCapture::request_processor_thread_func()::<lambda()> >(std::unique_lock<std::mutex> &, struct {...}) (this=0x5555754a08, __lock=..., __p=...) at /usr/include/c++/12/condition_variable:102
+No locals.
+#6  0x000000555558fd0c in CameraCapture::request_processor_thread_func (this=0x5555754850) at /home/pi/CoralEdgeTpu/src/camera_capture.cpp:827
+        monotonic_raw_now_ns = 11970553725457
+        epoch_offset_ms = 1765474802971
+        md_timestamp = std::optional<long> = {[contained value] = 11970265208000}
+        frame_id = 0
+        exposure_ms = 0
+        captured_buffers = std::map with 2 elements = {[0x7fc4047a18] = 0x7fc419a740, [0x7fc4047bb0] = 0x7fc403d2a0}
+        processing_end_time = {__d = {__r = 1765486773527920377}}
+        lock = {_M_device = 0x55557549d8, _M_owns = true}
+        call_ts = 1765486773236
+        processing_start_time = {__d = {__r = 1765486773524097597}}
+        duration_ms = 3
+        request = 0x555577e2a0
+        produced_ts = 1765486773524
+        md_exposure_us = std::optional<int> = {[contained value] = 884}
+#7  0x000000555559e54c in std::__invoke_impl<void, void (CameraCapture::*)(), CameraCapture*> (__f=@0x55557838e0: (void (CameraCapture::*)(CameraCapture * const)) 0x555558fc44 <CameraCapture::request_processor_thread_func()>, __t=@0x55557838d8: 0x5555754850) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#8  0x000000555559e404 in std::__invoke<void (CameraCapture::*)(), CameraCapture*> (__fn=@0x55557838e0: (void (CameraCapture::*)(CameraCapture * const)) 0x555558fc44 <CameraCapture::request_processor_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#9  0x000000555559e2c0 in std::thread::_Invoker<std::tuple<void (CameraCapture::*)(), CameraCapture*> >::_M_invoke<0ul, 1ul> (this=0x55557838d8) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#10 0x000000555559e174 in std::thread::_Invoker<std::tuple<void (CameraCapture::*)(), CameraCapture*> >::operator() (this=0x55557838d8) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#11 0x000000555559de74 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (CameraCapture::*)(), CameraCapture*> > >::_M_run (this=0x55557838d0) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#12 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#13 0x0000007ff6beee90 in start_thread (arg=0x7fffff83c7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff83c7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548632049024, 549755782096, 549755782086, 0, 8445504, 549755782087, 548623601664, 548632049024, 548623601664, 548632050880, 548632046880, 6847670180204623332, 0, 6847670181403817016, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#14 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 24 (Thread 0x7fbe309580 (LWP 18537) "detector"):
+#0  0x0000007ff6c4db68 in __ppoll (fds=0x7fc419bbe0, nfds=1, timeout=<optimized out>, sigmask=0x0) at ../sysdeps/unix/sysv/linux/ppoll.c:42
+        _x3tmp = 0
+        _x0tmp = 548750867424
+        _x0 = 548750867424
+        _x3 = 0
+        _x4tmp = 8
+        _x1tmp = 1
+        _x1 = 1
+        _x4 = 8
+        _x2tmp = <optimized out>
+        _x2 = 0
+        _x8 = 73
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        tval = {tv_sec = 548749290880, tv_nsec = 8}
+#1  0x0000007ff78f383c in libcamera::EventDispatcherPoll::poll(std::vector<pollfd, std::allocator<pollfd> >*) () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#2  0x0000007ff78f40f4 in libcamera::EventDispatcherPoll::processEvents() () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#3  0x0000007ff78fc1bc in libcamera::Thread::exec() () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#4  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#5  0x0000007ff6beee90 in start_thread (arg=0x7fcb696177) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fcb696177
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548651701632, 548873527680, 548873527670, 0, 8445504, 548873527671, 548643254272, 548651701632, 548643254272, 548651703488, 548651699488, 6847670180204623332, 0, 6847670181421896760, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#6  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 23 (Thread 0x7fb7ffe580 (LWP 18536) "detector"):
+#0  0x0000007ff7bc7234 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#1  0x0000007ff7bc74a8 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#2  0x0000007ff7bc7534 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff7f2a668 in tflite::Subgraph::CleanupNode(int) () from /home/pi/CoralEdgeTpu/lib/libtensorflowlite.so
+No symbol table info available.
+#4  0x0000007ff7f2a6d4 in tflite::Subgraph::~Subgraph() () from /home/pi/CoralEdgeTpu/lib/libtensorflowlite.so
+No symbol table info available.
+#5  0x0000007ff7f2a8c4 in tflite::Subgraph::~Subgraph() () from /home/pi/CoralEdgeTpu/lib/libtensorflowlite.so
+No symbol table info available.
+#6  0x0000007ff7f30d00 in tflite::Interpreter::~Interpreter() () from /home/pi/CoralEdgeTpu/lib/libtensorflowlite.so
+No symbol table info available.
+#7  0x00000055555a4a80 in std::default_delete<tflite::Interpreter>::operator() (this=0x7fb7ffd608, __ptr=0x7fb0000c70) at /usr/include/c++/12/bits/unique_ptr.h:95
+No locals.
+#8  0x00000055555a3cf0 in std::unique_ptr<tflite::Interpreter, std::default_delete<tflite::Interpreter> >::~unique_ptr (this=0x7fb7ffd608, __in_chrg=<optimized out>) at /usr/include/c++/12/bits/unique_ptr.h:396
+        __ptr = @0x7fb7ffd608: 0x7fb0000c70
+        __ptr = <optimized out>
+#9  0x00000055555a1360 in InferenceEngine::worker_thread_func (this=0x55557533a0) at /home/pi/CoralEdgeTpu/src/inference.cpp:249
+        interpreter = std::unique_ptr<tflite::Interpreter> = {get() = 0x7fb0000c70}
+        input_image = {buffer = std::shared_ptr<PooledBuffer<unsigned char>> (empty) = {get() = 0x0}, width = 0, height = 0, format = {fourcc_ = 0, modifier_ = 0}, timestamp_epoch_ms = 0, frame_id = -1}
+#10 0x00000055555a7ab0 in std::__invoke_impl<void, void (InferenceEngine::*)(), InferenceEngine*> (__f=@0x5555765910: NULL, __t=@0x5555765908: 0x0) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#11 0x00000055555a79f0 in std::__invoke<void (InferenceEngine::*)(), InferenceEngine*> (__fn=@0x5555765910: NULL) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#12 0x00000055555a7954 in std::thread::_Invoker<std::tuple<void (InferenceEngine::*)(), InferenceEngine*> >::_M_invoke<0ul, 1ul> (this=0x5555765908) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#13 0x00000055555a78f8 in std::thread::_Invoker<std::tuple<void (InferenceEngine::*)(), InferenceEngine*> >::operator() (this=0x5555765908) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#14 0x00000055555a788c in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (InferenceEngine::*)(), InferenceEngine*> > >::_M_run (this=0x5555765900) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#15 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#16 0x0000007ff6beee90 in start_thread (arg=0x7fffff8587) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8587
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548547847552, 549755782544, 549755782534, 0, 8445504, 549755782535, 548539400192, 548547847552, 548539400192, 548547849408, 548547845408, 6847670180204623332, 0, 6847670181299258424, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#17 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 22 (Thread 0x7fbf76e580 (LWP 18535) "ImageProcessor"):
+#0  std::__atomic_base<unsigned long>::load (__m=std::memory_order_relaxed, this=0x0) at /usr/include/c++/12/bits/atomic_base.h:488
+        __b = std::memory_order_relaxed
+#1  boost::lockfree::detail::ringbuffer_base<ImageData>::push (this=0x0, t=..., buffer=0x48, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:107
+        write_index = 0
+        next = 548673083352
+#2  0x0000005555594df8 in boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100ul>::push (this=0x0, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:454
+No locals.
+#3  0x0000005555592da8 in boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100ul> >::push (this=0x0, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:829
+No locals.
+#4  0x00000055555a8b70 in ImageProcessor::worker_thread_func (this=0x555573c240) at /home/pi/CoralEdgeTpu/src/image_processor.cpp:159
+        process_start_time = {__d = {__r = 1765486773528231136}}
+        required_size = 270000
+        temp_bgr_image = {flags = 1124024336, dims = 2, rows = 300, cols = 300, data = 0x5555736060 "\020`\206\362\177", datastart = 0x5555736060 "\020`\206\362\177", dataend = 0x5555777f10 "", datalimit = 0x5555777f10 "", allocator = 0x0, u = 0x0, size = {p = 0x7fbf76d5e8}, step = {p = 0x7fbf76d630, buf = {900, 3}}}
+        duration_ms = 0
+        raw_image = {flags = 1124024336, dims = 2, rows = 300, cols = 300, data = 0x5555736060 "\020`\206\362\177", datastart = 0x5555736060 "\020`\206\362\177", dataend = 0x5555777f10 "", datalimit = 0x5555777f10 "", allocator = 0x0, u = 0x0, size = {p = 0x7fbf76d528}, step = {p = 0x7fbf76d570, buf = {900, 3}}}
+        processed_buffer_data = warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+std::shared_ptr<PooledBuffer<unsigned char>> (use count 2, weak count 0) = {get() = 0x555573aa90}
+        bgr_image_out = {flags = 1124024336, dims = 2, rows = 300, cols = 300, data = 0x555573aa90 "\020`\206\362\177", datastart = 0x555573aa90 "\020`\206\362\177", dataend = 0x555577c940 "", datalimit = 0x555577c940 "", allocator = 0x0, u = 0x0, size = {p = 0x7fbf76d588}, step = {p = 0x7fbf76d5d0, buf = {900, 3}}}
+        processed_image = {buffer = warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+std::shared_ptr<PooledBuffer<unsigned char>> (use count 2, weak count 0) = {get() = 0x555573aa90}, width = 0, height = 0, format = {fourcc_ = 875710274, modifier_ = 0}, timestamp_epoch_ms = 1765486773236, frame_id = -1}
+        process_end_time = {__d = {__r = 0}}
+        input_image = {buffer = warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+std::shared_ptr<PooledBuffer<unsigned char>> (use count 1, weak count 0) = {get() = 0x5555736060}, width = 300, height = 300, format = {fourcc_ = 875710290, modifier_ = 0}, timestamp_epoch_ms = 1765486773236, frame_id = 0}
+        opencv_input_type = 16
+#5  0x00000055555a97b0 in std::__invoke_impl<void, void (ImageProcessor::*)(), ImageProcessor*> (__f=@0x55557532e0: NULL, __t=@0x55557532d8: 0x0) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#6  0x00000055555a96f0 in std::__invoke<void (ImageProcessor::*)(), ImageProcessor*> (__fn=@0x55557532e0: NULL) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#7  0x00000055555a9654 in std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> >::_M_invoke<0ul, 1ul> (this=0x55557532d8) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#8  0x00000055555a960c in std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> >::operator() (this=0x55557532d8) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#9  0x00000055555a95ec in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> > >::_M_run (this=0x55557532d0) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#10 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#11 0x0000007ff6beee90 in start_thread (arg=0x7fffff87e7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff87e7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548673086848, 549755783152, 549755783142, 0, 8445504, 549755783143, 548664639488, 548673086848, 548664639488, 548673088704, 548673084704, 6847670180204623332, 0, 6847670181442454584, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#12 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 21 (Thread 0x7fbff7e580 (LWP 18534) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fbff7db48, fd=48) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 48
+        _x0 = 48
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548681538376
+        _x1 = 548681538376
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=48, buf=0x7fbff7db48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548681540992, 549755768848, 549755768838, 0, 8445504, 549755768839, 548673093632, 548681540992, 548673093632, 548681542848, 548681538848, 6847670180204623332, 0, 6847670181434000440, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 20 (Thread 0x7fc078e580 (LWP 18533) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc078db48, fd=47) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 47
+        _x0 = 47
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548689992520
+        _x1 = 548689992520
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=47, buf=0x7fc078db48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548689995136, 549755768848, 549755768838, 0, 8445504, 549755768839, 548681547776, 548689995136, 548681547776, 548689996992, 548689992992, 6847670180204623332, 0, 6847670180385358904, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 19 (Thread 0x7fc0f9e580 (LWP 18532) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc0f9db48, fd=46) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 46
+        _x0 = 46
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548698446664
+        _x1 = 548698446664
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=46, buf=0x7fc0f9db48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548698449280, 549755768848, 549755768838, 0, 8445504, 549755768839, 548690001920, 548698449280, 548690001920, 548698451136, 548698447136, 6847670180204623332, 0, 6847670180376904760, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 18 (Thread 0x7fc17ae580 (LWP 18531) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc17adb48, fd=45) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 45
+        _x0 = 45
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548706900808
+        _x1 = 548706900808
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=45, buf=0x7fc17adb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548706903424, 549755768848, 549755768838, 0, 8445504, 549755768839, 548698456064, 548706903424, 548698456064, 548706905280, 548706901280, 6847670180204623332, 0, 6847670180402005048, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 17 (Thread 0x7fc1fbe580 (LWP 18530) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc1fbdb48, fd=44) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 44
+        _x0 = 44
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548715354952
+        _x1 = 548715354952
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=44, buf=0x7fc1fbdb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548715357568, 549755768848, 549755768838, 0, 8445504, 549755768839, 548706910208, 548715357568, 548706910208, 548715359424, 548715355424, 6847670180204623332, 0, 6847670180393550904, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 16 (Thread 0x7fc27ce580 (LWP 18529) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc27cdb48, fd=43) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 43
+        _x0 = 43
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548723809096
+        _x1 = 548723809096
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=43, buf=0x7fc27cdb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548723811712, 549755768848, 549755768838, 0, 8445504, 549755768839, 548715364352, 548723811712, 548715364352, 548723813568, 548723809568, 6847670180204623332, 0, 6847670180418651192, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 15 (Thread 0x7fc2fde580 (LWP 18528) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc2fddb48, fd=42) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 42
+        _x0 = 42
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548732263240
+        _x1 = 548732263240
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=42, buf=0x7fc2fddb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548732265856, 549755768848, 549755768838, 0, 8445504, 549755768839, 548723818496, 548732265856, 548723818496, 548732267712, 548732263712, 6847670180204623332, 0, 6847670180410197048, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 14 (Thread 0x7fc37ee580 (LWP 18527) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc37edb48, fd=41) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 41
+        _x0 = 41
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548740717384
+        _x1 = 548740717384
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=41, buf=0x7fc37edb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548740720000, 549755768848, 549755768838, 0, 8445504, 549755768839, 548732272640, 548740720000, 548732272640, 548740721856, 548740717856, 6847670180204623332, 0, 6847670180435297336, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 13 (Thread 0x7fc3ffe580 (LWP 18526) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc3ffdb48, fd=40) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 40
+        _x0 = 40
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548749171528
+        _x1 = 548749171528
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=40, buf=0x7fc3ffdb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548749174144, 549755768848, 549755768838, 0, 8445504, 549755768839, 548740726784, 548749174144, 548740726784, 548749176000, 548749172000, 6847670180204623332, 0, 6847670180426843192, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 12 (Thread 0x7fc8ee6580 (LWP 18525) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc8ee5b48, fd=36) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 36
+        _x0 = 36
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548831910728
+        _x1 = 548831910728
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=36, buf=0x7fc8ee5b48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548831913344, 549755768848, 549755768838, 0, 8445504, 549755768839, 548823465984, 548831913344, 548823465984, 548831915200, 548831911200, 6847670180204623332, 0, 6847670180511810616, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 11 (Thread 0x7fc96f6580 (LWP 18524) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x555576d4e0) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 366506071264
+        _x0 = 366506071264
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x555576d4e0) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x555576d4e0, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x555576d488, cond=0x555576d4b8) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fc96f5ab8, __canceltype = 0, __prev = 0x0}
+        cbuffer = {wseq = 0, cond = 0x555576d4b8, mutex = 0x555576d488, private = 0}
+        err = <optimized out>
+        g = 0
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 0
+        seq = 0
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x555576d4b8, mutex=0x555576d488) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x0000007ff6ea06ec in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#6  0x0000007ff7bd9c84 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#7  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#8  0x0000007ff6beee90 in start_thread (arg=0x7fffff4d67) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff4d67
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548840367488, 549755768176, 549755768166, 0, 8445504, 549755768167, 548831920128, 548840367488, 548831920128, 548840369344, 548840365344, 6847670180204623332, 0, 6847670180536910904, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#9  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 8 (Thread 0x7fca59e580 (LWP 18521) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x7fc404f6d0) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 548749506256
+        _x0 = 548749506256
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x7fc404f6d0) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x7fc404f6d0, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x7fc404f678, cond=0x7fc404f6a8) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fca59dc78, __canceltype = 0, __prev = 0x0}
+        cbuffer = {wseq = 0, cond = 0x7fc404f6a8, mutex = 0x7fc404f678, private = 0}
+        err = <optimized out>
+        g = 0
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 0
+        seq = 0
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x7fc404f6a8, mutex=0x7fc404f678) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x0000007fcae27dfc in RPiController::Alsc::asyncFunc() () from /usr/lib/aarch64-linux-gnu/libcamera/ipa/ipa_rpi_pisp.so
+No symbol table info available.
+#6  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#7  0x0000007ff6beee90 in start_thread (arg=0x7fcb6951a7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fcb6951a7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548855735680, 548873523632, 548873523622, 0, 8445504, 548873523623, 548847288320, 548855735680, 548847288320, 548855737536, 548855733536, 6847670180204623332, 0, 6847670180550968376, 4611686018427387904, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#8  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 7 (Thread 0x7fcadae580 (LWP 18520) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x7fc40467d8) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 548749469656
+        _x0 = 548749469656
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x7fc40467d8) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x7fc40467d8, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x7fc4046780, cond=0x7fc40467b0) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fcadadc78, __canceltype = 0, __prev = 0x0}
+        cbuffer = {wseq = 0, cond = 0x7fc40467b0, mutex = 0x7fc4046780, private = 0}
+        err = <optimized out>
+        g = 0
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 0
+        seq = 0
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x7fc40467b0, mutex=0x7fc4046780) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x0000007fcae2eedc in RPiController::Awb::asyncFunc() () from /usr/lib/aarch64-linux-gnu/libcamera/ipa/ipa_rpi_pisp.so
+No symbol table info available.
+#6  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#7  0x0000007ff6beee90 in start_thread (arg=0x7fcb695207) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fcb695207
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548864189824, 548873523728, 548873523718, 0, 8445504, 548873523719, 548855742464, 548864189824, 548855742464, 548864191680, 548864187680, 6847670180204623332, 0, 6847670180542514232, 4611686018427387904, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#8  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 6 (Thread 0x7fcb697580 (LWP 18519) "detector"):
+#0  0x0000007ff78fc1c4 in libcamera::Thread::exec() () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#1  0x0000007ff79e6784 in libcamera::CameraManager::Private::run() () from /lib/aarch64-linux-gnu/libcamera.so.0.5
+No symbol table info available.
+#2  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#3  0x0000007ff6beee90 in start_thread (arg=0x7fffff7d17) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff7d17
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548873532800, 549755780384, 549755780374, 0, 8445504, 549755780375, 548865085440, 548873532800, 548865085440, 548873534656, 548873530656, 6847670180204623332, 0, 6847670180570870840, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#4  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 5 (Thread 0x7ff380e580 (LWP 18518) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x555572b5ec) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 366505801196
+        _x0 = 366505801196
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x555572b5ec) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x555572b5ec, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x555572b590, cond=0x555572b5c0) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7ff380da28, __canceltype = 1433581200, __prev = 0x0}
+        cbuffer = {wseq = 3, cond = 0x555572b5c0, mutex = 0x555572b590, private = 0}
+        err = <optimized out>
+        g = 1
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 3
+        seq = 1
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x555572b5c0, mutex=0x555572b590) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x00000055555ac564 in std::condition_variable::wait<Logger::csv_writer_thread_func()::<lambda()> >(std::unique_lock<std::mutex> &, struct {...}) (this=0x555572b5c0, __lock=..., __p=...) at /usr/include/c++/12/condition_variable:102
+No locals.
+#6  0x00000055555abb20 in Logger::csv_writer_thread_func (this=0x555572b280) at /home/pi/CoralEdgeTpu/src/util_logging.cpp:359
+        lock = {_M_device = 0x555572b590, _M_owns = true}
+        entry = {produced_ts_epoch_ms = 1765486773527, module = "CameraCapture", thread_id = 8628789439896396813, event = "\001\300\372\a\000\000\000\000Դ\237\256\206\252\203)ssed", call_ts_epoch_ms = 1765486773236, camera_frame_id = 0, camera_width = 1536, camera_height = 864, camera_exposure_ms = 0, camera_copy_time_ms = 3, tpu_inference_ms = -1, tpu_input_w = -1, tpu_input_h = -1, tpu_temp_c = -1, encoder_encode_ms = -1, encoder_total_encoded_frames = -1, encoder_average_fps = -1, logic_metric_ballistics = -1, logic_metric_hit_scan = -1, logic_metric_servo_actuation = -1, sysmon_cpu_temp_c = -1, sysmon_cpu_usage_percent = -1, sysmon_mem_usage_percent = -1, p50_latency_ms = -1, p95_latency_ms = -1, p99_latency_ms = -1, average_fps = -1, total_frames_processed_or_inferences = -1, average_latency_ms = -1, details = ""}
+        it = {first = "CameraCapture", second = {module_name_ = "CameraCapture", log_dir_ = "/home/pi/CoralEdgeTpu/logs/camera", max_log_files_ = 3, current_log_file_ = <incomplete type>, file_mutex_ = {<std::__recursive_mutex_base> = {_M_mutex = {__data = {__lock = 0, __count = 0, __owner = 0, __nusers = 0, __kind = 1, __spins = 0, __list = {__prev = 0x0, __next = 0x0}}, __size = '\000' <repeats 16 times>, "\001", '\000' <repeats 30 times>, __align = 0}}, <No data fields>}, current_log_minute_ = 59}}
+#7  0x00000055555b6290 in std::__invoke_impl<void, void (Logger::*)(), Logger*> (__f=@0x555572ca70: (void (Logger::*)(Logger * const)) 0x55555aba64 <Logger::csv_writer_thread_func()>, __t=@0x555572ca68: 0x555572b280) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#8  0x00000055555b61d0 in std::__invoke<void (Logger::*)(), Logger*> (__fn=@0x555572ca70: (void (Logger::*)(Logger * const)) 0x55555aba64 <Logger::csv_writer_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#9  0x00000055555b6134 in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::_M_invoke<0ul, 1ul> (this=0x555572ca68) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#10 0x00000055555b60d0 in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::operator() (this=0x555572ca68) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#11 0x00000055555b6048 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> > >::_M_run (this=0x555572ca60) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#12 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#13 0x0000007ff6beee90 in start_thread (arg=0x7fffff8897) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8897
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549546157440, 549755783328, 549755783318, 0, 8445504, 549755783319, 549537710080, 549546157440, 549537710080, 549546159296, 549546155296, 6847670180204623332, 0, 6847670180154147896, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#14 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 4 (Thread 0x7ff401e580 (LWP 18517) "detector"):
+#0  __pthread_kill_implementation (threadid=549554611584, signo=signo@entry=6, no_tid=no_tid@entry=0) at ./nptl/pthread_kill.c:44
+        tid = 18517
+        ret = 0
+        pd = 0x7ff401e580
+        old_mask = {__val = {549554608272}}
+        ret = <optimized out>
+#1  0x0000007ff6bf0aa4 in __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+No locals.
+#2  0x0000007ff6baa72c in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+        ret = <optimized out>
+#3  0x0000007ff6b9747c in __GI_abort () at ./stdlib/abort.c:79
+        save_stage = 1
+        act = {__sigaction_handler = {sa_handler = 0x20, sa_sigaction = 0x20}, sa_mask = {__val = {549755783319, 549546164224, 549554611584, 549554608464, 549603973320, 549554609168, 549554609184, 549755783318, 1926118833064396544, 549554608464, 549603957528, 549554608464, 549603562928, 549554608656, 549554612636, 549755783318}}, sa_flags = 0, sa_restorer = 0x7ff401d970}
+#4  0x0000007ff6be4aac in __libc_message (action=action@entry=do_abort, fmt=fmt@entry=0x7ff6cc6d28 "%s\n") at ../sysdeps/posix/libc_fatal.c:155
+        ap = {__stack = 0x7ff401da60, __gr_top = 0x7ff401da60, __vr_top = 0x7ff401da30, __gr_offs = -40, __vr_offs = 0}
+        fd = <optimized out>
+        list = <optimized out>
+        nlist = <optimized out>
+        cp = <optimized out>
+#5  0x0000007ff6bfaeac in malloc_printerr (str=str@entry=0x7ff6cc1f28 "free(): invalid pointer") at ./malloc/malloc.c:5660
+No locals.
+#6  0x0000007ff6bfcc38 in _int_free (av=0x7ff6d10af0 <main_arena>, p=p@entry=0x5555752fb0, have_lock=have_lock@entry=0) at ./malloc/malloc.c:4435
+        size = 0
+        fb = <optimized out>
+        nextchunk = <optimized out>
+        nextsize = <optimized out>
+        nextinuse = <optimized out>
+        prevsize = <optimized out>
+        bck = <optimized out>
+        fwd = <optimized out>
+        __PRETTY_FUNCTION__ = "_int_free"
+#7  0x0000007ff6bff76c in __GI___libc_free (mem=<optimized out>) at ./malloc/malloc.c:3385
+        ar_ptr = <optimized out>
+        p = 0x5555752fb0
+        err = <optimized out>
+#8  0x00000055555ab95c in Logger::writer_thread_func (this=0x555572b280) at /home/pi/CoralEdgeTpu/src/util_logging.cpp:339
+        lock = {_M_device = 0x555572b4c8, _M_owns = false}
+        entry = {timestamp = {__d = {__r = 1765486773478852114}}, level = "DEBUG", message = "InferenceEngine: Total worker thread loop iteration time: 10071 us"}
+#9  0x00000055555b6290 in std::__invoke_impl<void, void (Logger::*)(), Logger*> (__f=@0x555572ce60: (void (Logger::*)(Logger * const)) 0x55555ab6e4 <Logger::writer_thread_func()>, __t=@0x555572ce58: 0x555572b280) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#10 0x00000055555b61d0 in std::__invoke<void (Logger::*)(), Logger*> (__fn=@0x555572ce60: (void (Logger::*)(Logger * const)) 0x55555ab6e4 <Logger::writer_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#11 0x00000055555b6134 in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::_M_invoke<0ul, 1ul> (this=0x555572ce58) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#12 0x00000055555b60d0 in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::operator() (this=0x555572ce58) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#13 0x00000055555b6048 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> > >::_M_run (this=0x555572ce50) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#14 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#15 0x0000007ff6beee90 in start_thread (arg=0x7fffff8897) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8897
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549554611584, 549755783328, 549755783318, 0, 8445504, 549755783319, 549546164224, 549554611584, 549546164224, 549554613440, 549554609440, 6847670180204623332, 0, 6847670180179248184, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#16 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 3 (Thread 0x7ff482e580 (LWP 18516) "detector-ust"):
+#0  syscall () at ../sysdeps/unix/sysv/linux/aarch64/syscall.S:38
+No locals.
+#1  0x0000007ff66b2104 in ?? () from /lib/aarch64-linux-gnu/liblttng-ust.so.1
+No symbol table info available.
+#2  0x0000007ff6beee90 in start_thread (arg=0x7fffffeda7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffffeda7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549563065728, 549755809488, 549755809190, 0, 8445504, 549755809191, 549554618368, 549563065728, 549554618368, 549563067584, 549563063584, 6847670180204623332, 0, 6847670180170794040, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#3  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 2 (Thread 0x7ff503e580 (LWP 18515) "detector-ust"):
+#0  syscall () at ../sysdeps/unix/sysv/linux/aarch64/syscall.S:38
+No locals.
+#1  0x0000007ff66b2104 in ?? () from /lib/aarch64-linux-gnu/liblttng-ust.so.1
+No symbol table info available.
+#2  0x0000007ff6beee90 in start_thread (arg=0x7fffffeda7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffffeda7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549571519872, 549755809488, 549755809190, 0, 8445504, 549755809191, 549563072512, 549571519872, 549563072512, 549571521728, 549571517728, 6847670180204623332, 0, 6847670180195894328, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#3  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 1 (Thread 0x7ff7fb5040 (LWP 18513) "detector"):
+#0  clone () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:64
+No locals.
+#1  0x0000007ff6c58a38 in __GI___clone_internal (cl_args=cl_args@entry=0x7fffff8680, func=func@entry=0x7ff6beebc0 <start_thread>, arg=arg@entry=0x7fb77ee580) at ../sysdeps/unix/sysv/linux/clone-internal.c:83
+        ret = <optimized out>
+        flags = <optimized out>
+        stack = <optimized out>
+#2  0x0000007ff6beeab4 in create_thread (pd=pd@entry=0x7fb77ee580, attr=attr@entry=0x7fffff87a0, stopped_start=stopped_start@entry=0x7fffff8796, stackaddr=0x7fb6fe0000, stacksize=8445504, thread_ran=thread_ran@entry=0x7fffff8797) at ./nptl/pthread_create.c:295
+        need_setaffinity = false
+        clone_flags = 4001536
+        tp = 0x7fb77eecc0
+        args = {flags = 4001536, pidfd = 548539393616, child_tid = 548539393616, parent_tid = 548539393616, exit_signal = 0, stack = 548530946048, stack_size = 8445504, tls = 548539395264, set_tid = 0, set_tid_size = 0, cgroup = 0}
+        ret = <optimized out>
+        __PRETTY_FUNCTION__ = "create_thread"
+#3  0x0000007ff6bef4ac in __pthread_create_2_1 (newthread=0x7fffff8940, attr=<optimized out>, start_routine=0x7ff6ece9c0, arg=0x5555783c10) at ./nptl/pthread_create.c:831
+        stackaddr = 0x7fb6fe0000
+        stacksize = 8445504
+        iattr = 0x7fffff87a0
+        default_attr = {external = {__size = '\000' <repeats 17 times>, "\020", '\000' <repeats 16 times>, "\200", '\000' <repeats 28 times>, __align = 0}, internal = {schedparam = {sched_priority = 0}, schedpolicy = 0, flags = 0, guardsize = 4096, stackaddr = 0x0, stacksize = 8388608, extension = 0x0, unused = 0x0}}
+        destroy_default_attr = true
+        c11 = <optimized out>
+        pd = 0x7fb77ee580
+        err = 0
+        retval = 0
+        self = 0x7ff7fb5040
+        stopped_start = false
+        thread_ran = false
+        original_sigmask = {__val = {0}}
+        __PRETTY_FUNCTION__ = "__pthread_create_2_1"
+#4  0x0000007ff6eceb04 in std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#5  0x00000055555d5b34 in std::thread::thread<void (LogicModule::*)(), LogicModule*, void> (this=0x7fffff8940, __f=@0x7fffff8948: (void (LogicModule::*)(LogicModule * const)) 0x55555d1f1c <LogicModule::worker_thread_func()>) at /usr/include/c++/12/bits/std_thread.h:142
+        __depend = 0
+        __depend = <optimized out>
+#6  0x00000055555d1c00 in LogicModule::start (this=0x55557204c0) at /home/pi/CoralEdgeTpu/src/logic.cpp:169
+No locals.
+#7  0x000000555556e728 in Application::start_modules (this=0x7fffff90c8) at /home/pi/CoralEdgeTpu/src/application.cpp:119
+        start_ok = true
+#8  0x000000555556fa48 in Application::run (this=0x7fffff90c8) at /home/pi/CoralEdgeTpu/src/application.cpp:208
+        exe_path = filesystem::path "/home/pi/CoralEdgeTpu/build/detector" = {[root-directory] = "/", [1] = "home", [2] = "pi", [3] = "CoralEdgeTpu", [4] = "build", [5] = "detector"}
+        config_path = filesystem::path "/home/pi/CoralEdgeTpu/build/../config.json" = {[root-directory] = "/", [1] = "home", [2] = "pi", [3] = "CoralEdgeTpu", [4] = "build", [5] = "..", [6] = "config.json"}
+        csv_log_configs = std::vector of length 5, capacity 8 = {{name = "CameraCapture", log_dir_suffix = "camera", max_log_files = 3}, {name = "InferenceEngine", log_dir_suffix = "tpu", max_log_files = 3}, {name = "H264Encoder", log_dir_suffix = "encoder", max_log_files = 3}, {name = "LogicModule", log_dir_suffix = "logic", max_log_files = 3}, {name = "SystemMonitor", log_dir_suffix = "system_monitor", max_log_files = 3}}
+        model_path = '\000' <repeats 84 times>
+        labels_path = "/home/pi/CoralEdgeTpu/build/../coco_labels.txt"
+#9  0x000000555556b864 in main (argc=1, argv=0x7ffffff378) at /home/pi/CoralEdgeTpu/src/main.cpp:27
+        app = {argc_ = 1, argv_ = 0x7ffffff378, config_loader_ = {config_data_ = {<nlohmann::json_abi_v3_12_0::detail::json_default_base> = {<No data fields>}, m_data = {m_type = nlohmann::json_abi_v3_12_0::detail::value_t::object, m_value = {object = 0x555572cf70, array = 0x555572cf70, string = 0x555572cf70, binary = 0x555572cf70, boolean = 112, number_integer = 366505807728, number_unsigned = 366505807728, number_float = 1.8107792859970205e-312}}}}, supervisor_ = {registered_modules_ = std::vector of length 0, capacity 0}, image_pool_ = std::shared_ptr<BufferPool<unsigned char>> (use count 3, weak count 0) = {get() = 0x5555712350}, detection_pool_ = std::shared_ptr<BufferPool<DetectionResult>> (use count 2, weak count 0) = {get() = 0x5555713e20}, h264_pool_ = std::shared_ptr<BufferPool<unsigned char>> (use count 2, weak count 0) = {get() = 0x5555713f10}, raw_image_for_processor_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100>> = {<boost::lockfree::detail::ringbuffer_base<ImageData>> = {write_index_ = std::atomic<unsigned long> = { 1 }, padding1 = '\000' <repeats 55 times>, read_index_ = std::atomic<unsigned long> = { 1 }}, static max_size = 101, storage_ = {data_ = {buf = "``sUU\000\000\000@\025\000\254\177\000\000\000,\001\000\000\000\000\000\000,\001\000\000\000\000\000\000RG24\337\362\272\032\000\000\000\000\000\000\000\000\364C6\017\233\001", '\000' <repeats 6409 times>, align_ = {<No data fields>}}}}, <No data fields>}, tpu_inference_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100>> = {<boost::lockfree::detail::ringbuffer_base<ImageData>> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = '\000' <repeats 55 times>, read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = '\000' <repeats 1265 times>..., align_ = {<No data fields>}}}}, <No data fields>}, detection_results_for_overlay_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<std::shared_ptr<PooledBuffer<DetectionResult> >, 100>> = {<boost::lockfree::detail::ringbuffer_base<std::shared_ptr<PooledBuffer<DetectionResult> > >> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = "\000\000\000\000\000\000\000\000 \225pUU\000\000\000$\225pUU\000\000\000$\225pUU\000\000\000\f\000\000\000\002\000\000\000\000\000\000\000\002\000\000\000\004\000\000\000\001\000\000", read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = "\000\000\000\000\000\000\000\000\300\345\252\367\177\000\000\000RG10\000\000\000\000\001\000\000\000\000\000\000\v\340\217pUU\000\000\000\344\217pUU\000\000\000\344\217pUU\000\000\000\n\000\000\000\002\000\000\000\001\000\000\000\004\000\000\000\005\000\000\000\001", '\000' <repeats 19 times>, "\260\345\252\367\177\000\000\000BA10\000\000\000\000\001\000\000\000\000\000\000\v\240\212pUU\000\000\000\244\212pUU\000\000\000\244\212pUU\000\000\000\n\000\000\000\002\000\000\000\001\000\000\000\004\000\000\000\005\000\000\000\001", '\000' <repeats 19 times>, "\240\345\252\367\177\000\000\000GB10\000\000\000\000"..., align_ = {<No data fields>}}}}, <No data fields>}, detection_results_for_logic_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<std::shared_ptr<PooledBuffer<DetectionResult> >, 100>> = {<boost::lockfree::detail::ringbuffer_base<std::shared_ptr<PooledBuffer<DetectionResult> > >> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = "\344opUU\000\000\000\344opUU\000\000\000\b\000\000\000\001\000\000\000\000\000\000\000\001\000\000\000\001\000\000\000\001", '\000' <repeats 18 times>, read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = "XVUY", '\000' <repeats 12 times>, "\200\\pUU\000\000\000\204\\pUU\000\000\000\204\\pUU\000\000\000 \000\000\000\001\000\000\000\000\000\000\000\001\000\000\000\004\000\000\000\001", '\000' <repeats 19 times>, "\200\344\252\367\177\000\000\000AVUY", '\000' <repeats 12 times>, "@WpUU\000\000\000DWpUU\000\000\000DWpUU\000\000\000 \000\000\000\001\000\000\000\000\000\000\000\001\000\000\000\004\000\000\000\001", '\000' <repeats 19 times>, "x\344\252\367\177\000\000\000VYUY", '\000' <repeats 12 times>, "\340QpUU\000\000\000"..., align_ = {<No data fields>}}}}, <No data fields>}, overlaid_video_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100>> = {<boost::lockfree::detail::ringbuffer_base<ImageData>> = {write_index_ = std::atomic<unsigned long> = { 1 }, padding1 = "\020", '\000' <repeats 11 times>, "\001\000\000\000\002\000\000\000\001", '\000' <repeats 19 times>, "\230\343\252\367\177\000\000\000RG16\000\000\000", read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = "P\205sUU\000\000\000\360\v\000\254\177\000\000\000\000\006\000\000\000\000\000\000`\003\000\000\000\000\000\000YUYV\337\362\272\032\000\000\000\000\000\000\000\000\364C6\017\233\001\000\000\000\000\000\000\000\000\000\000RG16", '\000' <repeats 12 times>, "\230\343\252\367\177\000\000\000RG16", '\000' <repeats 13 times>, "6pUU\000\000\000\0046pUU\000\000\000\0046pUU\000\000\000\020\000\000\000\000\000\000\000\000in\000\001\000\000\000\002\000\000\000\001", '\000' <repeats 19 times>, "RG16", '\000' <repeats 12 times>, "\240\343\252\367\177\000\000\000RG16", '\000' <repeats 12 times>..., align_ = {<No data fields>}}}}, <No data fields>}, h264_output_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<std::shared_ptr<PooledBuffer<unsigned char> >, 100>> = {<boost::lockfree::detail::ringbuffer_base<std::shared_ptr<PooledBuffer<unsigned char> > >> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = "\024\000\000\000\001\000\000\000\016 \000\000\000\000\000\000\260/\253\367\177\000\000\000X\026\301\367\177\000\000\000\032\000\000\000\000\000\000\000\020\000\306\367\177\000\000\000\300/\253\367\177\000\000", read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = "\030\000\000\000\001\000\000\000\026 \000\000\000\000\000\000\320/\253\367\177\000\000\000\026 \000\000\000\000\000\000\036\000\000\000\001\000\000\000\027 \000\000\000\000\000\000\340/\253\367\177\000\000\000\027 \000\000\000\000\000\000 \000\000\000\001\000\000\000\034 \000\000\000\000\000\000\360/\253\367\177\000\000\000\034 \000\000\000\000\000\000\030\000\000\000\001\000\000\000\035 \000\000\000\000\000\000\0000\253\367\177\000\000\000\035 \000\000\000\000\000\000\030\000\000\000\001\000\000\000\036 \000\000\000\000\000\000\0200\253\367\177\000\000\000\036 \000\000\000\000\000\000\030\000\000\000\001\000\000\000\037 \000\000\000\000\000\000 0\253\367\177\000\000\000\037 \000\000\000\000\000\000\030\000\000\000\001\000\000\000"..., align_ = {<No data fields>}}}}, <No data fields>}, main_image_output_queues_ = std::__cxx11::list = {[0] = {<std::_Reference_wrapper_base_memfun<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, false>> = {<std::_Reference_wrapper_base<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> > >> = {<std::_Weak_result_type<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> > >> = {<std::_Weak_result_type_memfun<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, false>> = {<std::_Weak_result_type_impl<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> > >> = {<std::_Maybe_get_result_type<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, void>> = {<No data fields>}, <No data fields>}, <No data fields>}, <No data fields>}, <std::_Refwrap_base_arg1<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, void>> = {<No data fields>}, <std::_Refwrap_base_arg2<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, void>> = {<No data fields>}, <No data fields>}, <No data fields>}, _M_data = 0x7fffffd170}}, image_processor_ = std::unique_ptr<ImageProcessor> = {get() = 0x555573c240}, inference_engine_ = std::unique_ptr<InferenceEngine> = {get() = 0x55557533a0}, primary_camera_ = std::unique_ptr<CameraCapture> = {get() = 0x5555754850}, h264_encoder_ = std::unique_ptr<H264Encoder> = {get() = 0x5555767780}, orientation_sensor_ = std::shared_ptr<OrientationSensor> (use count 2, weak count 0) = {get() = 0x5555782d90}, logic_module_ = std::unique_ptr<LogicModule> = {get() = 0x55557204c0}, system_monitor_ = std::unique_ptr<SystemMonitor> = {get() = 0x5555776ca0}, labels_ = std::vector of length 90, capacity 128 = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}}
+x0             0x0                 0
+x1             0x4855              18517
+x2             0x6                 6
+x3             0x7ff401e580        549554611584
+x4             0x7ff7ffdb98        549621586840
+x5             0x1                 1
+x6             0x20                32
+x7             0x7f7f7f7f7f7f7f7f  9187201950435737471
+x8             0x83                131
+x9             0x3                 3
+x10            0xa                 10
+x11            0x0                 0
+x12            0xfffffffd          4294967293
+x13            0x51eb851eb851eb0   368934881474191024
+x14            0x0                 0
+x15            0x51eb851eb851eb8   368934881474191032
+x16            0x1                 1
+x17            0x7ff6bff694        549600622228
+x18            0x5                 5
+x19            0x4855              18517
+x20            0x7ff401e580        549554611584
+x21            0x6                 6
+x22            0x1                 1
+x23            0x7ff7677000        549611597824
+x24            0x7ff6cc6d2a        549601439018
+x25            0x7ff3810000        549546164224
+x26            0x7ff401e580        549554611584
+x27            0x7ff3810000        549546164224
+x28            0x7ff401ecc0        549554613440
+x29            0x7ff401d820        549554608160
+x30            0x7ff6bf0a3c        549600561724
+sp             0x7ff401d820        0x7ff401d820
+pc             0x7ff6bf0a50        0x7ff6bf0a50 <__pthread_kill_implementation+304>
+cpsr           0x60001000          [ EL=0 BTYPE=0 SSBS C Z ]
+fpsr           0x10                [ IXC ]
+fpcr           0x0                 [ Len=0 Stride=0 RMode=0 ]
+tpidr          0x7ff401ecc0        0x7ff401ecc0
+tpidr2         0x0                 0x0
+A debugging session is active.
+
+	Inferior 1 [process 18513] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/aarch64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ff503e580 (LWP 21481)]
+[New Thread 0x7ff482e580 (LWP 21482)]
+[New Thread 0x7ff401e580 (LWP 21483)]
+[New Thread 0x7ff380e580 (LWP 21484)]
+[New Thread 0x7fcb697580 (LWP 21485)]
+[New Thread 0x7fcadae580 (LWP 21486)]
+[New Thread 0x7fca59e580 (LWP 21487)]
+[New Thread 0x7fc96f6580 (LWP 21488)]
+[Thread 0x7fc96f6580 (LWP 21488) exited]
+[New Thread 0x7fc96f6580 (LWP 21489)]
+[Thread 0x7fc96f6580 (LWP 21489) exited]
+[New Thread 0x7fc96f6580 (LWP 21490)]
+[New Thread 0x7fc8ee6580 (LWP 21491)]
+[New Thread 0x7fc3ffe580 (LWP 21492)]
+[New Thread 0x7fc37ee580 (LWP 21493)]
+[New Thread 0x7fc2fde580 (LWP 21494)]
+[New Thread 0x7fc27ce580 (LWP 21495)]
+[New Thread 0x7fc1fbe580 (LWP 21496)]
+[New Thread 0x7fc17ae580 (LWP 21497)]
+[New Thread 0x7fc0f9e580 (LWP 21498)]
+[New Thread 0x7fc078e580 (LWP 21499)]
+[New Thread 0x7fbff7e580 (LWP 21500)]
+[New Thread 0x7fbf76e580 (LWP 21501)]
+[New Thread 0x7fbef5e580 (LWP 21502)]
+[New Thread 0x7fbdaf9580 (LWP 21503)]
+[New Thread 0x7fbc83b580 (LWP 21504)]
+[New Thread 0x7fafffe580 (LWP 21505)]
+[New Thread 0x7faf7ee580 (LWP 21506)]
+[New Thread 0x7faefde580 (LWP 21507)]
+[New Thread 0x7fae7ce580 (LWP 21508)]
+
+Thread 22 "ImageProcessor" received signal SIGBUS, Bus error.
+[Switching to Thread 0x7fbf76e580 (LWP 21501)]
+std::__atomic_base<unsigned long>::load (__m=std::memory_order_relaxed, this=0xe) at /usr/include/c++/12/bits/atomic_base.h:488
+488		return __atomic_load_n(&_M_i, int(__m));
+
+Thread 29 (Thread 0x7fae7ce580 (LWP 21508) "detector"):
+#0  boost::lockfree::detail::ringbuffer_base<LogEntry>::next_index (arg=1765487285698049347, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:70
+        ret = 1765487278547799899
+#1  0x00000055555aff84 in boost::lockfree::detail::ringbuffer_base<LogEntry>::push (this=0x5555737dc8, t=..., buffer=0x5555737e10, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:108
+        write_index = 1765487285698049347
+        next = 548388260272
+#2  0x00000055555af178 in boost::lockfree::detail::compile_time_sized_ringbuffer<LogEntry, 100ul>::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:454
+No locals.
+#3  0x00000055555ae12c in boost::lockfree::spsc_queue<LogEntry, boost::lockfree::capacity<100ul> >::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:829
+No locals.
+#4  0x00000055555ab254 in Logger::log (this=0x5555737b80, level="DEBUG", message="H264Encoder: Time to pop from queue: 1 us") at /home/pi/CoralEdgeTpu/src/util_logging.cpp:272
+No locals.
+#5  0x00000055555d7574 in H264Encoder::worker_thread_func (this=0x555578deb0) at /home/pi/CoralEdgeTpu/src/h264_encoder.cpp:194
+        pop_end = {__d = {__r = 1765487285867231702}}
+        nal = 0x0
+        cvtcolor_start = {__d = {__r = 0}}
+        encoding_start_time = {__d = {__r = 0}}
+        total_loop_start = {__d = {__r = 1765487285867229813}}
+        image_data = {buffer = warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+std::shared_ptr<PooledBuffer<unsigned char>> (use count 1, weak count 0) = {get() = 0x5555734f00}, width = 1536, height = 864, format = {fourcc_ = 1448695129, modifier_ = 0}, timestamp_epoch_ms = 1765487285576, frame_id = 0}
+        frame_bgr = {flags = 0, dims = 0, rows = 0, cols = 0, data = 0x0, datastart = 0x0, dataend = 0x0, datalimit = 0x0, allocator = 0x0, u = 0x0, size = {p = 0x0}, step = {p = 0x0, buf = {0, 0}}}
+        cvtcolor_end = {__d = {__r = 0}}
+        memcpy_start = {__d = {__r = 0}}
+        i_nal = 0
+        pop_start = {__d = {__r = 1765487285867229905}}
+        call_ts = 0
+        frame_yuv = {flags = 0, dims = 0, rows = 0, cols = 0, data = 0x0, datastart = 0x0, dataend = 0x0, datalimit = 0x0, allocator = 0x0, u = 0x0, size = {p = 0x0}, step = {p = 0x0, buf = {0, 0}}}
+        memcpy_end = {__d = {__r = 0}}
+        frame_size = 0
+        total_loop_end = {__d = {__r = 0}}
+        param = {cpu = 10, i_threads = 1, i_lookahead_threads = 0, b_sliced_threads = 1, b_deterministic = 1, b_cpu_independent = 0, i_sync_lookahead = 0, i_width = 1536, i_height = 864, i_csp = 2, i_bitdepth = 8, i_level_idc = -1, i_frame_total = 0, i_nal_hrd = 0, vui = {i_sar_height = 0, i_sar_width = 0, i_overscan = 0, i_vidformat = 5, b_fullrange = -1, i_colorprim = 2, i_transfer = 2, i_colmatrix = -1, i_chroma_loc = 0}, i_frame_reference = 1, i_dpb_size = 0, i_keyint_max = 120, i_keyint_min = 0, i_scenecut_threshold = 0, b_intra_refresh = 1, i_bframe = 0, i_bframe_adaptive = 0, i_bframe_bias = 0, i_bframe_pyramid = 2, b_open_gop = 0, b_bluray_compat = 0, i_avcintra_class = 0, i_avcintra_flavor = 0, b_deblocking_filter = 0, i_deblocking_filter_alphac0 = 0, i_deblocking_filter_beta = 0, b_cabac = 0, i_cabac_init_idc = 0, b_interlaced = 0, b_constrained_intra = 0, i_cqm_preset = 0, psz_cqm_file = 0x0, cqm_4iy = '\020' <repeats 16 times>, cqm_4py = '\020' <repeats 16 times>, cqm_4ic = '\020' <repeats 16 times>, cqm_4pc = '\020' <repeats 16 times>, cqm_8iy = '\020' <repeats 64 times>, cqm_8py = '\020' <repeats 64 times>, cqm_8ic = '\020' <repeats 64 times>, cqm_8pc = '\020' <repeats 64 times>, pf_log = 0x7ff768c630 <x264_log_default>, p_log_private = 0x0, i_log_level = 2, b_full_recon = 0, psz_dump_yuv = 0x0, analyse = {intra = 0, inter = 0, b_transform_8x8 = 0, i_weighted_pred = 0, b_weighted_bipred = 0, i_direct_mv_pred = 1, i_chroma_qp_offset = 0, i_me_method = 0, i_me_range = 16, i_mv_range = -1, i_mv_range_thread = -1, i_subpel_refine = 0, b_chroma_me = 1, b_mixed_references = 0, i_trellis = 0, b_fast_pskip = 1, b_dct_decimate = 1, i_noise_reduction = 0, f_psy_rd = 1, f_psy_trellis = 0, b_psy = 1, b_mb_info = 0, b_mb_info_update = 0, i_luma_deadzone = {21, 11}, b_psnr = 0, b_ssim = 0}, rc = {i_rc_method = 1, i_qp_constant = -1, i_qp_min = 0, i_qp_max = 2147483647, i_qp_step = 4, i_bitrate = 0, f_rf_constant = 23, f_rf_constant_max = 0, f_rate_tolerance = 1, i_vbv_max_bitrate = 0, i_vbv_buffer_size = 0, f_vbv_buffer_init = 0.899999976, f_ip_factor = 1.39999998, f_pb_factor = 1.29999995, b_filler = 0, i_aq_mode = 0, f_aq_strength = 1, b_mb_tree = 0, i_lookahead = 0, b_stat_write = 0, psz_stat_out = 0x7ff7796540 "x264_2pass.log", b_stat_read = 0, psz_stat_in = 0x7ff7796540 "x264_2pass.log", f_qcompress = 0.600000024, f_qblur = 0.5, f_complexity_blur = 20, zones = 0x0, i_zones = 0, psz_zones = 0x0}, crop_rect = {i_left = 0, i_top = 0, i_right = 0, i_bottom = 0}, i_frame_packing = -1, mastering_display = {b_mastering_display = 0, i_green_x = 0, i_green_y = 0, i_blue_x = 0, i_blue_y = 0, i_red_x = 0, i_red_y = 0, i_white_x = 0, i_white_y = 0, i_display_max = 0, i_display_min = 0}, content_light_level = {b_cll = 0, i_max_cll = 0, i_max_fall = 0}, i_alternative_transfer = 2, b_aud = 0, b_repeat_headers = 1, b_annexb = 1, i_sps_id = 0, b_vfr_input = 0, b_pulldown = 0, i_fps_num = 120, i_fps_den = 1, i_timebase_num = 0, i_timebase_den = 0, b_tff = 1, b_pic_struct = 0, b_fake_interlaced = 0, b_stitchable = 0, b_opencl = 0, i_opencl_device = 0, opencl_device_id = 0x0, psz_clbin_file = 0x0, i_slice_max_size = 0, i_slice_max_mbs = 0, i_slice_min_mbs = 0, i_slice_count = 0, i_slice_count_max = 0, param_free = 0x0, nalu_process = 0x0, opaque = 0x0}
+#6  0x00000055555da3f0 in std::__invoke_impl<void, void (H264Encoder::*)(), H264Encoder*> (__f=@0x55557901a0: (void (H264Encoder::*)(H264Encoder * const)) 0x55555d6b20 <H264Encoder::worker_thread_func()>, __t=@0x5555790198: 0x555578deb0) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#7  0x00000055555da330 in std::__invoke<void (H264Encoder::*)(), H264Encoder*> (__fn=@0x55557901a0: (void (H264Encoder::*)(H264Encoder * const)) 0x55555d6b20 <H264Encoder::worker_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#8  0x00000055555da294 in std::thread::_Invoker<std::tuple<void (H264Encoder::*)(), H264Encoder*> >::_M_invoke<0ul, 1ul> (this=0x5555790198) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#9  0x00000055555da24c in std::thread::_Invoker<std::tuple<void (H264Encoder::*)(), H264Encoder*> >::operator() (this=0x5555790198) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#10 0x00000055555da22c in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (H264Encoder::*)(), H264Encoder*> > >::_M_run (this=0x5555790190) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#11 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#12 0x0000007ff6beee90 in start_thread (arg=0x7fffff8677) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8677
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548388267392, 549755782784, 549755782774, 0, 8445504, 549755782775, 548379820032, 548388267392, 548379820032, 548388269248, 548388265248, 4989091631309594426, 0, 4989091630651223782, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#13 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 28 (Thread 0x7faefde580 (LWP 21507) "detector"):
+#0  0x0000007ff6c236f0 in __GI___clock_nanosleep (clock_id=<optimized out>, clock_id@entry=0, flags=flags@entry=0, req=0x7faefdd9f0, rem=0x7faefdd9f0) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:48
+        _x2tmp = 548396718576
+        _x0tmp = <optimized out>
+        _x0 = 0
+        _x2 = 548396718576
+        _x8 = 115
+        _x3tmp = 548396718576
+        _x1tmp = 0
+        _x1 = 0
+        _x3 = 548396718576
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        r = <optimized out>
+#1  0x0000007ff6c2865c in __GI___nanosleep (req=<optimized out>, rem=<optimized out>) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+        ret = <optimized out>
+#2  0x00000055555df724 in std::this_thread::sleep_for<long, std::ratio<1l, 1l> > (__rtime=...) at /usr/include/c++/12/bits/this_thread_sleep.h:80
+        __s = {__r = 5}
+        __ns = {__r = 0}
+        __ts = {tv_sec = 4, tv_nsec = 795434467}
+#3  0x00000055555dd5fc in SystemMonitor::worker_thread_func (this=0x5555785a00) at /home/pi/CoralEdgeTpu/src/system_monitor.cpp:61
+        call_ts = 1765487285849
+        cpu_temp = 56.75
+        memory_usage_percent = 60.3923454
+        cpu_usage = 19.9999981
+        entry = {produced_ts_epoch_ms = 1765487285852, module = "SystemMonitor", thread_id = 3852667645816525991, event = "sysmon_metrics", call_ts_epoch_ms = 1765487285849, camera_frame_id = -1, camera_width = -1, camera_height = -1, camera_exposure_ms = -1, camera_copy_time_ms = -1, tpu_inference_ms = -1, tpu_input_w = -1, tpu_input_h = -1, tpu_temp_c = -1, encoder_encode_ms = -1, encoder_total_encoded_frames = -1, encoder_average_fps = -1, logic_metric_ballistics = -1, logic_metric_hit_scan = -1, logic_metric_servo_actuation = -1, sysmon_cpu_temp_c = 56.75, sysmon_cpu_usage_percent = 19.9999981, sysmon_mem_usage_percent = 60.3923454, p50_latency_ms = -1, p95_latency_ms = -1, p99_latency_ms = -1, average_fps = -1, total_frames_processed_or_inferences = -1, average_latency_ms = -1, details = ""}
+#4  0x0000005555604ff4 in std::__invoke_impl<void, void (SystemMonitor::*)(), SystemMonitor*> (__f=@0x5555790170: (void (SystemMonitor::*)(SystemMonitor * const)) 0x55555dd44c <SystemMonitor::worker_thread_func()>, __t=@0x5555790168: 0x5555785a00) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#5  0x0000005555604f34 in std::__invoke<void (SystemMonitor::*)(), SystemMonitor*> (__fn=@0x5555790170: (void (SystemMonitor::*)(SystemMonitor * const)) 0x55555dd44c <SystemMonitor::worker_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#6  0x0000005555604e98 in std::thread::_Invoker<std::tuple<void (SystemMonitor::*)(), SystemMonitor*> >::_M_invoke<0ul, 1ul> (this=0x5555790168) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#7  0x0000005555604df8 in std::thread::_Invoker<std::tuple<void (SystemMonitor::*)(), SystemMonitor*> >::operator() (this=0x5555790168) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#8  0x0000005555604d98 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (SystemMonitor::*)(), SystemMonitor*> > >::_M_run (this=0x5555790160) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#9  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#10 0x0000007ff6beee90 in start_thread (arg=0x7fffff8797) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8797
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548396721536, 549755783072, 549755783062, 0, 8445504, 549755783063, 548388274176, 548396721536, 548388274176, 548396723392, 548396719392, 4989091631309594426, 0, 4989091630642769638, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#11 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 27 (Thread 0x7faf7ee580 (LWP 21506) "detector"):
+#0  boost::lockfree::detail::ringbuffer_base<LogEntry>::next_index (arg=1765487285698049347, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:70
+        ret = 1765487282027670463
+#1  0x00000055555aff84 in boost::lockfree::detail::ringbuffer_base<LogEntry>::push (this=0x5555737dc8, t=..., buffer=0x5555737e10, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:108
+        write_index = 1765487285698049347
+        next = 548405172288
+#2  0x00000055555af178 in boost::lockfree::detail::compile_time_sized_ringbuffer<LogEntry, 100ul>::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:454
+No locals.
+#3  0x00000055555ae12c in boost::lockfree::spsc_queue<LogEntry, boost::lockfree::capacity<100ul> >::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:829
+No locals.
+#4  0x00000055555ab254 in Logger::log (this=0x5555737b80, level="DEBUG", message="LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.") at /home/pi/CoralEdgeTpu/src/util_logging.cpp:272
+No locals.
+#5  0x00000055555d021c in LogicModule::worker_thread_func (this=0x55557284c0) at /home/pi/CoralEdgeTpu/src/logic.cpp:222
+        detections_buffer = std::shared_ptr<PooledBuffer<DetectionResult>> (empty) = {get() = 0x0}
+#6  0x00000055555d64cc in std::__invoke_impl<void, void (LogicModule::*)(), LogicModule*> (__f=@0x5555790140: (void (LogicModule::*)(LogicModule * const)) 0x55555cfd08 <LogicModule::worker_thread_func()>, __t=@0x5555790138: 0x55557284c0) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#7  0x00000055555d640c in std::__invoke<void (LogicModule::*)(), LogicModule*> (__fn=@0x5555790140: (void (LogicModule::*)(LogicModule * const)) 0x55555cfd08 <LogicModule::worker_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#8  0x00000055555d6370 in std::thread::_Invoker<std::tuple<void (LogicModule::*)(), LogicModule*> >::_M_invoke<0ul, 1ul> (this=0x5555790138) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#9  0x00000055555d6328 in std::thread::_Invoker<std::tuple<void (LogicModule::*)(), LogicModule*> >::operator() (this=0x5555790138) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#10 0x00000055555d6308 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (LogicModule::*)(), LogicModule*> > >::_M_run (this=0x5555790130) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#11 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#12 0x0000007ff6beee90 in start_thread (arg=0x7fffff8797) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8797
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548405175680, 549755783072, 549755783062, 0, 8445504, 549755783063, 548396728320, 548405175680, 548396728320, 548405177536, 548405173536, 4989091631309594426, 0, 4989091630667869926, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#13 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 26 (Thread 0x7fafffe580 (LWP 21505) "detector"):
+#0  0x0000007ff6c236f0 in __GI___clock_nanosleep (clock_id=<optimized out>, clock_id@entry=0, flags=flags@entry=0, req=0x7fafffdb10, rem=0x7fafffdb10) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:48
+        _x2tmp = 548413627152
+        _x0tmp = <optimized out>
+        _x0 = 0
+        _x2 = 548413627152
+        _x8 = 115
+        _x3tmp = 548413627152
+        _x1tmp = 0
+        _x1 = 0
+        _x3 = 548413627152
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        r = <optimized out>
+#1  0x0000007ff6c2865c in __GI___nanosleep (req=<optimized out>, rem=<optimized out>) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+        ret = <optimized out>
+#2  0x0000005555574f80 in std::this_thread::sleep_for<long, std::ratio<1l, 1000l> > (__rtime=...) at /usr/include/c++/12/bits/this_thread_sleep.h:80
+        __s = {__r = 0}
+        __ns = {__r = 100000000}
+        __ts = {tv_sec = 0, tv_nsec = 93273913}
+#3  0x00000055555dac68 in OrientationSensor::worker_thread_func (this=0x5555790b20) at /home/pi/CoralEdgeTpu/src/orientation_sensor.cpp:52
+No locals.
+#4  0x00000055555db3ac in std::__invoke_impl<void, void (OrientationSensor::*)(), OrientationSensor*> (__f=@0x555578ff00: (void (OrientationSensor::*)(OrientationSensor * const)) 0x55555dabb0 <OrientationSensor::worker_thread_func()>, __t=@0x555578fef8: 0x5555790b20) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#5  0x00000055555db2ec in std::__invoke<void (OrientationSensor::*)(), OrientationSensor*> (__fn=@0x555578ff00: (void (OrientationSensor::*)(OrientationSensor * const)) 0x55555dabb0 <OrientationSensor::worker_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#6  0x00000055555db250 in std::thread::_Invoker<std::tuple<void (OrientationSensor::*)(), OrientationSensor*> >::_M_invoke<0ul, 1ul> (this=0x555578fef8) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#7  0x00000055555db208 in std::thread::_Invoker<std::tuple<void (OrientationSensor::*)(), OrientationSensor*> >::operator() (this=0x555578fef8) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#8  0x00000055555db1e8 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (OrientationSensor::*)(), OrientationSensor*> > >::_M_run (this=0x555578fef0) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#9  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#10 0x0000007ff6beee90 in start_thread (arg=0x7fffff8797) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8797
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548413629824, 549755783072, 549755783062, 0, 8445504, 549755783063, 548405182464, 548413629824, 548405182464, 548413631680, 548413627680, 4989091631309594426, 0, 4989091630659415782, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#11 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 25 (Thread 0x7fbc83b580 (LWP 21504) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x5555763f84) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 366506033028
+        _x0 = 366506033028
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x5555763f84) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5555763f84, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x5555763f28, cond=0x5555763f58) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fbc83a658, __canceltype = 1433812872, __prev = 0x0}
+        cbuffer = {wseq = 3, cond = 0x5555763f58, mutex = 0x5555763f28, private = 0}
+        err = <optimized out>
+        g = 1
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 3
+        seq = 1
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x5555763f58, mutex=0x5555763f28) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x00000055555909f0 in std::condition_variable::wait<CameraCapture::request_processor_thread_func()::<lambda()> >(std::unique_lock<std::mutex> &, struct {...}) (this=0x5555763f58, __lock=..., __p=...) at /usr/include/c++/12/condition_variable:102
+No locals.
+#6  0x000000555558fc8c in CameraCapture::request_processor_thread_func (this=0x5555763da0) at /home/pi/CoralEdgeTpu/src/camera_capture.cpp:827
+        monotonic_raw_now_ns = 12482892976355
+        epoch_offset_ms = 1765474802971
+        md_timestamp = std::optional<long> = {[contained value] = 12482605130000}
+        frame_id = 0
+        exposure_ms = 0
+        captured_buffers = std::map with 2 elements = {[0x7fc4047a18] = 0x7fc419a740, [0x7fc4047bb0] = 0x7fc403d2a0}
+        processing_end_time = {__d = {__r = 1765487285865621277}}
+        lock = {_M_device = 0x5555763f28, _M_owns = true}
+        call_ts = 1765487285576
+        processing_start_time = {__d = {__r = 1765487285863299390}}
+        duration_ms = 2
+        request = 0x5555736a70
+        produced_ts = 1765487285863
+        md_exposure_us = std::optional<int> = {[contained value] = 884}
+#7  0x000000555559e4cc in std::__invoke_impl<void, void (CameraCapture::*)(), CameraCapture*> (__f=@0x555577b590: (void (CameraCapture::*)(CameraCapture * const)) 0x555558fbc4 <CameraCapture::request_processor_thread_func()>, __t=@0x555577b588: 0x5555763da0) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#8  0x000000555559e384 in std::__invoke<void (CameraCapture::*)(), CameraCapture*> (__fn=@0x555577b590: (void (CameraCapture::*)(CameraCapture * const)) 0x555558fbc4 <CameraCapture::request_processor_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#9  0x000000555559e240 in std::thread::_Invoker<std::tuple<void (CameraCapture::*)(), CameraCapture*> >::_M_invoke<0ul, 1ul> (this=0x555577b588) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#10 0x000000555559e0f4 in std::thread::_Invoker<std::tuple<void (CameraCapture::*)(), CameraCapture*> >::operator() (this=0x555577b588) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#11 0x000000555559ddf4 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (CameraCapture::*)(), CameraCapture*> > >::_M_run (this=0x555577b580) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#12 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#13 0x0000007ff6beee90 in start_thread (arg=0x7fffff83c7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff83c7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548623594880, 549755782096, 549755782086, 0, 8445504, 549755782087, 548615147520, 548623594880, 548615147520, 548623596736, 548623592736, 4989091631309594426, 0, 4989091630404886246, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#14 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 24 (Thread 0x7fbdaf9580 (LWP 21503) "detector"):
+#0  0x0000007ff6c4db68 in __ppoll (fds=0x5555778c30, nfds=1, timeout=<optimized out>, sigmask=0x0) at ../sysdeps/unix/sysv/linux/ppoll.c:42
+        _x3tmp = 0
+        _x0tmp = 366506118192
+        _x0 = 366506118192
+        _x3 = 0
+        _x4tmp = 8
+        _x1tmp = 1
+        _x1 = 1
+        _x4 = 8
+        _x2tmp = <optimized out>
+        _x2 = 0
+        _x8 = 73
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        tval = {tv_sec = 548749290880, tv_nsec = 8}
+#1  0x0000007ff78f383c in libcamera::EventDispatcherPoll::poll(std::vector<pollfd, std::allocator<pollfd> >*) () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#2  0x0000007ff78f40f4 in libcamera::EventDispatcherPoll::processEvents() () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#3  0x0000007ff78fc1bc in libcamera::Thread::exec() () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#4  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#5  0x0000007ff6beee90 in start_thread (arg=0x7fcb696177) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fcb696177
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548643247488, 548873527680, 548873527670, 0, 8445504, 548873527671, 548634800128, 548643247488, 548634800128, 548643249344, 548643245344, 4989091631309594426, 0, 4989091630419312358, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#6  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 23 (Thread 0x7fbef5e580 (LWP 21502) "detector"):
+#0  boost::lockfree::detail::ringbuffer_base<LogEntry>::next_index (arg=1765487285698049347, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:70
+        ret = 1765487282181922006
+#1  0x00000055555aff84 in boost::lockfree::detail::ringbuffer_base<LogEntry>::push (this=0x5555737dc8, t=..., buffer=0x5555737e10, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:108
+        write_index = 1765487285698049347
+        next = 548664628224
+#2  0x00000055555af178 in boost::lockfree::detail::compile_time_sized_ringbuffer<LogEntry, 100ul>::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:454
+No locals.
+#3  0x00000055555ae12c in boost::lockfree::spsc_queue<LogEntry, boost::lockfree::capacity<100ul> >::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:829
+No locals.
+#4  0x00000055555ab254 in Logger::log (this=0x5555737b80, level="DEBUG", message="InferenceEngine: Total worker thread loop iteration time: 15007 us") at /home/pi/CoralEdgeTpu/src/util_logging.cpp:272
+No locals.
+#5  0x00000055555a128c in InferenceEngine::worker_thread_func (this=0x55557626a0) at /home/pi/CoralEdgeTpu/src/inference.cpp:247
+        total_loop_start = {__d = {__r = 1765487285864193037}}
+        pop_start = {__d = {__r = 1765487285864193074}}
+        total_loop_end = {__d = {__r = 1765487285879200341}}
+        interpreter = std::unique_ptr<tflite::Interpreter> = {get() = 0x7fb0000c70}
+        input_image = {buffer = std::shared_ptr<PooledBuffer<unsigned char>> (empty) = {get() = 0x0}, width = 0, height = 0, format = {fourcc_ = 0, modifier_ = 0}, timestamp_epoch_ms = 0, frame_id = -1}
+#6  0x00000055555a7a30 in std::__invoke_impl<void, void (InferenceEngine::*)(), InferenceEngine*> (__f=@0x555577bb70: (void (InferenceEngine::*)(InferenceEngine * const)) 0x55555a06f8 <InferenceEngine::worker_thread_func()>, __t=@0x555577bb68: 0x55557626a0) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#7  0x00000055555a7970 in std::__invoke<void (InferenceEngine::*)(), InferenceEngine*> (__fn=@0x555577bb70: (void (InferenceEngine::*)(InferenceEngine * const)) 0x55555a06f8 <InferenceEngine::worker_thread_func()>) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#8  0x00000055555a78d4 in std::thread::_Invoker<std::tuple<void (InferenceEngine::*)(), InferenceEngine*> >::_M_invoke<0ul, 1ul> (this=0x555577bb68) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#9  0x00000055555a7878 in std::thread::_Invoker<std::tuple<void (InferenceEngine::*)(), InferenceEngine*> >::operator() (this=0x555577bb68) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#10 0x00000055555a780c in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (InferenceEngine::*)(), InferenceEngine*> > >::_M_run (this=0x555577bb60) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#11 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#12 0x0000007ff6beee90 in start_thread (arg=0x7fffff8587) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8587
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548664632704, 549755782544, 549755782534, 0, 8445504, 549755782535, 548656185344, 548664632704, 548656185344, 548664634560, 548664630560, 4989091631309594426, 0, 4989091630374858470, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#13 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 22 (Thread 0x7fbf76e580 (LWP 21501) "ImageProcessor"):
+#0  std::__atomic_base<unsigned long>::load (__m=std::memory_order_relaxed, this=0xe) at /usr/include/c++/12/bits/atomic_base.h:488
+        __b = std::memory_order_relaxed
+#1  boost::lockfree::detail::ringbuffer_base<ImageData>::push (this=0xe, t=..., buffer=0x56, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:107
+        write_index = 14
+        next = 548673083352
+#2  0x0000005555594d78 in boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100ul>::push (this=0xe, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:454
+No locals.
+#3  0x0000005555592d28 in boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100ul> >::push (this=0xe, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:829
+No locals.
+#4  0x00000055555a8af0 in ImageProcessor::worker_thread_func (this=0x5555734e80) at /home/pi/CoralEdgeTpu/src/image_processor.cpp:159
+        process_start_time = {__d = {__r = 1765487285865878073}}
+        required_size = 270000
+        temp_bgr_image = {flags = 1124024336, dims = 2, rows = 300, cols = 300, data = 0x55557343a0 "0JsUU", datastart = 0x55557343a0 "0JsUU", dataend = 0x5555776250 "vWU\005", datalimit = 0x5555776250 "vWU\005", allocator = 0x0, u = 0x0, size = {p = 0x7fbf76d5e8}, step = {p = 0x7fbf76d630, buf = {900, 3}}}
+        duration_ms = 0
+        raw_image = {flags = 1124024336, dims = 2, rows = 300, cols = 300, data = 0x55557343a0 "0JsUU", datastart = 0x55557343a0 "0JsUU", dataend = 0x5555776250 "vWU\005", datalimit = 0x5555776250 "vWU\005", allocator = 0x0, u = 0x0, size = {p = 0x7fbf76d528}, step = {p = 0x7fbf76d570, buf = {900, 3}}}
+        processed_buffer_data = warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+std::shared_ptr<PooledBuffer<unsigned char>> (use count 2, weak count 0) = {get() = 0x5555733b30}
+        bgr_image_out = {flags = 1124024336, dims = 2, rows = 300, cols = 300, data = 0x5555733b30 "\020`\206\362\177", datastart = 0x5555733b30 "\020`\206\362\177", dataend = 0x55557759e0 "@\024qUU", datalimit = 0x55557759e0 "@\024qUU", allocator = 0x0, u = 0x0, size = {p = 0x7fbf76d588}, step = {p = 0x7fbf76d5d0, buf = {900, 3}}}
+        processed_image = {buffer = warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+std::shared_ptr<PooledBuffer<unsigned char>> (use count 2, weak count 0) = {get() = 0x5555733b30}, width = 0, height = 0, format = {fourcc_ = 875710274, modifier_ = 0}, timestamp_epoch_ms = 1765487285576, frame_id = -1}
+        process_end_time = {__d = {__r = 0}}
+        input_image = {buffer = warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+warning: RTTI symbol not found for class 'std::_Sp_counted_deleter<PooledBuffer<unsigned char>*, BufferPool<unsigned char>::acquire(std::chrono::duration<long, std::ratio<1l, 1000l> >)::{lambda(PooledBuffer<unsigned char>*)#2}, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>'
+std::shared_ptr<PooledBuffer<unsigned char>> (use count 1, weak count 0) = {get() = 0x55557343a0}, width = 300, height = 300, format = {fourcc_ = 875710290, modifier_ = 0}, timestamp_epoch_ms = 1765487285576, frame_id = 0}
+        opencv_input_type = 16
+#5  0x00000055555a9730 in std::__invoke_impl<void, void (ImageProcessor::*)(), ImageProcessor*> (__f=@0x5555736ae0: &virtual table offset 3415245218162963305, this adjustment 215598938169, __t=@0x5555736ad8: 0x642f64656b636f6c) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#6  0x00000055555a9670 in std::__invoke<void (ImageProcessor::*)(), ImageProcessor*> (__fn=@0x5555736ae0: &virtual table offset 3415245218162963305, this adjustment 215598938169) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#7  0x00000055555a95d4 in std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> >::_M_invoke<0ul, 1ul> (this=0x5555736ad8) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#8  0x00000055555a958c in std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> >::operator() (this=0x5555736ad8) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#9  0x00000055555a956c in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (ImageProcessor::*)(), ImageProcessor*> > >::_M_run (this=0x5555736ad0) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#10 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#11 0x0000007ff6beee90 in start_thread (arg=0x7fffff87e7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff87e7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548673086848, 549755783152, 549755783142, 0, 8445504, 549755783143, 548664639488, 548673086848, 548664639488, 548673088704, 548673084704, 4989091631309594426, 0, 4989091630399958758, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#12 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 21 (Thread 0x7fbff7e580 (LWP 21500) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fbff7db48, fd=48) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 48
+        _x0 = 48
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548681538376
+        _x1 = 548681538376
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=48, buf=0x7fbff7db48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548681540992, 549755768848, 549755768838, 0, 8445504, 549755768839, 548673093632, 548681540992, 548673093632, 548681542848, 548681538848, 4989091631309594426, 0, 4989091630391504614, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 20 (Thread 0x7fc078e580 (LWP 21499) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc078db48, fd=47) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 47
+        _x0 = 47
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548689992520
+        _x1 = 548689992520
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=47, buf=0x7fc078db48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548689995136, 549755768848, 549755768838, 0, 8445504, 549755768839, 548681547776, 548689995136, 548681547776, 548689996992, 548689992992, 4989091631309594426, 0, 4989091632093802214, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 19 (Thread 0x7fc0f9e580 (LWP 21498) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc0f9db48, fd=46) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 46
+        _x0 = 46
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548698446664
+        _x1 = 548698446664
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=46, buf=0x7fc0f9db48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548698449280, 549755768848, 549755768838, 0, 8445504, 549755768839, 548690001920, 548698449280, 548690001920, 548698451136, 548698447136, 4989091631309594426, 0, 4989091632085348070, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 18 (Thread 0x7fc17ae580 (LWP 21497) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc17adb48, fd=45) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 45
+        _x0 = 45
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548706900808
+        _x1 = 548706900808
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=45, buf=0x7fc17adb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548706903424, 549755768848, 549755768838, 0, 8445504, 549755768839, 548698456064, 548706903424, 548698456064, 548706905280, 548706901280, 4989091631309594426, 0, 4989091632110448358, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 17 (Thread 0x7fc1fbe580 (LWP 21496) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc1fbdb48, fd=44) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 44
+        _x0 = 44
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548715354952
+        _x1 = 548715354952
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=44, buf=0x7fc1fbdb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548715357568, 549755768848, 549755768838, 0, 8445504, 549755768839, 548706910208, 548715357568, 548706910208, 548715359424, 548715355424, 4989091631309594426, 0, 4989091632101994214, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 16 (Thread 0x7fc27ce580 (LWP 21495) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc27cdb48, fd=43) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 43
+        _x0 = 43
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548723809096
+        _x1 = 548723809096
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=43, buf=0x7fc27cdb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548723811712, 549755768848, 549755768838, 0, 8445504, 549755768839, 548715364352, 548723811712, 548715364352, 548723813568, 548723809568, 4989091631309594426, 0, 4989091632060509926, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 15 (Thread 0x7fc2fde580 (LWP 21494) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc2fddb48, fd=42) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 42
+        _x0 = 42
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548732263240
+        _x1 = 548732263240
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=42, buf=0x7fc2fddb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548732265856, 549755768848, 549755768838, 0, 8445504, 549755768839, 548723818496, 548732265856, 548723818496, 548732267712, 548732263712, 4989091631309594426, 0, 4989091632052055782, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 14 (Thread 0x7fc37ee580 (LWP 21493) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc37edb48, fd=41) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 41
+        _x0 = 41
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548740717384
+        _x1 = 548740717384
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=41, buf=0x7fc37edb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548740720000, 549755768848, 549755768838, 0, 8445504, 549755768839, 548732272640, 548740720000, 548732272640, 548740721856, 548740717856, 4989091631309594426, 0, 4989091632077156070, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 13 (Thread 0x7fc3ffe580 (LWP 21492) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc3ffdb48, fd=40) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 40
+        _x0 = 40
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548749171528
+        _x1 = 548749171528
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=40, buf=0x7fc3ffdb48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548749174144, 549755768848, 549755768838, 0, 8445504, 549755768839, 548740726784, 548749174144, 548740726784, 548749176000, 548749172000, 4989091631309594426, 0, 4989091632068701926, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 12 (Thread 0x7fc8ee6580 (LWP 21491) "detector"):
+#0  __GI___libc_read (nbytes=8, buf=0x7fc8ee5b48, fd=36) at ../sysdeps/unix/sysv/linux/read.c:26
+        _x2tmp = 8
+        _x0tmp = 36
+        _x0 = 36
+        _x2 = 8
+        _x8 = 63
+        _x1tmp = 548831910728
+        _x1 = 548831910728
+        _sys_result = <optimized out>
+        sc_ret = <optimized out>
+        sc_cancel_oldtype = 0
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        sc_ret = <optimized out>
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x1tmp = <optimized out>
+        _x1 = <optimized out>
+        _x2tmp = <optimized out>
+        _x2 = <optimized out>
+        _x8 = <optimized out>
+#1  __GI___libc_read (fd=36, buf=0x7fc8ee5b48, nbytes=8) at ../sysdeps/unix/sysv/linux/read.c:24
+No locals.
+#2  0x0000007ff7b7e6b0 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#3  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#4  0x0000007ff6beee90 in start_thread (arg=0x7fffff5007) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff5007
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548831913344, 549755768848, 549755768838, 0, 8445504, 549755768839, 548823465984, 548831913344, 548823465984, 548831915200, 548831911200, 4989091631309594426, 0, 4989091632218746598, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#5  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 11 (Thread 0x7fc96f6580 (LWP 21490) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x5555794d80) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 366506233216
+        _x0 = 366506233216
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x5555794d80) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x5555794d80, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x5555794d28, cond=0x5555794d58) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fc96f5ab8, __canceltype = 0, __prev = 0x0}
+        cbuffer = {wseq = 0, cond = 0x5555794d58, mutex = 0x5555794d28, private = 0}
+        err = <optimized out>
+        g = 0
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 0
+        seq = 0
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x5555794d58, mutex=0x5555794d28) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x0000007ff6ea06ec in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#6  0x0000007ff7bd9c84 in ?? () from /home/pi/CoralEdgeTpu/lib/libedgetpu.so.1
+No symbol table info available.
+#7  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#8  0x0000007ff6beee90 in start_thread (arg=0x7fffff4d67) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff4d67
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548840367488, 549755768176, 549755768166, 0, 8445504, 549755768167, 548831920128, 548840367488, 548831920128, 548840369344, 548840365344, 4989091631309594426, 0, 4989091632243846886, 1056964608, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#9  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 8 (Thread 0x7fca59e580 (LWP 21487) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x7fc404f6d0) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 548749506256
+        _x0 = 548749506256
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x7fc404f6d0) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x7fc404f6d0, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x7fc404f678, cond=0x7fc404f6a8) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fca59dc78, __canceltype = 0, __prev = 0x0}
+        cbuffer = {wseq = 0, cond = 0x7fc404f6a8, mutex = 0x7fc404f678, private = 0}
+        err = <optimized out>
+        g = 0
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 0
+        seq = 0
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x7fc404f6a8, mutex=0x7fc404f678) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x0000007fcae27dfc in RPiController::Alsc::asyncFunc() () from /usr/lib/aarch64-linux-gnu/libcamera/ipa/ipa_rpi_pisp.so
+No symbol table info available.
+#6  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#7  0x0000007ff6beee90 in start_thread (arg=0x7fcb6951a7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fcb6951a7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548855735680, 548873523632, 548873523622, 0, 8445504, 548873523623, 548847288320, 548855735680, 548847288320, 548855737536, 548855733536, 4989091631309594426, 0, 4989091632196497126, 4611686018427387904, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#8  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 7 (Thread 0x7fcadae580 (LWP 21486) "detector"):
+#0  0x0000007ff6beb6f4 in __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x7fc40467d8) at ./nptl/futex-internal.c:57
+        _x3tmp = 0
+        _x0tmp = 548749469656
+        _x0 = 548749469656
+        _x3 = 0
+        _x4tmp = 0
+        _x1tmp = 393
+        _x1 = 393
+        _x4 = 0
+        _x5tmp = 4294967295
+        _x2tmp = 0
+        _x2 = 0
+        _x5 = 4294967295
+        _x8 = 98
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        _sys_result = <optimized out>
+        _x5tmp = <optimized out>
+        _x4tmp = <optimized out>
+        _x3tmp = <optimized out>
+        _x2tmp = <optimized out>
+        _x1tmp = <optimized out>
+        _x0tmp = <optimized out>
+        _x0 = <optimized out>
+        _x1 = <optimized out>
+        _x2 = <optimized out>
+        _x3 = <optimized out>
+        _x4 = <optimized out>
+        _x5 = <optimized out>
+        _x8 = <optimized out>
+#1  __futex_abstimed_wait_common (cancel=true, private=0, abstime=0x0, clockid=0, expected=0, futex_word=0x7fc40467d8) at ./nptl/futex-internal.c:87
+        err = <optimized out>
+        clockbit = 256
+        op = 393
+        err = <optimized out>
+        clockbit = <optimized out>
+        op = <optimized out>
+#2  __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x7fc40467d8, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+No locals.
+#3  0x0000007ff6bee230 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x7fc4046780, cond=0x7fc40467b0) at ./nptl/pthread_cond_wait.c:503
+        spin = 0
+        buffer = {__routine = 0x7ff6bedf74 <__condvar_cleanup_waiting>, __arg = 0x7fcadadc78, __canceltype = 0, __prev = 0x0}
+        cbuffer = {wseq = 0, cond = 0x7fc40467b0, mutex = 0x7fc4046780, private = 0}
+        err = <optimized out>
+        g = 0
+        flags = <optimized out>
+        g1_start = <optimized out>
+        maxspin = 0
+        signals = <optimized out>
+        result = 0
+        wseq = 0
+        seq = 0
+        private = 0
+        maxspin = <optimized out>
+        err = <optimized out>
+        result = <optimized out>
+        wseq = <optimized out>
+        g = <optimized out>
+        seq = <optimized out>
+        flags = <optimized out>
+        private = <optimized out>
+        signals = <optimized out>
+        done = <optimized out>
+        g1_start = <optimized out>
+        spin = <optimized out>
+        buffer = <optimized out>
+        cbuffer = <optimized out>
+        s = <optimized out>
+#4  ___pthread_cond_wait (cond=0x7fc40467b0, mutex=0x7fc4046780) at ./nptl/pthread_cond_wait.c:618
+No locals.
+#5  0x0000007fcae2eedc in RPiController::Awb::asyncFunc() () from /usr/lib/aarch64-linux-gnu/libcamera/ipa/ipa_rpi_pisp.so
+No symbol table info available.
+#6  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#7  0x0000007ff6beee90 in start_thread (arg=0x7fcb695207) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fcb695207
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548864189824, 548873523728, 548873523718, 0, 8445504, 548873523719, 548855742464, 548864189824, 548855742464, 548864191680, 548864187680, 4989091631309594426, 0, 4989091632188042982, 4611686018427387904, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#8  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 6 (Thread 0x7fcb697580 (LWP 21485) "detector"):
+#0  0x0000007ff78fc1c4 in libcamera::Thread::exec() () from /lib/aarch64-linux-gnu/libcamera-base.so.0.5
+No symbol table info available.
+#1  0x0000007ff79e6784 in libcamera::CameraManager::Private::run() () from /lib/aarch64-linux-gnu/libcamera.so.0.5
+No symbol table info available.
+#2  0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#3  0x0000007ff6beee90 in start_thread (arg=0x7fffff7d17) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff7d17
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {548873532800, 549755780384, 549755780374, 0, 8445504, 549755780375, 548865085440, 548873532800, 548865085440, 548873534656, 548873530656, 4989091631309594426, 0, 4989091632210157286, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#4  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 5 (Thread 0x7ff380e580 (LWP 21484) "detector"):
+#0  boost::lockfree::detail::ringbuffer_base<LogEntry>::next_index (arg=1765487285698049347, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:70
+        ret = 1765487281202897999
+#1  0x00000055555aff84 in boost::lockfree::detail::ringbuffer_base<LogEntry>::push (this=0x5555737dc8, t=..., buffer=0x5555737e10, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:108
+        write_index = 1765487285698049347
+        next = 549546154480
+#2  0x00000055555af178 in boost::lockfree::detail::compile_time_sized_ringbuffer<LogEntry, 100ul>::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:454
+No locals.
+#3  0x00000055555ae12c in boost::lockfree::spsc_queue<LogEntry, boost::lockfree::capacity<100ul> >::push (this=0x5555737dc8, t=...) at /usr/include/boost/lockfree/spsc_queue.hpp:829
+No locals.
+#4  0x00000055555ab254 in Logger::log (this=0x5555737b80, level="INFO", message="Logger: CSV writer thread finished.") at /home/pi/CoralEdgeTpu/src/util_logging.cpp:272
+No locals.
+#5  0x00000055555abd64 in Logger::csv_writer_thread_func (this=0x5555737b80) at /home/pi/CoralEdgeTpu/src/util_logging.cpp:381
+        entry = {produced_ts_epoch_ms = 1765487285865, module = "CameraCapture", thread_id = 2638320084125094398, event = "main_frame_processed", call_ts_epoch_ms = 1765487285576, camera_frame_id = 0, camera_width = 1536, camera_height = 864, camera_exposure_ms = 0, camera_copy_time_ms = 1, tpu_inference_ms = -1, tpu_input_w = -1, tpu_input_h = -1, tpu_temp_c = -1, encoder_encode_ms = -1, encoder_total_encoded_frames = -1, encoder_average_fps = -1, logic_metric_ballistics = -1, logic_metric_hit_scan = -1, logic_metric_servo_actuation = -1, sysmon_cpu_temp_c = -1, sysmon_cpu_usage_percent = -1, sysmon_mem_usage_percent = -1, p50_latency_ms = -1, p95_latency_ms = -1, p99_latency_ms = -1, average_fps = -1, total_frames_processed_or_inferences = -1, average_latency_ms = -1, details = ""}
+#6  0x00000055555b407c in std::__invoke_impl<void, void (Logger::*)(), Logger*> (__f=@0x55557341d0: (void (Logger::*)(Logger * const)) 0x5555744110, this adjustment 183252951176, __t=@0x55557341c8: 0x5555744110) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#7  0x00000055555b3fbc in std::__invoke<void (Logger::*)(), Logger*> (__fn=@0x55557341d0: (void (Logger::*)(Logger * const)) 0x5555744110, this adjustment 183252951176) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#8  0x00000055555b3f20 in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::_M_invoke<0ul, 1ul> (this=0x55557341c8) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#9  0x00000055555b3ebc in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::operator() (this=0x55557341c8) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#10 0x00000055555b3e34 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> > >::_M_run (this=0x55557341c0) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#11 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#12 0x0000007ff6beee90 in start_thread (arg=0x7fffff8897) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8897
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549546157440, 549755783328, 549755783318, 0, 8445504, 549755783319, 549537710080, 549546157440, 549537710080, 549546159296, 549546155296, 4989091631309594426, 0, 4989091631260708582, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#13 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 4 (Thread 0x7ff401e580 (LWP 21483) "detector"):
+#0  __pthread_kill_implementation (threadid=549554611584, signo=signo@entry=6, no_tid=no_tid@entry=0) at ./nptl/pthread_kill.c:44
+        tid = 21483
+        ret = 0
+        pd = 0x7ff401e580
+        old_mask = {__val = {2}}
+        ret = <optimized out>
+#1  0x0000007ff6bf0aa4 in __pthread_kill_internal (signo=6, threadid=<optimized out>) at ./nptl/pthread_kill.c:78
+No locals.
+#2  0x0000007ff6baa72c in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+        ret = <optimized out>
+#3  0x0000007ff6b9747c in __GI_abort () at ./stdlib/abort.c:79
+        save_stage = 1
+        act = {__sigaction_handler = {sa_handler = 0x20, sa_sigaction = 0x20}, sa_mask = {__val = {549554608896, 32, 549554608440, 549554608488, 21285, 889206064, 5, 549554608048, 549603876476, 549554608752, 549554612636, 549755783318, 549604902352, 549554608048, 549604902656, 6}}, sa_flags = 6, sa_restorer = 0x7ff401d7f0}
+#4  0x0000007ff6be4aac in __libc_message (action=action@entry=do_abort, fmt=fmt@entry=0x7ff6cc6d28 "%s\n") at ../sysdeps/posix/libc_fatal.c:155
+        ap = {__stack = 0x7ff401d8c0, __gr_top = 0x7ff401d8c0, __vr_top = 0x7ff401d890, __gr_offs = -40, __vr_offs = 0}
+        fd = <optimized out>
+        list = <optimized out>
+        nlist = <optimized out>
+        cp = <optimized out>
+#5  0x0000007ff6bfaeac in malloc_printerr (str=str@entry=0x7ff6cc1fb8 "free(): double free detected in tcache 2") at ./malloc/malloc.c:5660
+No locals.
+#6  0x0000007ff6bfd098 in _int_free (av=0x7ff6d10af0 <main_arena>, p=p@entry=0x5555711350, have_lock=have_lock@entry=0) at ./malloc/malloc.c:4469
+        tmp = <optimized out>
+        cnt = <optimized out>
+        e = 0x5555711360
+        tc_idx = 0
+        size = 32
+        fb = <optimized out>
+        nextchunk = <optimized out>
+        nextsize = <optimized out>
+        nextinuse = <optimized out>
+        prevsize = <optimized out>
+        bck = <optimized out>
+        fwd = <optimized out>
+        __PRETTY_FUNCTION__ = "_int_free"
+#7  0x0000007ff6bff76c in __GI___libc_free (mem=<optimized out>) at ./malloc/malloc.c:3385
+        ar_ptr = <optimized out>
+        p = 0x5555711350
+        err = <optimized out>
+#8  0x00000055555ad260 in LogEntry::~LogEntry (this=0x5555737e10, __in_chrg=<optimized out>) at /home/pi/CoralEdgeTpu/src/util_logging.h:70
+No locals.
+#9  0x00000055555b150c in boost::lockfree::detail::ringbuffer_base<LogEntry>::consume_one<boost::lockfree::detail::consume_via_copy<LogEntry> > (this=0x5555737dc8, functor=..., buffer=0x5555737e10, max_size=101) at /usr/include/boost/lockfree/spsc_queue.hpp:173
+        write_index = 1765487285698049347
+        read_index = 0
+        object_to_consume = @0x5555737e10: {timestamp = {__d = {__r = 1765487285698051124}}, level = "DEBU", message = "1B$PU\000\000\000\340F\vǛ8)Keated."}
+        next = 549554608704
+#10 0x00000055555b069c in boost::lockfree::detail::compile_time_sized_ringbuffer<LogEntry, 100ul>::consume_one<boost::lockfree::detail::consume_via_copy<LogEntry> > (this=0x5555737dc8, f=...) at /usr/include/boost/lockfree/spsc_queue.hpp:460
+No locals.
+#11 0x00000055555af20c in boost::lockfree::spsc_queue<LogEntry, boost::lockfree::capacity<100ul> >::consume_one<boost::lockfree::detail::consume_via_copy<LogEntry> > (this=0x5555737dc8, f=...) at /usr/include/boost/lockfree/spsc_queue.hpp:950
+No locals.
+#12 0x00000055555ae1e4 in boost::lockfree::spsc_queue<LogEntry, boost::lockfree::capacity<100ul> >::pop<LogEntry> (this=0x5555737dc8, ret=...) at /usr/include/boost/lockfree/spsc_queue.hpp:859
+        consume_functor = {out_ = @0x7ff401daf8}
+#13 0x00000055555ab804 in Logger::writer_thread_func (this=0x5555737b80) at /home/pi/CoralEdgeTpu/src/util_logging.cpp:323
+        entry = {timestamp = {__d = {__r = 1765487285698051124}}, level = "DEBU", message = "1B$PU\000\000\000\340F\vǛ8)Keated."}
+#14 0x00000055555b407c in std::__invoke_impl<void, void (Logger::*)(), Logger*> (__f=@0x5555734590: NULL, __t=@0x5555734588: 0x0) at /usr/include/c++/12/bits/invoke.h:74
+No locals.
+#15 0x00000055555b3fbc in std::__invoke<void (Logger::*)(), Logger*> (__fn=@0x5555734590: NULL) at /usr/include/c++/12/bits/invoke.h:96
+No locals.
+#16 0x00000055555b3f20 in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::_M_invoke<0ul, 1ul> (this=0x5555734588) at /usr/include/c++/12/bits/std_thread.h:252
+No locals.
+#17 0x00000055555b3ebc in std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> >::operator() (this=0x5555734588) at /usr/include/c++/12/bits/std_thread.h:259
+No locals.
+#18 0x00000055555b3e34 in std::thread::_State_impl<std::thread::_Invoker<std::tuple<void (Logger::*)(), Logger*> > >::_M_run (this=0x5555734580) at /usr/include/c++/12/bits/std_thread.h:210
+No locals.
+#19 0x0000007ff6ece9dc in ?? () from /lib/aarch64-linux-gnu/libstdc++.so.6
+No symbol table info available.
+#20 0x0000007ff6beee90 in start_thread (arg=0x7fffff8897) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffff8897
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549554611584, 549755783328, 549755783318, 0, 8445504, 549755783319, 549546164224, 549554611584, 549546164224, 549554613440, 549554609440, 4989091631309594426, 0, 4989091631352917734, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#21 0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 3 (Thread 0x7ff482e580 (LWP 21482) "detector-ust"):
+#0  syscall () at ../sysdeps/unix/sysv/linux/aarch64/syscall.S:38
+No locals.
+#1  0x0000007ff66b2104 in ?? () from /lib/aarch64-linux-gnu/liblttng-ust.so.1
+No symbol table info available.
+#2  0x0000007ff6beee90 in start_thread (arg=0x7fffffeda7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffffeda7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549563065728, 549755809488, 549755809190, 0, 8445504, 549755809191, 549554618368, 549563065728, 549554618368, 549563067584, 549563063584, 4989091631309594426, 0, 4989091631344463590, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#3  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 2 (Thread 0x7ff503e580 (LWP 21481) "detector-ust"):
+#0  syscall () at ../sysdeps/unix/sysv/linux/aarch64/syscall.S:38
+No locals.
+#1  0x0000007ff66b2104 in ?? () from /lib/aarch64-linux-gnu/liblttng-ust.so.1
+No symbol table info available.
+#2  0x0000007ff6beee90 in start_thread (arg=0x7fffffeda7) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = 0x7fffffeda7
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {549571519872, 549755809488, 549755809190, 0, 8445504, 549755809191, 549563072512, 549571519872, 549563072512, 549571521728, 549571517728, 4989091631309594426, 0, 4989091631369563878, 0, 0, 0, 0, 0, 0, 0, 0}, mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = 0
+#3  0x0000007ff6c57b1c in thread_start () at ../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+No locals.
+
+Thread 1 (Thread 0x7ff7fb5040 (LWP 21479) "detector"):
+#0  0x0000007ff6c236f0 in __GI___clock_nanosleep (clock_id=<optimized out>, clock_id@entry=0, flags=flags@entry=0, req=0x7fffff89f0, rem=0x7fffff89f0) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:48
+        _x2tmp = 549755783664
+        _x0tmp = <optimized out>
+        _x0 = 0
+        _x2 = 549755783664
+        _x8 = 115
+        _x3tmp = 549755783664
+        _x1tmp = 0
+        _x1 = 0
+        _x3 = 549755783664
+        _sys_result = <optimized out>
+        sc_cancel_oldtype = 0
+        sc_ret = <optimized out>
+        r = <optimized out>
+#1  0x0000007ff6c2865c in __GI___nanosleep (req=<optimized out>, rem=<optimized out>) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+        ret = <optimized out>
+#2  0x0000005555574f80 in std::this_thread::sleep_for<long, std::ratio<1l, 1000l> > (__rtime=...) at /usr/include/c++/12/bits/this_thread_sleep.h:80
+        __s = {__r = 0}
+        __ns = {__r = 100000000}
+        __ts = {tv_sec = 0, tv_nsec = 97892261}
+#3  0x000000555556f0ec in Application::main_loop (this=0x7fffff90c8) at /home/pi/CoralEdgeTpu/src/application.cpp:151
+        last_metric_log_time = {__d = {__r = 12482708033080}}
+        now = {__d = {__r = 12482808107413}}
+#4  0x000000555556fa7c in Application::run (this=0x7fffff90c8) at /home/pi/CoralEdgeTpu/src/application.cpp:214
+        exe_path = filesystem::path "/home/pi/CoralEdgeTpu/build/detector" = {[root-directory] = "/", [1] = "home", [2] = "pi", [3] = "CoralEdgeTpu", [4] = "build", [5] = "detector"}
+        config_path = filesystem::path "/home/pi/CoralEdgeTpu/build/../config.json" = {[root-directory] = "/", [1] = "home", [2] = "pi", [3] = "CoralEdgeTpu", [4] = "build", [5] = "..", [6] = "config.json"}
+        csv_log_configs = std::vector of length 5, capacity 8 = {{name = "CameraCapture", log_dir_suffix = "camera", max_log_files = 3}, {name = "InferenceEngine", log_dir_suffix = "tpu", max_log_files = 3}, {name = "H264Encoder", log_dir_suffix = "encoder", max_log_files = 3}, {name = "LogicModule", log_dir_suffix = "logic", max_log_files = 3}, {name = "SystemMonitor", log_dir_suffix = "system_monitor", max_log_files = 3}}
+        model_path = '\000' <repeats 84 times>
+        labels_path = "/home/pi/CoralEdgeTpu/build/../coco_labels.txt"
+#5  0x000000555556b7e4 in main (argc=1, argv=0x7ffffff378) at /home/pi/CoralEdgeTpu/src/main.cpp:27
+        app = {argc_ = 1, argv_ = 0x7ffffff378, config_loader_ = {config_data_ = {<nlohmann::json_abi_v3_12_0::detail::json_default_base> = {<No data fields>}, m_data = {m_type = nlohmann::json_abi_v3_12_0::detail::value_t::object, m_value = {object = 0x5555734f70, array = 0x5555734f70, string = 0x5555734f70, binary = 0x5555734f70, boolean = 112, number_integer = 366505840496, number_unsigned = 366505840496, number_float = 1.8107794478924513e-312}}}}, supervisor_ = {registered_modules_ = std::vector of length 7, capacity 8 = {{first = "SystemMonitor", second = {<std::_Maybe_unary_or_binary_function<void>> = {<No data fields>}, <std::_Function_base> = {static _M_max_size = 16, static _M_max_align = 8, _M_functor = {_M_unused = {_M_object = 0x7fffff90c8, _M_const_object = 0x7fffff90c8, _M_function_pointer = 0x7fffff90c8, _M_member_pointer = (void (std::_Undefined_class::*)(std::_Undefined_class * const)) 0x7fffff90c8}, _M_pod_data = "Ȑ\377\377\177\000\000\000\000\000\000\000\000\000\000"}, _M_manager = 0x5555570220 <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_manager(std::_Any_data &, const std::_Any_data &, std::_Manager_operation)>}, _M_invoker = 0x55555701fc <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_invoke(const std::_Any_data &)>}}, {first = "LogicModule", second = {<std::_Maybe_unary_or_binary_function<void>> = {<No data fields>}, <std::_Function_base> = {static _M_max_size = 16, static _M_max_align = 8, _M_functor = {_M_unused = {_M_object = 0x7fffff90c8, _M_const_object = 0x7fffff90c8, _M_function_pointer = 0x7fffff90c8, _M_member_pointer = (void (std::_Undefined_class::*)(std::_Undefined_class * const)) 0x7fffff90c8}, _M_pod_data = "Ȑ\377\377\177\000\000\000\000\000\000\000\000\000\000"}, _M_manager = 0x5555570330 <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_manager(std::_Any_data &, const std::_Any_data &, std::_Manager_operation)>}, _M_invoker = 0x555557030c <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_invoke(const std::_Any_data &)>}}, {first = "OrientationSensor", second = {<std::_Maybe_unary_or_binary_function<void>> = {<No data fields>}, <std::_Function_base> = {static _M_max_size = 16, static _M_max_align = 8, _M_functor = {_M_unused = {_M_object = 0x7fffff90c8, _M_const_object = 0x7fffff90c8, _M_function_pointer = 0x7fffff90c8, _M_member_pointer = (void (std::_Undefined_class::*)(std::_Undefined_class * const)) 0x7fffff90c8}, _M_pod_data = "Ȑ\377\377\177\000\000\000\000\000\000\000\000\000\000"}, _M_manager = 0x5555570440 <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_manager(std::_Any_data &, const std::_Any_data &, std::_Manager_operation)>}, _M_invoker = 0x555557041c <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_invoke(const std::_Any_data &)>}}, {first = "CameraCapture", second = {<std::_Maybe_unary_or_binary_function<void>> = {<No data fields>}, <std::_Function_base> = {static _M_max_size = 16, static _M_max_align = 8, _M_functor = {_M_unused = {_M_object = 0x7fffff90c8, _M_const_object = 0x7fffff90c8, _M_function_pointer = 0x7fffff90c8, _M_member_pointer = (void (std::_Undefined_class::*)(std::_Undefined_class * const)) 0x7fffff90c8}, _M_pod_data = "Ȑ\377\377\177\000\000\000\000\000\000\000\000\000\000"}, _M_manager = 0x5555570550 <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_manager(std::_Any_data &, const std::_Any_data &, std::_Manager_operation)>}, _M_invoker = 0x555557052c <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_invoke(const std::_Any_data &)>}}, {first = "H264Encoder", second = {<std::_Maybe_unary_or_binary_function<void>> = {<No data fields>}, <std::_Function_base> = {static _M_max_size = 16, static _M_max_align = 8, _M_functor = {_M_unused = {_M_object = 0x7fffff90c8, _M_const_object = 0x7fffff90c8, _M_function_pointer = 0x7fffff90c8, _M_member_pointer = (void (std::_Undefined_class::*)(std::_Undefined_class * const)) 0x7fffff90c8}, _M_pod_data = "Ȑ\377\377\177\000\000\000\000\000\000\000\000\000\000"}, _M_manager = 0x5555570660 <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_manager(std::_Any_data &, const std::_Any_data &, std::_Manager_operation)>}, _M_invoker = 0x555557063c <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_invoke(const std::_Any_data &)>}}, {first = "ImageProcessor", second = {<std::_Maybe_unary_or_binary_function<void>> = {<No data fields>}, <std::_Function_base> = {static _M_max_size = 16, static _M_max_align = 8, _M_functor = {_M_unused = {_M_object = 0x7fffff90c8, _M_const_object = 0x7fffff90c8, _M_function_pointer = 0x7fffff90c8, _M_member_pointer = (void (std::_Undefined_class::*)(std::_Undefined_class * const)) 0x7fffff90c8}, _M_pod_data = "Ȑ\377\377\177\000\000\000\000\000\000\000\000\000\000"}, _M_manager = 0x5555570770 <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_manager(std::_Any_data &, const std::_Any_data &, std::_Manager_operation)>}, _M_invoker = 0x555557074c <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_invoke(const std::_Any_data &)>}}, {first = "InferenceEngine", second = {<std::_Maybe_unary_or_binary_function<void>> = {<No data fields>}, <std::_Function_base> = {static _M_max_size = 16, static _M_max_align = 8, _M_functor = {_M_unused = {_M_object = 0x7fffff90c8, _M_const_object = 0x7fffff90c8, _M_function_pointer = 0x7fffff90c8, _M_member_pointer = (void (std::_Undefined_class::*)(std::_Undefined_class * const)) 0x7fffff90c8}, _M_pod_data = "Ȑ\377\377\177\000\000\000\000\000\000\000\000\000\000"}, _M_manager = 0x5555570880 <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_manager(std::_Any_data &, const std::_Any_data &, std::_Manager_operation)>}, _M_invoker = 0x555557085c <std::_Function_handler<void(), Application::register_shutdown_handlers()::<lambda()> >::_M_invoke(const std::_Any_data &)>}}}}, image_pool_ = std::shared_ptr<BufferPool<unsigned char>> (use count 3, weak count 0) = {get() = 0x555571a350}, detection_pool_ = std::shared_ptr<BufferPool<DetectionResult>> (use count 2, weak count 0) = {get() = 0x555571be20}, h264_pool_ = std::shared_ptr<BufferPool<unsigned char>> (use count 2, weak count 0) = {get() = 0x555571bf10}, raw_image_for_processor_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100>> = {<boost::lockfree::detail::ringbuffer_base<ImageData>> = {write_index_ = std::atomic<unsigned long> = { 1 }, padding1 = '\000' <repeats 55 times>, read_index_ = std::atomic<unsigned long> = { 1 }}, static max_size = 101, storage_ = {data_ = {buf = "\240CsUU\000\000\000\200\016\000\250\177\000\000\000,\001\000\000\000\000\000\000,\001\000\000\000\000\000\000RG24#t~f\000\000\000\000\000\000\000\000H\025>\017\233\001", '\000' <repeats 6409 times>, align_ = {<No data fields>}}}}, <No data fields>}, tpu_inference_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100>> = {<boost::lockfree::detail::ringbuffer_base<ImageData>> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = '\000' <repeats 55 times>, read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = '\000' <repeats 1265 times>..., align_ = {<No data fields>}}}}, <No data fields>}, detection_results_for_overlay_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<std::shared_ptr<PooledBuffer<DetectionResult> >, 100>> = {<boost::lockfree::detail::ringbuffer_base<std::shared_ptr<PooledBuffer<DetectionResult> > >> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = "\000\000\000\000\000\000\000\000 \025qUU\000\000\000$\025qUU\000\000\000$\025qUU\000\000\000\f\000\000\000\002\000\000\000\000\000\000\000\002\000\000\000\004\000\000\000\001\000\000", read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = "\000\000\000\000\000\000\000\000\300\345\252\367\177\000\000\000RG10\000\000\000\000\001\000\000\000\000\000\000\v\340\017qUU\000\000\000\344\017qUU\000\000\000\344\017qUU\000\000\000\n\000\000\000\002\000\000\000\001\000\000\000\004\000\000\000\005\000\000\000\001", '\000' <repeats 19 times>, "\260\345\252\367\177\000\000\000BA10\000\000\000\000\001\000\000\000\000\000\000\v\240\nqUU\000\000\000\244\nqUU\000\000\000\244\nqUU\000\000\000\n\000\000\000\002\000\000\000\001\000\000\000\004\000\000\000\005\000\000\000\001", '\000' <repeats 19 times>, "\240\345\252\367\177\000\000\000GB10\000\000\000\000"..., align_ = {<No data fields>}}}}, <No data fields>}, detection_results_for_logic_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<std::shared_ptr<PooledBuffer<DetectionResult> >, 100>> = {<boost::lockfree::detail::ringbuffer_base<std::shared_ptr<PooledBuffer<DetectionResult> > >> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = "\344\357pUU\000\000\000\344\357pUU\000\000\000\b\000\000\000\001\000\000\000\000\000\000\000\001\000\000\000\001\000\000\000\001", '\000' <repeats 18 times>, read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = "XVUY", '\000' <repeats 12 times>, "\200\334pUU\000\000\000\204\334pUU\000\000\000\204\334pUU\000\000\000 \000\000\000\001\000\000\000\000\000\000\000\001\000\000\000\004\000\000\000\001", '\000' <repeats 19 times>, "\200\344\252\367\177\000\000\000AVUY", '\000' <repeats 12 times>, "@\327pUU\000\000\000D\327pUU\000\000\000D\327pUU\000\000\000 \000\000\000\001\000\000\000\000\000\000\000\001\000\000\000\004\000\000\000\001", '\000' <repeats 19 times>, "x\344\252\367\177\000\000\000VYUY", '\000' <repeats 12 times>, "\340\321pUU\000\000\000"..., align_ = {<No data fields>}}}}, <No data fields>}, overlaid_video_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<ImageData, 100>> = {<boost::lockfree::detail::ringbuffer_base<ImageData>> = {write_index_ = std::atomic<unsigned long> = { 1 }, padding1 = "\020", '\000' <repeats 11 times>, "\001\000\000\000\002\000\000\000\001", '\000' <repeats 19 times>, "\230\343\252\367\177\000\000\000RG16\000\000\000", read_index_ = std::atomic<unsigned long> = { 1 }}, static max_size = 101, storage_ = {data_ = {buf = "\000OsUU\000\000\0000\f\000\250\177\000\000\000\000\006\000\000\000\000\000\000`\003\000\000\000\000\000\000YUYV#t~f\000\000\000\000\000\000\000\000H\025>\017\233\001\000\000\000\000\000\000\000\000\000\000RG16", '\000' <repeats 12 times>, "\230\343\252\367\177\000\000\000RG16", '\000' <repeats 13 times>, "\266pUU\000\000\000\004\266pUU\000\000\000\004\266pUU\000\000\000\020\000\000\000\000\000\000\000\000in\000\001\000\000\000\002\000\000\000\001", '\000' <repeats 19 times>, "RG16", '\000' <repeats 12 times>, "\240\343\252\367\177\000\000\000RG16", '\000' <repeats 12 times>..., align_ = {<No data fields>}}}}, <No data fields>}, h264_output_queue_ = {<boost::lockfree::detail::compile_time_sized_ringbuffer<std::shared_ptr<PooledBuffer<unsigned char> >, 100>> = {<boost::lockfree::detail::ringbuffer_base<std::shared_ptr<PooledBuffer<unsigned char> > >> = {write_index_ = std::atomic<unsigned long> = { 0 }, padding1 = "\024\000\000\000\001\000\000\000\016 \000\000\000\000\000\000\260/\253\367\177\000\000\000X\026\301\367\177\000\000\000\032\000\000\000\000\000\000\000\020\000\306\367\177\000\000\000\300/\253\367\177\000\000", read_index_ = std::atomic<unsigned long> = { 0 }}, static max_size = 101, storage_ = {data_ = {buf = "\030\000\000\000\001\000\000\000\026 \000\000\000\000\000\000\320/\253\367\177\000\000\000\026 \000\000\000\000\000\000\036\000\000\000\001\000\000\000\027 \000\000\000\000\000\000\340/\253\367\177\000\000\000\027 \000\000\000\000\000\000 \000\000\000\001\000\000\000\034 \000\000\000\000\000\000\360/\253\367\177\000\000\000\034 \000\000\000\000\000\000\030\000\000\000\001\000\000\000\035 \000\000\000\000\000\000\0000\253\367\177\000\000\000\035 \000\000\000\000\000\000\030\000\000\000\001\000\000\000\036 \000\000\000\000\000\000\0200\253\367\177\000\000\000\036 \000\000\000\000\000\000\030\000\000\000\001\000\000\000\037 \000\000\000\000\000\000 0\253\367\177\000\000\000\037 \000\000\000\000\000\000\030\000\000\000\001\000\000\000"..., align_ = {<No data fields>}}}}, <No data fields>}, main_image_output_queues_ = std::__cxx11::list = {[0] = {<std::_Reference_wrapper_base_memfun<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, false>> = {<std::_Reference_wrapper_base<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> > >> = {<std::_Weak_result_type<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> > >> = {<std::_Weak_result_type_memfun<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, false>> = {<std::_Weak_result_type_impl<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> > >> = {<std::_Maybe_get_result_type<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, void>> = {<No data fields>}, <No data fields>}, <No data fields>}, <No data fields>}, <std::_Refwrap_base_arg1<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, void>> = {<No data fields>}, <std::_Refwrap_base_arg2<boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100> >, void>> = {<No data fields>}, <No data fields>}, <No data fields>}, _M_data = 0x7fffffd170}}, image_processor_ = std::unique_ptr<ImageProcessor> = {get() = 0x5555734e80}, inference_engine_ = std::unique_ptr<InferenceEngine> = {get() = 0x55557626a0}, primary_camera_ = std::unique_ptr<CameraCapture> = {get() = 0x5555763da0}, h264_encoder_ = std::unique_ptr<H264Encoder> = {get() = 0x555578deb0}, orientation_sensor_ = std::shared_ptr<OrientationSensor> (use count 2, weak count 0) = {get() = 0x5555790b20}, logic_module_ = std::unique_ptr<LogicModule> = {get() = 0x55557284c0}, system_monitor_ = std::unique_ptr<SystemMonitor> = {get() = 0x5555785a00}, labels_ = std::vector of length 90, capacity 128 = {"", "", "", "", "", "", "", "", "", <error: Cannot access memory at address 0x6f6870206c6c6563>, <error: Cannot access memory at address 0x7661776f7263696d>, "", "", "", <error: Cannot access memory at address 0x7265676972666572>, "", "", "", "", "", <error: Cannot access memory at address 0x6562207964646574>, <error: Cannot access memory at address 0x6972642072696168>, <error: Cannot access memory at address 0x75726268746f6f74>, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "\000\000\000\000\000\000\000\000b", '\000' <repeats 15 times>, "\002\000\000\000\000\000\000\000\352\337j", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\300<vUU\000", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\000\000\000\000\000\000", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\230\021\000\250\177\000", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\000\000\000\000\000\000\000\000$", '\000' <repeats 15 times>, "\002\000\000\000\000\000\000\000\240", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\000\000\000\000\000\000\000\000~", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\200=vUU\000\000\000", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\3005vUU\000\000\000", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "P\215vUU\000\000\000\003", "", <error reading variable: Cannot create a lazy string with address 0x0, and a non-zero length.>, "\000qvUU\000\000\000", ""}}
+x0             0xe                 14
+x1             0x0                 0
+x2             0x56                86
+x3             0x65                101
+x4             0x5555776250        366506107472
+x5             0x55557759e0        366506105312
+x6             0x42ff4010          1124024336
+x7             0x7ff7ffdb98        549621586840
+x8             0x384               900
+x9             0x7fbf76d5c8        548673082824
+x10            0x0                 0
+x11            0x0                 0
+x12            0x11d0              4560
+x13            0x34ef0e2           55505122
+x14            0x0                 0
+x15            0x35                53
+x16            0x1                 1
+x17            0x7ff721d1f0        549607035376
+x18            0x5                 5
+x19            0xe                 14
+x20            0x12c               300
+x21            0x7fffff87e6        549755783142
+x22            0x0                 0
+x23            0x80de40            8445504
+x24            0x7fffff87e7        549755783143
+x25            0x7fbef60000        548664639488
+x26            0x7fbf76e580        548673086848
+x27            0x7fbef60000        548664639488
+x28            0x7fbf76ecc0        548673088704
+x29            0x7fbf76d3a0        548673082272
+x30            0x555559712c        366504145196
+sp             0x7fbf76d3a0        0x7fbf76d3a0
+pc             0x5555597158        0x5555597158 <boost::lockfree::detail::ringbuffer_base<ImageData>::push(ImageData const&, ImageData*, unsigned long)+144>
+cpsr           0x60001000          [ EL=0 BTYPE=0 SSBS C Z ]
+fpsr           0x10                [ IXC ]
+fpcr           0x0                 [ Len=0 Stride=0 RMode=0 ]
+tpidr          0x7fbf76ecc0        0x7fbf76ecc0
+tpidr2         0x0                 0x0
+A debugging session is active.
+
+	Inferior 1 [process 21479] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]
