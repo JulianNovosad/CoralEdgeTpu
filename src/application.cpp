@@ -50,10 +50,10 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         main_image_output_queues_.push_back(overlaid_video_queue_); 
         
         APP_LOG_INFO("Creating CameraCapture...");
-        // Pass raw_image_for_processor_queue_ as the output for TPU frames
         primary_camera_ = std::make_unique<CameraCapture>(
             cam_w, cam_h, // Main stream width/height
             config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
+            config_loader_.get_tpu_stream_fps(), // TPU stream FPS (from config)
             config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
             image_pool_, main_image_output_queues_, raw_image_for_processor_queue_, camera_watchdog_timeout);
         APP_LOG_INFO("CameraCapture created.");
@@ -101,6 +101,10 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
         APP_LOG_INFO("H264Encoder created.");
 
+        APP_LOG_INFO("Creating KeyboardMonitor...");
+        keyboard_monitor_ = std::make_unique<KeyboardMonitor>();
+        APP_LOG_INFO("KeyboardMonitor created.");
+
     } catch (const std::exception& e) {
         APP_LOG_ERROR("Failed to initialize modules: " + std::string(e.what()));
         return false;
@@ -119,9 +123,15 @@ bool Application::start_modules() {
     start_ok &= logic_module_->start();
     start_ok &= system_monitor_->start();
     start_ok &= h264_encoder_->start(); // Start the H264 encoder
+    start_ok &= keyboard_monitor_->start();
+
+    // Start the overlay consumer thread
+    overlay_consumer_running_ = true;
+    overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
 
     if (!start_ok) {
         APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
+        if (keyboard_monitor_->is_running()) keyboard_monitor_->stop();
         if (system_monitor_->is_running()) system_monitor_->stop();
         if (logic_module_->is_running()) logic_module_->stop();
         if (orientation_sensor_->is_running()) orientation_sensor_->stop();
@@ -143,23 +153,33 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("H264Encoder", [&]() { h264_encoder_->stop(); }); // Register H264 encoder for shutdown
     supervisor_.register_module_stop("ImageProcessor", [&]() { image_processor_->stop(); }); // Register ImageProcessor for shutdown
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
+    supervisor_.register_module_stop("KeyboardMonitor", [&]() { keyboard_monitor_->stop(); });
+    supervisor_.register_module_stop("OverlayConsumer", [&]() {
+        overlay_consumer_running_ = false;
+        if (overlay_consumer_thread_.joinable()) {
+            overlay_consumer_thread_.join();
+        }
+    });
+}
+
+void Application::overlay_queue_consumer_thread_func() {
+    APP_LOG_INFO("Overlay consumer thread started.");
+    std::shared_ptr<DetectionResultBuffer> detections_buffer;
+    while (overlay_consumer_running_) {
+        // Attempt to pop a buffer. If successful, it will be released when
+        // detections_buffer goes out of scope or is reassigned.
+        if (!detection_results_for_overlay_queue_.pop(detections_buffer)) {
+            // If pop fails (queue empty or shut down), wait a bit to avoid busy-waiting.
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    APP_LOG_INFO("Overlay consumer thread stopped.");
 }
 
 void Application::main_loop() {
-    APP_LOG_INFO("Running application. Press Ctrl+C to quit.");
+    APP_LOG_INFO("Running application. Press 'o' to quit.");
     while (!shutdown_requested) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        
-        static auto last_metric_log_time = std::chrono::steady_clock::now();
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_metric_log_time).count() >= 5) {
-            inference_engine_->get_performance_metrics();
-            logic_module_->get_performance_metrics();
-            primary_camera_->get_performance_metrics();
-            system_monitor_->get_performance_metrics();
-            h264_encoder_->get_performance_metrics(); // Log H264 encoder metrics
-            last_metric_log_time = now;
-        }
     }
 }
 

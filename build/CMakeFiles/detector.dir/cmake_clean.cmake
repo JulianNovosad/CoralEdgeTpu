@@ -15,6 +15,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/detector.dir/src/image_processor.cpp.o.d"
   "CMakeFiles/detector.dir/src/inference.cpp.o"
   "CMakeFiles/detector.dir/src/inference.cpp.o.d"
+  "CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o"
+  "CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o.d"
   "CMakeFiles/detector.dir/src/logic.cpp.o"
   "CMakeFiles/detector.dir/src/logic.cpp.o.d"
   "CMakeFiles/detector.dir/src/main.cpp.o"

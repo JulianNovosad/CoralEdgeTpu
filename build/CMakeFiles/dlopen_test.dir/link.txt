@@ -1,1 +1,1 @@
-/usr/bin/c++  -Wall -Wextra -Werror -g CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o -o dlopen_test  -ldl 
+/usr/bin/c++ -Werror -Wall -Wextra -Werror -g CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o -o dlopen_test  -ldl 

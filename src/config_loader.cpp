@@ -114,6 +114,19 @@ float ConfigLoader::get_temperature_c() const {
     return config_data_.value("/application/ballistics/temperature_c"_json_pointer, 15.0f);
 }
 
+// --- Tracking ---
+int ConfigLoader::get_max_active_tracks() const {
+    return config_data_.value("/application/tracking/max_active_tracks"_json_pointer, 100);
+}
+
+float ConfigLoader::get_track_iou_threshold() const {
+    return config_data_.value("/application/tracking/track_iou_threshold"_json_pointer, 0.3f);
+}
+
+int ConfigLoader::get_track_missed_frames_threshold() const {
+    return config_data_.value("/application/tracking/track_missed_frames_threshold"_json_pointer, 5);
+}
+
 
 // --- Network Port Getters (Corrected) ---
 unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {
@@ -137,6 +150,10 @@ unsigned int ConfigLoader::get_tpu_stream_height() const {
     return config_data_.value("/application/tpu_stream/height"_json_pointer, 300);
 }
 
+unsigned int ConfigLoader::get_tpu_stream_fps() const {
+    return config_data_.value("/application/tpu_stream/fps"_json_pointer, 30); // Default to 30 FPS
+}
+
 unsigned int ConfigLoader::get_tpu_target_width() const {
     return config_data_.value("/application/tpu_target/width"_json_pointer, 300);
 }
@@ -146,7 +163,16 @@ unsigned int ConfigLoader::get_tpu_target_height() const {
 }
 
 libcamera::PixelFormat ConfigLoader::get_tpu_stream_pixel_format() const {
-    std::string format_str = config_data_.value("/application/tpu_stream/pixel_format"_json_pointer, "BGR888");
+    std::string format_str = "BGR888"; // Default value
+    auto pixel_format_path = "/application/tpu_stream/pixel_format"_json_pointer;
+
+    if (config_data_.contains(pixel_format_path)) {
+        format_str = config_data_[pixel_format_path].get<std::string>();
+        APP_LOG_INFO("ConfigLoader: Found TPU stream pixel format in config: '" + format_str + "'");
+    } else {
+        APP_LOG_WARNING("ConfigLoader: TPU stream pixel format not found in config. Using default: BGR888");
+    }
+
     if (format_str == "BGR888") return libcamera::formats::BGR888;
     if (format_str == "RGB888") return libcamera::formats::RGB888;
     if (format_str == "BGRA8888") return libcamera::formats::BGRA8888;
@@ -155,7 +181,7 @@ libcamera::PixelFormat ConfigLoader::get_tpu_stream_pixel_format() const {
     // Add other formats as needed
     {
         std::stringstream ss;
-        ss << "Configured TPU stream pixel format '" << format_str << "' not recognized. Defaulting to BGR888.";
+        ss << "Configured TPU stream pixel format '" << format_str << "' not recognized by logic. Defaulting to BGR888.";
         APP_LOG_WARNING(ss.str());
     }
     return libcamera::formats::BGR888; // Default

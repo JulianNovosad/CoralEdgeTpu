@@ -83,7 +83,7 @@ CoralEdgeTpu/
 
 ### Stage 0: Technische haalbaarheid & prestatiegrenzen
 
-**Doel:** Basale throughput en latentie meten van kernsubsystemen zonder volledige integratie.
+**Doel:** Basale throughput en latentie meten van kernsubsystemen zonder verplichte volledige integratie.
 
 **Subsystemen:**
 

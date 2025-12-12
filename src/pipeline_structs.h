@@ -78,7 +78,7 @@ struct InferenceFrame {
 // --- Type aliases for all pipeline queues ---
 
 /// @brief Type alias for a lock-free SPSC queue holding ImageData objects.
-using ImageQueue = boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100>>;
+typedef boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100ul>> ImageQueue;
 
 // Define a type for a pooled buffer of detection results
 using DetectionResultBuffer = PooledBuffer<DetectionResult>;

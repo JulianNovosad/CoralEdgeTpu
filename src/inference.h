@@ -1,15 +1,3 @@
-/**
- * @file inference.h
- * @brief Defines the InferenceEngine class for running TensorFlow Lite models
- *        with Edge TPU acceleration.
- *
- * This header provides the interface for the InferenceEngine, which manages
- * the loading, execution, and output processing of TensorFlow Lite models.
- * It integrates with the Edge TPU delegate for hardware acceleration and
- * operates within a multi-threaded pipeline, consuming image data and
- * producing detection results via thread-safe queues.
- */
-
 #ifndef INFERENCE_H
 #define INFERENCE_H
 
@@ -108,53 +96,11 @@ public:
     int get_input_height() const { return input_height_; }
     void get_state() const;
 
-    void get_performance_metrics();
-
 private:
-    /**
-     * @brief The main function executed by each inference worker thread.
-     *
-     * This function continuously processes images from the input queue,
-     * performs inference, and pushes results to the output queue.
-     */
     void worker_thread_func();
-
-    /**
-     * @brief Creates and configures a TensorFlow Lite interpreter with the Edge TPU delegate.
-     *
-     * This method is called by each worker thread to obtain its dedicated interpreter instance.
-     *
-     * @return A unique_ptr to a fully initialized interpreter, or nullptr on failure.
-     */
     std::unique_ptr<tflite::Interpreter> create_interpreter();
-
-    /**
-     * @brief Prepares the input tensor for inference.
-     *
-     * Copies image data into the interpreter's input tensor and handles
-     * necessary preprocessing like color channel swapping (BGR to RGB).
-     *
-     * @param interpreter Pointer to the TensorFlow Lite interpreter.
-     * @param image The ImageData to be processed.
-     */
     void set_input_tensor(tflite::Interpreter* interpreter, const ImageData& image);
-
-    /**
-     * @brief Parses the output tensors of the interpreter to extract detection results.
-     *
-     * Assumes a standard output format (e.g., for SSD models) and converts
-     * raw tensor data into a vector of DetectionResult objects.
-     *
-     * @param interpreter Pointer to the TensorFlow Lite interpreter.
-     * @return A shared pointer to a pooled buffer containing the detected objects.
-     */
     std::shared_ptr<DetectionResultBuffer> get_output_tensor(tflite::Interpreter* interpreter);
-
-    /**
-     * @brief Reads the Edge TPU temperature from the system.
-     *
-     * @return The temperature in degrees Celsius, or a negative value on error.
-     */
     float get_tpu_temperature();
 
     std::string model_path_; ///< Path to the TensorFlow Lite model file.
@@ -174,12 +120,6 @@ private:
     std::vector<std::thread> worker_threads_; ///< Vector of active inference worker threads.
     std::atomic<bool> running_ = false; ///< Atomic flag to control the running state of the inference engine.
     
-    // Performance measurement members
-    std::vector<long long> inference_times_ms_;
-    std::mutex inference_times_mutex_;
-    long long total_inferences_ = 0;
-    std::chrono::time_point<std::chrono::high_resolution_clock> performance_start_time_;
-
     TfLiteDelegate* edgetpu_delegate_ = nullptr; ///< The single Edge TPU delegate.
 };
 

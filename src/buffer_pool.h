@@ -33,91 +33,66 @@ struct PooledBuffer {
 template <typename T>
 class BufferPool {
 public:
-    // Defines a shared_ptr that will automatically return the buffer to the pool.
-
-
-    // Defines a shared_ptr that will automatically return the buffer to the pool.
-    using PooledPtr = std::shared_ptr<PooledBuffer<T>>;
-
-    BufferPool(size_t num_buffers, size_t buffer_size, std::string pool_name = "BufferPool")
-        : name_(std::move(pool_name)) {
-        if (num_buffers == 0 || buffer_size == 0) {
-            throw std::invalid_argument("BufferPool: Number of buffers and buffer size must be greater than 0.");
-        }
-        
-        for (size_t i = 0; i < num_buffers; ++i) {
-            PooledBuffer<T>* buffer = new PooledBuffer<T>(); // Manually allocate raw buffer
-            buffer->data.resize(buffer_size); // Pre-allocate memory
-            buffer->size = buffer_size; // Store the buffer's capacity
-            pool_.push(buffer); // Store raw pointer in the queue
+    // Constructor for fixed-size buffer types (e.g., DetectionResult)
+    BufferPool(size_t pool_size, size_t buffer_data_size, const std::string& name)
+        : name_(name), total_buffers_(pool_size) {
+        buffers_storage_.reserve(pool_size);
+        for (size_t i = 0; i < pool_size; ++i) {
+            buffers_storage_.emplace_back(); // Store the actual PooledBuffer object
+            buffers_storage_.back().data.resize(buffer_data_size);
+            available_buffers_.push(&buffers_storage_.back()); // Push raw pointer to queue
         }
     }
 
-    // Disable copy and assignment
-    BufferPool(const BufferPool&) = delete;
-    BufferPool& operator=(const BufferPool&) = delete;
+    // Constructor for variable-size buffer types (e.g., uint8_t for images)
+    BufferPool(size_t pool_size, size_t min_buffer_size, size_t max_buffer_size, const std::string& name)
+        : name_(name), total_buffers_(pool_size) {
+        buffers_storage_.reserve(pool_size);
+        for (size_t i = 0; i < pool_size; ++i) {
+            buffers_storage_.emplace_back();
+            buffers_storage_.back().data.resize(min_buffer_size); // Initial allocation
+            available_buffers_.push(&buffers_storage_.back()); // Push raw pointer to queue
+        }
+    }
+
+    std::shared_ptr<PooledBuffer<T>> acquire() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!cond_.wait_for(lock, std::chrono::seconds(1),
+                            [this]{ return !available_buffers_.empty(); })) {
+            APP_LOG_WARNING(name_ + ": Failed to acquire buffer within timeout. Available: " + std::to_string(available_buffers_.size()));
+            return nullptr; // Timeout
+        }
+        PooledBuffer<T>* buffer_ptr = available_buffers_.front();
+        available_buffers_.pop();
+        lock.unlock();
+
+        // Create a shared_ptr with a custom deleter that returns the raw pointer to the pool
+        return std::shared_ptr<PooledBuffer<T>>(buffer_ptr, [this](PooledBuffer<T>* b) {
+            std::unique_lock<std::mutex> local_lock(this->mutex_);
+            this->available_buffers_.push(b); // Push the raw pointer back to the queue
+            local_lock.unlock();
+            this->cond_.notify_one();
+        });
+    }
+
+    // No explicit release method needed, as it's handled by the custom deleter
     
-    // Destructor to ensure all allocated raw buffers are deleted if the pool is destroyed
-    ~BufferPool() {
-        std::lock_guard<std::mutex> lock(mutex_); // Ensure thread safety during destruction
-        while(!pool_.empty()) {
-            PooledBuffer<T>* buffer = pool_.front();
-            pool_.pop();
-            delete buffer; // Delete the raw buffer
-        }
-    }
-
-    /**
-     * @brief Acquires a buffer from the pool, waiting if none are available.
-     *
-     * @param timeout The maximum duration to wait for a buffer.
-     * @return A PooledPtr (a shared_ptr with a custom deleter) to a buffer.
-     *         If a timeout occurs, the shared_ptr will be null.
-     */
-    PooledPtr acquire(std::chrono::milliseconds timeout = std::chrono::milliseconds(1000)) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (cond_var_.wait_for(lock, timeout, [this] { return !pool_.empty(); })) {
-            PooledBuffer<T>* raw_buffer = pool_.front();
-            pool_.pop();
-            APP_LOG_DEBUG(name_ + ": Acquired buffer. Available: " + std::to_string(pool_.size()));
-            return PooledPtr(raw_buffer, [this](PooledBuffer<T>* b) {
-                this->release(b); // Custom deleter calls the private release method
-            });
-        }
-        // Timeout occurred
-        APP_LOG_WARNING(name_ + ": Failed to acquire buffer within timeout. Available: " + std::to_string(pool_.size()));
-        return nullptr;
-    }
-
-    /**
-     * @brief Returns the number of available buffers in the pool.
-     */
-    size_t available() const {
+    size_t get_available_buffers() const {
         std::lock_guard<std::mutex> lock(mutex_);
-        return pool_.size();
+        return available_buffers_.size();
+    }
+
+    size_t get_total_buffers() const {
+        return total_buffers_;
     }
 
 private:
-    /**
-     * @brief Releases a buffer, returning it to the pool.
-     *
-     * This method is called by the custom deleter of PooledPtr.
-     *
-     * @param raw_buffer The raw pointer to the buffer to be returned.
-     */
-    void release(PooledBuffer<T>* raw_buffer) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        pool_.push(raw_buffer);
-        APP_LOG_DEBUG(name_ + ": Released buffer. Available: " + std::to_string(pool_.size()));
-        cond_var_.notify_one();
-    }
-
-private:
-
     std::string name_;
-    std::mutex mutex_;
-    std::condition_variable cond_var_;
-    std::queue<PooledBuffer<T>*> pool_; // Store raw pointers in the queue
+    size_t total_buffers_;
+    std::queue<PooledBuffer<T>*> available_buffers_; // Stores raw pointers
+    std::vector<PooledBuffer<T>> buffers_storage_; // Owns the actual buffer objects
+    mutable std::mutex mutex_;
+    std::condition_variable cond_;
 };
 
 #endif // BUFFER_POOL_H

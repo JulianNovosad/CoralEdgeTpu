@@ -78,7 +78,7 @@ echo "5. Building final C++ application..."
 rm -rf build # Clean previous build artifacts
 mkdir -p build
 cd build
-cmake ../
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror" ../
 make -j$(nproc)
 cd ..
 cd ..

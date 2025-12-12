@@ -42,6 +42,7 @@ public:
     // --- TPU Stream Configuration ---
     unsigned int get_tpu_stream_width() const;
     unsigned int get_tpu_stream_height() const;
+    unsigned int get_tpu_stream_fps() const; // New: Get TPU stream FPS
     unsigned int get_tpu_target_width() const;
     unsigned int get_tpu_target_height() const;
     libcamera::PixelFormat get_tpu_stream_pixel_format() const;
@@ -68,6 +69,14 @@ public:
     float get_air_pressure_pa() const;
     /** @return Temperatuur in Celsius. Standaard: 15.0. */
     float get_temperature_c() const;
+
+    // --- Tracking ---
+    /** @return Maximale aantal actieve tracks. Standaard: 100. */
+    int get_max_active_tracks() const;
+    /** @return Minimale Intersection over Union (IoU) voor trackassociatie. Standaard: 0.3. */
+    float get_track_iou_threshold() const;
+    /** @return Aantal gemiste frames voordat een track wordt verwijderd. Standaard: 5. */
+    int get_track_missed_frames_threshold() const;
 
     // --- Netwerkconfiguratie ---
     std::string get_listen_address() const;

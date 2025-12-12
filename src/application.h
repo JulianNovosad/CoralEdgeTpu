@@ -11,6 +11,7 @@
 #include "pipeline_structs.h"
 #include "system_monitor.h"
 #include "image_processor.h" // New include
+#include "keyboard_monitor.h"
 
 #include "buffer_pool.h"
 
@@ -66,6 +67,11 @@ private:
     DetectionResultsQueue detection_results_for_logic_queue_;
     ImageQueue overlaid_video_queue_;
     H264Queue h264_output_queue_;
+
+    // Thread for consuming overlay detection results
+    std::thread overlay_consumer_thread_;
+    std::atomic<bool> overlay_consumer_running_{false};
+    void overlay_queue_consumer_thread_func();
     std::list<std::reference_wrapper<ImageQueue>> main_image_output_queues_;
 
     // Modules
@@ -77,6 +83,7 @@ private:
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;
     std::unique_ptr<SystemMonitor> system_monitor_;
+    std::unique_ptr<KeyboardMonitor> keyboard_monitor_;
 
     std::vector<std::string> labels_;
 };

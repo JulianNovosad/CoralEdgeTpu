@@ -980,4 +980,16 @@ CMakeFiles/detector.dir/src/application.cpp.o: \
  /home/pi/CoralEdgeTpu/src/logic.h \
  /home/pi/CoralEdgeTpu/src/orientation_sensor.h \
  /home/pi/CoralEdgeTpu/src/system_monitor.h \
- /home/pi/CoralEdgeTpu/src/image_processor.h
+ /home/pi/CoralEdgeTpu/src/image_processor.h \
+ /home/pi/CoralEdgeTpu/src/keyboard_monitor.h /usr/include/termios.h \
+ /usr/include/aarch64-linux-gnu/bits/termios.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-struct.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-c_cc.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-c_iflag.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-c_oflag.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-baud.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-c_cflag.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-c_lflag.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-tcflow.h \
+ /usr/include/aarch64-linux-gnu/bits/termios-misc.h \
+ /usr/include/aarch64-linux-gnu/sys/ttydefaults.h
