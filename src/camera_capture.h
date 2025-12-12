@@ -40,6 +40,7 @@ public:
      * @param main_height Hoogte van de hoge-resolutie videostream.
      * @param tpu_width Breedte van de lage-resolutie stream voor de TPU.
      * @param tpu_height Hoogte van de lage-resolutie stream voor de TPU.
+     * @param tpu_fps Frame rate voor de TPU-stream.
      * @param target_tpu_width Doelbreedte voor de TPU-inferentie.
      * @param target_tpu_height Doelhoogte voor de TPU-inferentie.
      * @param image_buffer_pool Een gedeelde pool voor het beheren van image buffers.
@@ -49,10 +50,11 @@ public:
      */
     CameraCapture(unsigned int main_width, unsigned int main_height,
                   unsigned int tpu_width, unsigned int tpu_height,
+                  unsigned int tpu_fps,
                   unsigned int target_tpu_width, unsigned int target_tpu_height,
                   std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
                   std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
-                  ImageQueue& image_processor_input_queue, // Change here
+                  ImageQueue& image_processor_input_queue,
                   std::chrono::seconds watchdog_timeout);
     ~CameraCapture();
 
@@ -77,11 +79,6 @@ public:
      * @brief Logt de huidige status van de camera-instellingen.
      */
     void get_state() const;
-
-    /**
-     * @brief Berekent en logt prestatie-indicatoren zoals FPS en latentie.
-     */
-    void get_performance_metrics();
 
     /**
      * @brief Configureert de camera met de opgegeven stream-instellingen.
@@ -114,6 +111,7 @@ public:
     unsigned int height_; ///< Hoogte van de hoofdstream.
     unsigned int tpu_width_; ///< Breedte van de TPU-stream.
     unsigned int tpu_height_; ///< Hoogte van de TPU-stream.
+    unsigned int tpu_fps_; ///< Frame rate voor de TPU-stream.
 
     unsigned int target_tpu_width_; ///< Doelbreedte voor TPU-inferentie na resizing.
     unsigned int target_tpu_height_; ///< Doelhoogte voor TPU-inferentie na resizing.
@@ -142,17 +140,14 @@ public:
     std::unique_ptr<cv::VideoWriter> video_writer_;  ///< H.264 encoder (momenteel niet gebruikt).
     std::function<void(cv::Mat& frame)> overlay_callback_;  ///< Callback voor overlays.
 
-    // Leden voor prestatiemetingen
-    std::vector<long long> frame_latencies_ms_; ///< Vector om latenties van frames op te slaan.
-    std::mutex frame_latencies_mutex_; ///< Mutex voor thread-veilige toegang tot de latencies vector.
-    long long total_frames_processed_ = 0; ///< Totaal aantal verwerkte frames voor prestatieberekening.
-
     // Members for dedicated request processing thread
     std::thread request_processor_thread_;
     std::queue<libcamera::Request*> request_queue_;
     std::mutex request_queue_mutex_;
     std::condition_variable request_queue_cond_var_;
     std::atomic<bool> processing_running_ = false;
+
+    int skip_initial_measurements_ = 20; // Number of initial frames to skip for performance metrics
 
 private:
     void request_processor_thread_func(); // New thread function

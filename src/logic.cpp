@@ -54,9 +54,21 @@ BallisticState BallisticsSolver::rk4_step(const BallisticState& state, float dt,
     return {pos_next, vel_next};
 }
 
-std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial_pitch, float max_distance, float time_step) {
+std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial_pitch, float max_distance, float time_step_override) {
     std::vector<BallisticState> trajectory;
     float air_density = get_air_density();
+
+    // Determine an appropriate time_step if not overridden
+    float actual_time_step = time_step_override;
+    if (actual_time_step == 0.0f) { // Using 0.0f to indicate default, as 0.01f is an actual value
+        // Calculate time_step to ensure max_distance is covered in a reasonable number of steps.
+        // Let's target roughly 500 steps for the given max_distance.
+        float target_steps = 500.0f;
+        actual_time_step = max_distance / (profile_.muzzle_velocity_mps * target_steps);
+        
+        // Ensure time_step is within a reasonable range for stability and performance
+        actual_time_step = std::max(0.0001f, std::min(0.1f, actual_time_step)); // min 0.1ms, max 100ms
+    }
 
     BallisticState current_state;
     current_state.position = {0, -profile_.sight_height_m, 0};
@@ -67,11 +79,11 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
     };
     trajectory.push_back(current_state);
 
-    while (current_state.position.x < max_distance) {
-        current_state = rk4_step(current_state, time_step, air_density);
+    while (current_state.position.x < max_distance && current_state.position.y >= -profile_.sight_height_m) {
+        current_state = rk4_step(current_state, actual_time_step, air_density); // Use actual_time_step
         trajectory.push_back(current_state);
-        if (trajectory.size() > 5000) { // Veiligheidsstop
-            APP_LOG_WARNING("Trajectory calculation exceeded 5000 steps.");
+        if (trajectory.size() > 20000) { // Safety stop, verhoogd naar 20000
+            APP_LOG_WARNING("Trajectory calculation exceeded 20000 steps. Max distance: " + std::to_string(max_distance) + "m, Time step: " + std::to_string(actual_time_step) + "s. Last Pos Y: " + std::to_string(current_state.position.y) + "m");
             break;
         }
     }
@@ -89,15 +101,17 @@ float BallisticsSolver::calculate_zero_pitch() {
 
     for (int i = 0; i < max_iterations; ++i) {
         float mid_angle_rad = (low_angle_rad + high_angle_rad) / 2.0f;
-        auto trajectory = calculate_trajectory(mid_angle_rad, profile_.zero_distance_m + 1.0f);
+        // Use profile_.zero_distance_m directly as max_distance
+        auto trajectory = calculate_trajectory(mid_angle_rad, profile_.zero_distance_m);
 
         if (trajectory.empty()) {
-            APP_LOG_ERROR("Failed to calculate trajectory during zero pitch calculation.");
-            return 0.0f; // Fout
+            APP_LOG_ERROR("Failed to calculate trajectory during zero pitch calculation for mid_angle_rad: " + std::to_string(mid_angle_rad));
+            // If trajectory is empty, something is wrong. Return 0.0f.
+            return 0.0f; 
         }
 
-        // Interpoleer om de exacte hoogte op de zero-afstand te vinden
         float height_at_zero = 0.0f;
+        bool reached_zero_distance = false;
         for (size_t j = 1; j < trajectory.size(); ++j) {
             if (trajectory[j].position.x >= profile_.zero_distance_m) {
                 // Lineaire interpolatie voor de hoogte
@@ -105,10 +119,21 @@ float BallisticsSolver::calculate_zero_pitch() {
                 const auto& p2 = trajectory[j].position;
                 float t = (profile_.zero_distance_m - p1.x) / (p2.x - p1.x);
                 height_at_zero = p1.y + t * (p2.y - p1.y);
+                reached_zero_distance = true;
                 break;
             }
         }
         
+        // If zero_distance_m was not reached within the trajectory,
+        // it means the angle was too low (or max_distance too small).
+        // We need to adjust binary search accordingly.
+        if (!reached_zero_distance) {
+            // If it didn't reach zero distance, it means it hit the ground too early or too flat.
+            // This implies the angle was too low, so treat it as if height_at_zero was < 0.
+            low_angle_rad = mid_angle_rad;
+            continue; // Skip to next iteration
+        }
+
         // Vergelijk de hoogte met de zichtlijn (die op y=0 ligt in ons coördinatensysteem)
         if (std::abs(height_at_zero) < tolerance_m) {
             APP_LOG_INFO("Zero pitch found after " + std::to_string(i + 1) + " iterations: " + std::to_string(mid_angle_rad) + " rad");
@@ -122,7 +147,7 @@ float BallisticsSolver::calculate_zero_pitch() {
         }
     }
 
-    APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations.");
+    APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations. Best estimate: " + std::to_string((low_angle_rad + high_angle_rad) / 2.0f) + " rad.");
     return (low_angle_rad + high_angle_rad) / 2.0f; // Geef de beste schatting terug
 }
 
@@ -142,8 +167,11 @@ float LogicModule::calculate_iou(const DetectionResult& det1, const DetectionRes
 }
 
 LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor, const ConfigLoader& config)
-    : detection_input_queue_(detection_input_queue), 
+    : detection_input_queue_(detection_input_queue),
       orientation_sensor_(orientation_sensor),
+      max_active_tracks_(config.get_max_active_tracks()),
+      track_iou_threshold_(config.get_track_iou_threshold()),
+      track_missed_frames_threshold_(config.get_track_missed_frames_threshold()),
       current_fallback_mode_(NORMAL_OPERATION) {
     
     BallisticProfile profile = {
@@ -158,9 +186,6 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
     ballistics_solver_ = std::make_unique<BallisticsSolver>(profile);
 
     APP_LOG_INFO("LogicModule created with 3D Ballistics Solver, configured from file.");
-    performance_start_time_ = std::chrono::high_resolution_clock::now();
-    current_hit_scan_count_ = 0;
-    current_servo_command_count_ = 0;
 }
 
 LogicModule::~LogicModule() { stop(); APP_LOG_INFO("LogicModule destroyed."); }
@@ -209,9 +234,9 @@ void LogicModule::worker_thread_func() {
                 entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
                 copy_to_array(entry.module, "LogicModule");
                 entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                copy_to_array(entry.event, "logic_done");
+                copy_to_array(entry.event, "logic_cycle_done"); // Event changed to reflect per-cycle
                 entry.call_ts_epoch_ms = call_ts;
-                entry.logic_metric_ballistics = static_cast<float>(duration_ms); // Map processing_ms to ballistics metric
+                entry.logic_metric_ballistics = static_cast<float>(duration_ms); // Total processing time for this cycle
                 entry.logic_metric_hit_scan = static_cast<float>(current_hit_scan_count_);
                 entry.logic_metric_servo_actuation = static_cast<float>(current_servo_command_count_);
                 Logger::getInstance().log_csv(entry);
@@ -250,13 +275,8 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
     auto end_safety = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time for safety and actuation: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_safety - start_safety).count()) + " us");
 
-    auto total_process_end = std::chrono::high_resolution_clock::now();
-    long long dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(total_process_end - total_process_start).count();
+    auto total_process_end = std::chrono::high_resolution_clock::now(); // Declaration added here
     APP_LOG_DEBUG("LogicModule: Total time for process function: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_process_end - total_process_start).count()) + " us");
-    
-    std::lock_guard<std::mutex> lock(prediction_times_mutex_);
-    prediction_times_ms_.push_back(dur_ms);
-    total_predictions_++;
 }
 
 bool LogicModule::predict_impact_point(const TrackedObject& target, const OrientationData& /*current_imu_data*/, Vec3& out_impact_point) {
@@ -365,7 +385,7 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         for (auto& track : active_tracks_) {
             if (!track.associated_this_frame) {
                 float iou = calculate_iou(new_detection, track.last_detection);
-                if (iou > best_iou && iou >= 0.3f) {
+                if (iou > best_iou && iou >= track_iou_threshold_) {
                     best_iou = iou;
                     best_match_track = &track;
                 }
@@ -380,14 +400,18 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
             best_match_track->missed_frames = 0;
             best_match_track->associated_this_frame = true;
         } else {
-            active_tracks_.emplace_back(++next_track_id_, new_detection, 50.0f);
+            if (active_tracks_.size() < static_cast<size_t>(max_active_tracks_)) {
+                active_tracks_.emplace_back(++next_track_id_, new_detection, 50.0f);
+            } else {
+                APP_LOG_WARNING("Max active tracks reached (" + std::to_string(max_active_tracks_) + "). New detection ignored.");
+            }
         }
     }
 
     active_tracks_.erase(std::remove_if(active_tracks_.begin(), active_tracks_.end(), 
         [&](TrackedObject& track) {
             if (!track.associated_this_frame) track.missed_frames++;
-            return track.missed_frames > 5;
+            return track.missed_frames > track_missed_frames_threshold_;
         }), active_tracks_.end());
 }
 
@@ -415,66 +439,4 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
     current_servo_command_count_++; // Increment servo command count
 }
 
-void LogicModule::get_performance_metrics() {
-    std::lock_guard<std::mutex> lock(prediction_times_mutex_);
-
-    if (total_predictions_ == 0) {
-        APP_LOG_INFO("LogicModule: No predictions recorded for performance metrics.");
-        return;
-    }
-
-    double average_duration_ms = 0;
-    for (long long duration : prediction_times_ms_) {
-        average_duration_ms += static_cast<double>(duration);
-    }
-    average_duration_ms /= total_predictions_;
-    double average_fps = 1000.0 / average_duration_ms;
-
-    std::sort(prediction_times_ms_.begin(), prediction_times_ms_.end());
-    size_t percentile_99_index = static_cast<size_t>(std::round(total_predictions_ * 0.99));
-    size_t percentile_95_index = static_cast<size_t>(std::round(total_predictions_ * 0.95));
-    size_t percentile_50_index = static_cast<size_t>(std::round(total_predictions_ * 0.50));
-
-    long long p99_latency_ms = prediction_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_predictions_ - 1))];
-    long long p95_latency_ms = prediction_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_predictions_ - 1))];
-    long long p50_latency_ms = prediction_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_predictions_ - 1))];
-
-    // Populate the new CsvLogEntry fields directly
-    CsvLogEntry entry;
-    copy_to_array(entry.module, "LogicModule");
-    copy_to_array(entry.event, "performance_metrics");
-    entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    entry.call_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(performance_start_time_.time_since_epoch()).count();
-    entry.p50_latency_ms = static_cast<float>(p50_latency_ms);
-    entry.p95_latency_ms = static_cast<float>(p95_latency_ms);
-    entry.p99_latency_ms = static_cast<float>(p99_latency_ms);
-    entry.average_fps = static_cast<float>(average_fps);
-    entry.total_frames_processed_or_inferences = total_predictions_;
-    entry.average_latency_ms = static_cast<float>(average_duration_ms);
-    // Clear details field as it is now structured
-    copy_to_array(entry.details, "");
-
-    // The logic_metric_ballistics field is already being used for average_duration_ms in the existing code.
-    // We should keep this for now, but ensure its meaning is clear.
-    // If the intention is to log total processing duration for 'logic_done' event, then this is fine.
-    // For 'PerformanceMetrics' event, we now have more specific fields.
-    // entry.logic_metric_ballistics = static_cast<float>(average_duration_ms); 
-    
-    Logger::getInstance().log_csv(entry);
-    APP_LOG_INFO("--- LogicModule Performance Metrics ---");
-    APP_LOG_INFO("  Total Predictions: " + std::to_string(total_predictions_));
-    APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));
-    APP_LOG_INFO("  Average Latency: " + std::to_string(average_duration_ms) + " ms");
-    APP_LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
-    APP_LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
-    APP_LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
-    APP_LOG_INFO("-------------------------------------");
-
-    prediction_times_ms_.clear();
-    total_predictions_ = 0;
-    current_hit_scan_count_ = 0; // Reset for the next interval
-    current_servo_command_count_ = 0; // Reset for the next interval
-    performance_start_time_ = std::chrono::high_resolution_clock::now();
-}
 void LogicModule::perform_sensor_fusion(const OrientationData& /*imu_data*/) { /* Implement sensor fusion logic */ }

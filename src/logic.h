@@ -1,8 +1,3 @@
-/**
- * @file logic.h
- * @brief Definieert de hoofdlogica-module voor ballistische berekeningen,
- * object-tracking en veiligheidscontroles.
- */
 #ifndef LOGIC_H
 #define LOGIC_H
 
@@ -111,7 +106,7 @@ class BallisticsSolver {
 public:
     BallisticsSolver(const BallisticProfile& profile);
     
-    std::vector<BallisticState> calculate_trajectory(float initial_pitch, float max_distance, float time_step = 0.001f);
+    std::vector<BallisticState> calculate_trajectory(float initial_pitch, float max_distance, float time_step = 0.0f);
     float calculate_zero_pitch();
 
 private:
@@ -136,11 +131,19 @@ public:
     bool start();
     void stop();
     bool is_running() const { return running_; }
-    void get_performance_metrics();
 
 private:
     void worker_thread_func();
     void process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data);
+    void update_object_tracks(const std::vector<DetectionResult>& detections);
+    SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, float predicted_impact_uncertainty, std::string& safety_status_message);
+    void issue_servo_commands(float target_x, float target_y, float target_z);
+    bool predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, Vec3& out_impact_point);
+    float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
+    void perform_sensor_fusion(const OrientationData& imu_data);
+    void calculate_ballistics_for_tracks(const OrientationData& imu_data);
+    void perform_safety_and_actuation(const OrientationData& imu_data);
+
 
     DetectionResultsQueue& detection_input_queue_;
     std::atomic<bool> running_ = false;
@@ -152,25 +155,15 @@ private:
 
     std::unique_ptr<BallisticsSolver> ballistics_solver_;
 
-    static float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
+    // New configuration parameters for tracking
+    int max_active_tracks_;
+    float track_iou_threshold_;
+    int track_missed_frames_threshold_;
 
-    bool predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, Vec3& out_impact_point);
+    FallbackMode current_fallback_mode_ = NORMAL_OPERATION;
+    long current_hit_scan_count_ = 0;
+    long current_servo_command_count_ = 0;
 
-    SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, float predicted_impact_uncertainty, std::string& safety_status_message);
-    void issue_servo_commands(float target_x, float target_y, float target_z);
-    
-    std::vector<long long> prediction_times_ms_;
-    std::mutex prediction_times_mutex_;
-    long long total_predictions_ = 0;
-    std::chrono::time_point<std::chrono::high_resolution_clock> performance_start_time_;
-    FallbackMode current_fallback_mode_;
-    int current_hit_scan_count_ = 0;      // New: Count of successful hit-scan predictions in the last interval
-    int current_servo_command_count_ = 0; // New: Count of servo commands issued in the last interval
-
-    void perform_sensor_fusion(const OrientationData& imu_data);
-    void update_object_tracks(const std::vector<DetectionResult>& detections);
-    void calculate_ballistics_for_tracks(const OrientationData& imu_data);
-    void perform_safety_and_actuation(const OrientationData& imu_data);
 };
 
 #endif // LOGIC_H

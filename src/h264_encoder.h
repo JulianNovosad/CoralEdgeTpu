@@ -22,8 +22,8 @@ public:
 
     bool start();
     void stop();
-    void get_performance_metrics();
     bool is_running() const { return running_; }
+    void get_state() const;
 
 private:
     void worker_thread_func();
@@ -42,11 +42,6 @@ private:
     x264_picture_t picture_in_;
     x264_picture_t picture_out_;
     x264_param_t param_;
-
-    // Performance metrics
-    std::vector<long long> encoding_times_ms_;
-    std::mutex encoding_times_mutex_;
-    size_t total_encoded_frames_ = 0;
 };
 
 #endif // H264_ENCODER_H

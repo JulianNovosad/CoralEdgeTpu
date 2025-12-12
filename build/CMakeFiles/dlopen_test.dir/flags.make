@@ -6,5 +6,5 @@ CXX_DEFINES = -DDEBUG_MODE -DOPENSSL_API_3_0
 
 CXX_INCLUDES = 
 
-CXX_FLAGS =  -Wall -Wextra -Werror -g -std=gnu++17
+CXX_FLAGS = -Werror -Wall -Wextra -Werror -g -std=gnu++17
 

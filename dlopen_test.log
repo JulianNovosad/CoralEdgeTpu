@@ -1,8 +1,0 @@
-Attempting to dynamically load libedgetpu.so.1.0...
-Library /usr/lib/aarch64-linux-gnu/libedgetpu.so.1.0 loaded successfully.
-Symbol tflite_plugin_create_delegate found successfully.
-Symbol tflite_plugin_destroy_delegate found successfully.
-Attempting to create delegate using dlsym'd function...
-Delegate created successfully using dlsym'd function.
-Delegate destroyed successfully using dlsym'd function.
-Library /usr/lib/aarch64-linux-gnu/libedgetpu.so.1.0 closed successfully.

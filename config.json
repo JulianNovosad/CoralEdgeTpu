@@ -42,7 +42,8 @@
     "tpu_stream": {
       "width": 300,
       "height": 300,
-      "pixel_format": "YUYV"
+      "pixel_format": "RGB888",
+      "fps": 30.0
     },
     "video_stream": {
       "protocol": "RTP",

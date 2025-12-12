@@ -15,12 +15,27 @@
 #include <sstream>        // For std::ostringstream
 #include <iomanip>        // For std::put_time
 #include <algorithm>      // For std::sort
+#include <cerrno>         // For errno
+#include <string>         // Explicitly include <string> for std::string
 
 #ifdef __linux__
 #include <sys/prctl.h> // For prctl(PR_SET_NAME)
 #endif
 
-namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity.
+// set_thread_name implementation
+void set_thread_name(const std::string& name) {
+#ifdef __linux__
+    // Only set if running on Linux and name fits PR_SET_NAME limit (16 chars including null terminator)
+    if (name.length() < 16) {
+        prctl(PR_SET_NAME, name.c_str(), 0, 0, 0);
+    }
+#else
+    // No-op on other platforms
+    (void)name; // Suppress unused parameter warning
+#endif // __linux__
+}
+
+namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity. 
 
 // Static members initialization
 std::unique_ptr<Logger> Logger::instance_;
@@ -48,20 +63,42 @@ void CsvLogger::write_header() {
     std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
         // Universal header as defined in README.md and CsvLogEntry struct
-        current_log_file_ << "produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,"
-                          << "camera_frame_id,camera_width,camera_height,camera_exposure_ms,camera_copy_time_ms,"
-                          << "tpu_inference_ms,tpu_input_w,tpu_input_h,tpu_temp_c,"
-                          << "encoder_encode_ms,encoder_total_encoded_frames,encoder_average_fps,"
-                          << "logic_metric_ballistics,logic_metric_hit_scan,logic_metric_servo_actuation,"
-                          << "sysmon_cpu_temp_c,sysmon_cpu_usage_percent,sysmon_mem_usage_percent,"
+        current_log_file_ << "produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms," 
+                          << "camera_frame_id,camera_width,camera_height,camera_exposure_ms,camera_copy_time_ms," 
+                          << "tpu_inference_ms,tpu_input_w,tpu_input_h,tpu_temp_c," 
+                          << "encoder_encode_ms,encoder_total_encoded_frames,encoder_average_fps," 
+                          << "logic_metric_ballistics,logic_metric_hit_scan,logic_metric_servo_actuation," 
+                          << "sysmon_cpu_temp_c,sysmon_cpu_usage_percent,sysmon_mem_usage_percent," 
                           << "p50_latency_ms,p95_latency_ms,p99_latency_ms,average_fps,total_frames_processed_or_inferences,average_latency_ms,details\n";
         current_log_file_.flush();
     }
 }
 
 void CsvLogger::write_entry(const CsvLogEntry& entry) {
-    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
-    if (current_log_file_.is_open()) {
+    std::lock_guard<std::mutex> lock(buffer_mutex_); // Use buffer_mutex_ to protect buffer access
+    buffer_.push_back(entry);
+}
+
+void CsvLogger::flush_buffer_to_disk() {
+    std::lock_guard<std::mutex> buffer_lock(buffer_mutex_); // Lock buffer for flushing
+    if (buffer_.empty()) {
+        return;
+    }
+
+    // Acquire file lock for writing
+    std::lock_guard<std::recursive_mutex> file_lock(file_mutex_);
+    if (!current_log_file_.is_open()) {
+        // If file is not open, attempt to rotate (this will open it)
+        rotate_log_file();
+        if (!current_log_file_.is_open()) {
+            std::cerr << "Failed to open CSV log file for flushing in module " << module_name_ << ". Entries dropped." << std::endl;
+            buffer_.clear(); // Drop entries if cannot write
+            return;
+        }
+    }
+
+    // Write all buffered entries to file
+    for (const auto& entry : buffer_) {
         current_log_file_ << entry.produced_ts_epoch_ms << ","
                           << entry.module.data() << ","
                           << entry.thread_id << ","
@@ -91,14 +128,64 @@ void CsvLogger::write_entry(const CsvLogEntry& entry) {
                           << entry.average_fps << ","
                           << entry.total_frames_processed_or_inferences << ","
                           << entry.average_latency_ms << ","
-                          << entry.details.data() << "\n"; // Ensure details is the last field
-        current_log_file_.flush();
+                          << entry.details.data() << "\n";
     }
+    current_log_file_.flush(); // Ensure data is written to disk
+    buffer_.clear(); // Clear buffer after flushing
 }
 
-
 void CsvLogger::rotate_log_file() {
-    std::lock_guard<std::recursive_mutex> lock(file_mutex_);
+    // Acquire file lock for writing
+    std::lock_guard<std::recursive_mutex> file_lock(file_mutex_);
+    
+    // Flush any pending buffered entries before closing the current file
+    // This is important to ensure no data is lost during rotation.
+    {
+        std::lock_guard<std::mutex> buffer_lock(buffer_mutex_);
+        if (!buffer_.empty()) {
+            // Temporarily swap buffer to a local one to release lock faster
+            std::vector<CsvLogEntry> temp_buffer;
+            temp_buffer.swap(buffer_);
+
+            if (current_log_file_.is_open()) {
+                for (const auto& entry : temp_buffer) {
+                    current_log_file_ << entry.produced_ts_epoch_ms << ","
+                                      << entry.module.data() << ","
+                                      << entry.thread_id << ","
+                                      << entry.event.data() << ","
+                                      << entry.call_ts_epoch_ms << ","
+                                      << entry.camera_frame_id << ","
+                                      << entry.camera_width << ","
+                                      << entry.camera_height << ","
+                                      << entry.camera_exposure_ms << ","
+                                      << entry.camera_copy_time_ms << ","
+                                      << entry.tpu_inference_ms << ","
+                                      << entry.tpu_input_w << ","
+                                      << entry.tpu_input_h << ","
+                                      << entry.tpu_temp_c << ","
+                                      << entry.encoder_encode_ms << ","
+                                      << entry.encoder_total_encoded_frames << ","
+                                      << entry.encoder_average_fps << ","
+                                      << entry.logic_metric_ballistics << ","
+                                      << entry.logic_metric_hit_scan << ","
+                                      << entry.logic_metric_servo_actuation << ","
+                                      << entry.sysmon_cpu_temp_c << ","
+                                      << entry.sysmon_cpu_usage_percent << ","
+                                      << entry.sysmon_mem_usage_percent << ","
+                                      << entry.p50_latency_ms << ","
+                                      << entry.p95_latency_ms << ","
+                                      << entry.p99_latency_ms << ","
+                                      << entry.average_fps << ","
+                                      << entry.total_frames_processed_or_inferences << ","
+                                      << entry.average_latency_ms << ","
+                                      << entry.details.data() << "\n";
+                }
+                current_log_file_.flush();
+            }
+        }
+    }
+
+
     if (current_log_file_.is_open()) {
         current_log_file_.close();
     }
@@ -122,7 +209,7 @@ void CsvLogger::rotate_log_file() {
     // Open new primary log file
     current_log_file_.open(new_log_filepath.string(), std::ios_base::out | std::ios_base::app); // Use app to append if file already exists for current minute
     if (!current_log_file_.is_open()) {
-        std::cerr << "Failed to open CSV log file: " << new_log_filepath << std::endl;
+        std::cerr << "Failed to open CSV log file: " << new_log_filepath << " - Reason: " << strerror(errno) << std::endl;
         current_log_minute_ = -1; // Indicate no file is open
     } else {
         // Only write header if file was newly created or is empty
@@ -175,6 +262,7 @@ Logger& Logger::getInstance() {
 // Definition for the public default constructor
 Logger::Logger()
     : base_log_dir_("."), log_file_prefix_("dummy_log"), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(1), running_(false) {
+    
     // No-op, primarily for the dummy logger during early initialization
     // No need to create directories or start threads for a dummy.
 }
@@ -219,9 +307,9 @@ Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_d
  * all buffered messages are written and resources are released.
  */
 Logger::~Logger() {
-    stop_writer_thread(); // Signal writer thread to stop and wait for it.
+    stop_writer_thread(); // Signal writer thread to stop and wait for it. 
     if (standard_log_file_.is_open()) {
-        standard_log_file_.close(); // Close the log file.
+        standard_log_file_.close(); // Close the log file. 
     }
 }
 
@@ -235,8 +323,8 @@ void Logger::start_writer_thread() {
     if (!running_.exchange(true)) { // Atomically set to true and check old value
         APP_LOG_INFO("Logger: Creating standard writer thread.");
         standard_writer_thread_ = std::thread(&Logger::writer_thread_func, this);
-        APP_LOG_INFO("Logger: Creating CSV writer thread.");
-        csv_writer_thread_ = std::thread(&Logger::csv_writer_thread_func, this);
+        APP_LOG_INFO("Logger: Creating CSV log flusher thread.");
+        log_flusher_thread_ = std::thread(&Logger::log_flusher_thread_func, this);
     }
 }
 
@@ -251,10 +339,10 @@ void Logger::stop_writer_thread() {
     if (running_.exchange(false)) { // Atomically set to false and check old value
         
         if (standard_writer_thread_.joinable()) {
-            standard_writer_thread_.join(); // Wait for the standard thread to finish.
+            standard_writer_thread_.join(); // Wait for the standard thread to finish. 
         }
-        if (csv_writer_thread_.joinable()) {
-            csv_writer_thread_.join(); // Wait for the CSV thread to finish.
+        if (log_flusher_thread_.joinable()) {
+            log_flusher_thread_.join(); // Wait for the log flusher thread to finish. 
         }
     }
 }
@@ -269,7 +357,7 @@ void Logger::stop_writer_thread() {
  * @param message The log message content.
  */
 void Logger::log(const std::string& level, const std::string& message) {
-    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), level, message})); // Enqueue the log entry.
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), level, message})); // Enqueue the log entry. 
 }
 
 /**
@@ -283,11 +371,18 @@ void Logger::log(const std::string& level, const std::string& message) {
  */
 void Logger::log_json(const std::string& key, const std::string& value) {
     std::string json_message = "{\"" + key + "\": " + value + "}";
-    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), "JSON", json_message})); // Enqueue structured log.
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), "JSON", json_message})); // Enqueue structured log. 
 }
 
 void Logger::log_csv(const CsvLogEntry& entry) {
-    csv_log_queue_.push(std::move(entry));
+    // Find the correct CsvLogger for this module
+    auto it = csv_loggers_.find(std::string(entry.module.data()));
+    if (it != csv_loggers_.end()) {
+        it->second.write_entry(entry); // Now buffers internally
+    } else {
+        // Log this error to the standard logger as a fallback
+        APP_LOG_ERROR("CsvLogger not found for module: [" + std::string(entry.module.data()) + "]. Entry dropped.");
+    }
 }
 
 /**
@@ -298,9 +393,10 @@ void Logger::log_csv(const CsvLogEntry& entry) {
  * as long as `running_` is true or there are messages still in the queue.
  */
 void Logger::writer_thread_func() {
+    set_thread_name("StdLogWriter");
     APP_LOG_INFO("Logger: Standard writer thread started.");
     LogEntry entry; // Declare outside loop to avoid re-allocation
-    while (running_.load()) { // Loop while running_ is true
+    while (running_.load(std::memory_order_acquire)) { // Loop while running_ is true
         // Try to pop an entry from the queue
         if (log_queue_.pop(entry)) { // Use non-blocking pop
             // Write to console (standard output).
@@ -329,59 +425,7 @@ void Logger::writer_thread_func() {
     APP_LOG_INFO("Logger: Standard writer thread finished.");
 }
 
-/**
- * @brief The main function executed by the asynchronous CSV log writer thread.
- *
- * This thread continuously dequeues CsvLogEntry objects and writes them to
- * their respective module-specific CSV log files, handling rotation.
- */
-void Logger::csv_writer_thread_func() {
-    APP_LOG_INFO("Logger: CSV writer thread started.");
-    CsvLogEntry entry; // Declare outside loop to avoid re-allocation
-    while (running_.load()) {
-        if (csv_log_queue_.pop(entry)) {
-            // Retrieve the correct CsvLogger for this module
-            APP_LOG_DEBUG("Attempting to find CsvLogger for module: [" + std::string(entry.module.data()) + "]");
-            auto it = csv_loggers_.find(std::string(entry.module.data()));
-            if (it != csv_loggers_.end()) {
-                // Check for log rotation based on current minute
-                auto now_check = std::chrono::system_clock::now();
-                std::time_t now_c_check = std::chrono::system_clock::to_time_t(now_check);
-                std::tm* now_tm_check = std::localtime(&now_c_check);
-                
-                // Use getter methods to access CsvLogger members
-                if (now_tm_check->tm_min != it->second.get_current_log_minute() || !it->second.is_file_open()) {
-                    it->second.rotate_log_file();
-                }
-                
-                it->second.write_entry(entry);
-            } else {
-                APP_LOG_ERROR("CsvLogger not found for module: [" + std::string(entry.module.data()) + "]. Entry dropped.");
-            }
-        } else {
-            // If queue is empty, sleep for a short period to avoid busy-waiting
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    }
-    // Process any remaining messages in the queue before exiting
-    while (csv_log_queue_.pop(entry)) {
-        APP_LOG_DEBUG("Processing remaining CsvLogEntry for module: [" + std::string(entry.module.data()) + "]");
-        auto it = csv_loggers_.find(std::string(entry.module.data()));
-        if (it != csv_loggers_.end()) {
-            auto now_check = std::chrono::system_clock::now();
-            std::time_t now_c_check = std::chrono::system_clock::to_time_t(now_check);
-            std::tm* now_tm_check = std::localtime(&now_c_check);
-            
-            if (now_tm_check->tm_min != it->second.get_current_log_minute() || !it->second.is_file_open()) {
-                it->second.rotate_log_file();
-            }
-            it->second.write_entry(entry);
-        } else {
-            APP_LOG_ERROR("CsvLogger not found for module: [" + std::string(entry.module.data()) + "]. Entry dropped.");
-        }
-    }
-    APP_LOG_INFO("Logger: CSV writer thread finished.");
-}
+
 
 /**
  * @brief Rotates the standard log file by closing the current one and opening a new one.
@@ -391,7 +435,7 @@ void Logger::csv_writer_thread_func() {
 void Logger::rotate_standard_log_file() {
 
     if (standard_log_file_.is_open()) {
-        standard_log_file_.close(); // Close the old log file.
+        standard_log_file_.close(); // Close the old log file. 
     }
 
     // Delete oldest files (e.g., run-prefix.2.json -> delete)
@@ -440,14 +484,6 @@ std::string Logger::get_current_iso_time() {
     return oss.str();
 }
 
-/**
- * @brief Gets the current monotonic time in nanoseconds since epoch.
- *
- * This uses std::chrono::steady_clock, which is typically monotonic and
- * not subject to system clock adjustments (like NTP).
- *
- * @return A long long representing nanoseconds since the steady_clock epoch.
- */
 long long Logger::get_raw_monotonic_time_ns() {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == -1) {
@@ -458,15 +494,38 @@ long long Logger::get_raw_monotonic_time_ns() {
     return static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
 }
 
-// set_thread_name implementation
-void set_thread_name(const std::string& name) {
-#ifdef __linux__
-    // Only set if running on Linux and name fits PR_SET_NAME limit (16 chars including null terminator)
-    if (name.length() < 16) {
-        prctl(PR_SET_NAME, name.c_str(), 0, 0, 0);
+/**
+ * @brief The main function executed by the asynchronous log flusher thread.
+ *
+ * This thread periodically flushes the RAM buffers of all CsvLogger instances to disk.
+ */
+void Logger::log_flusher_thread_func() {
+    set_thread_name("CsvFlusher");
+    APP_LOG_INFO("Logger: CSV log flusher thread started.");
+    while (running_.load(std::memory_order_acquire)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Flush every 100ms
+
+        // Iterate through all CsvLogger instances and flush their buffers
+        for (auto& pair : csv_loggers_) {
+            pair.second.flush_buffer_to_disk();
+        }
+
+        // Also check for log rotation for each CsvLogger
+        // This is done here rather than in write_entry to keep write_entry lock-free
+        // and avoid repeated time checks in hot paths.
+        auto now_check = std::chrono::system_clock::now();
+        std::time_t now_c_check = std::chrono::system_clock::to_time_t(now_check);
+        std::tm* now_tm_check = std::localtime(&now_c_check);
+
+        for (auto& pair : csv_loggers_) {
+            if (now_tm_check->tm_min != pair.second.get_current_log_minute()) {
+                pair.second.rotate_log_file();
+            }
+        }
     }
-#else
-    // No-op on other platforms
-    (void)name; // Suppress unused parameter warning
-#endif // __linux__
+    // Perform a final flush for all CsvLoggers before exiting
+    for (auto& pair : csv_loggers_) {
+        pair.second.flush_buffer_to_disk();
+    }
+    APP_LOG_INFO("Logger: CSV log flusher thread finished.");
 }

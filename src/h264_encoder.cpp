@@ -249,7 +249,7 @@ void H264Encoder::worker_thread_func() {
             CsvLogEntry entry;
             entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
             copy_to_array(entry.module, "H264Encoder");
-            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>()(std::this_thread::get_id()));
             copy_to_array(entry.event, "encode_done");
             entry.call_ts_epoch_ms = call_ts;
             entry.encoder_encode_ms = static_cast<float>(duration_ms);
@@ -258,11 +258,6 @@ void H264Encoder::worker_thread_func() {
             entry.encoder_average_fps = -1.0f;
             Logger::getInstance().log_csv(entry);
 
-            {
-                std::lock_guard<std::mutex> lock(encoding_times_mutex_);
-                encoding_times_ms_.push_back(duration_ms);
-                total_encoded_frames_++;
-            }
             // 5. NAL unit handling and queue push
             auto nal_handling_start = std::chrono::high_resolution_clock::now();
             for (int i = 0; i < i_nal; ++i) {
@@ -288,55 +283,5 @@ void H264Encoder::worker_thread_func() {
     APP_LOG_INFO("H264Encoder worker thread stopped.");
 }
 
-void H264Encoder::get_performance_metrics() {
-    std::lock_guard<std::mutex> lock(encoding_times_mutex_);
 
-    if (total_encoded_frames_ == 0) {
-        APP_LOG_INFO("H264Encoder: No frames encoded for performance metrics.");
-        return;
-    }
-
-    double average_latency_ms = 0;
-    for (long long latency : encoding_times_ms_) {
-        average_latency_ms += static_cast<double>(latency);
-    }
-    average_latency_ms /= total_encoded_frames_;
-    double average_fps = 1000.0 / average_latency_ms;
-
-    std::sort(encoding_times_ms_.begin(), encoding_times_ms_.end());
-    size_t percentile_99_index = static_cast<size_t>(std::round(total_encoded_frames_ * 0.99));
-    size_t percentile_95_index = static_cast<size_t>(std::round(total_encoded_frames_ * 0.95));
-    size_t percentile_50_index = static_cast<size_t>(std::round(total_encoded_frames_ * 0.50));
-
-    long long p99_latency_ms = encoding_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_encoded_frames_ - 1))];
-    long long p95_latency_ms = encoding_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_encoded_frames_ - 1))];
-    long long p50_latency_ms = encoding_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_encoded_frames_ - 1))];
-
-    // Populate the new CsvLogEntry fields directly
-    CsvLogEntry entry;
-    entry.p50_latency_ms = static_cast<float>(p50_latency_ms);
-    entry.p95_latency_ms = static_cast<float>(p95_latency_ms);
-    entry.p99_latency_ms = static_cast<float>(p99_latency_ms);
-    entry.average_fps = static_cast<float>(average_fps);
-    entry.total_frames_processed_or_inferences = total_encoded_frames_;
-    entry.average_latency_ms = static_cast<float>(average_latency_ms);
-    // Set module and event for CsvLogger
-    copy_to_array(entry.module, "H264Encoder");
-    copy_to_array(entry.event, "PerformanceMetrics");
-    // Clear details field as it is now structured
-    copy_to_array(entry.details, "");
-
-    Logger::getInstance().log_csv(entry);
-    APP_LOG_INFO("--- H264Encoder Performance Metrics ---");
-    APP_LOG_INFO("  Total Encoded Frames: " + std::to_string(total_encoded_frames_));
-    APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));
-    APP_LOG_INFO("  Average Latency: " + std::to_string(average_latency_ms) + " ms");
-    APP_LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
-    APP_LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
-    APP_LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
-    APP_LOG_INFO("---------------------------------------");
-
-    encoding_times_ms_.clear();
-    total_encoded_frames_ = 0;
-}
 

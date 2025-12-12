@@ -216,12 +216,6 @@ void InferenceEngine::worker_thread_func() {
             entry.tpu_temp_c = get_tpu_temperature();
             Logger::getInstance().log_csv(entry);
 
-            {
-                std::lock_guard<std::mutex> lock(inference_times_mutex_);
-                inference_times_ms_.push_back(duration_ms);
-                total_inferences_++;
-            }
-            
             // 4. Get output tensor
             auto get_output_start = std::chrono::high_resolution_clock::now();
             auto results_buffer = get_output_tensor(interpreter.get());
@@ -328,69 +322,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     return results_buffer;
 }
 
-void InferenceEngine::get_performance_metrics() {
-    std::lock_guard<std::mutex> lock(inference_times_mutex_);
 
-    if (total_inferences_ == 0) {
-        APP_LOG_INFO("InferenceEngine: No inferences recorded for performance metrics.");
-        return;
-    }
-
-    double average_duration_ms = 0;
-    for (long long duration : inference_times_ms_) {
-        average_duration_ms += duration;
-    }
-    average_duration_ms /= total_inferences_;
-    double average_fps = 1000.0 / average_duration_ms;
-
-    double sum_sq_diff = 0;
-    for (long long duration : inference_times_ms_) {
-        sum_sq_diff += (duration - average_duration_ms) * (duration - average_duration_ms);
-    }
-    double std_dev_ms = std::sqrt(sum_sq_diff / total_inferences_);
-
-    std::sort(inference_times_ms_.begin(), inference_times_ms_.end());
-    size_t percentile_99_index = static_cast<size_t>(std::round(total_inferences_ * 0.99));
-    size_t percentile_95_index = static_cast<size_t>(std::round(total_inferences_ * 0.95));
-    size_t percentile_50_index = static_cast<size_t>(std::round(total_inferences_ * 0.50));
-
-    long long p99_latency_ms = inference_times_ms_[std::min(percentile_99_index, static_cast<size_t>(total_inferences_ - 1))];
-    long long p95_latency_ms = inference_times_ms_[std::min(percentile_95_index, static_cast<size_t>(total_inferences_ - 1))];
-    long long p50_latency_ms = inference_times_ms_[std::min(percentile_50_index, static_cast<size_t>(total_inferences_ - 1))];
-
-    // Populate the new CsvLogEntry fields directly
-    CsvLogEntry entry; // Declare entry here
-    entry.p50_latency_ms = static_cast<float>(p50_latency_ms);
-    entry.p95_latency_ms = static_cast<float>(p95_latency_ms);
-    entry.p99_latency_ms = static_cast<float>(p99_latency_ms);
-    entry.average_fps = static_cast<float>(average_fps);
-    entry.total_frames_processed_or_inferences = total_inferences_;
-    entry.average_latency_ms = static_cast<float>(average_duration_ms);
-    // Set module and event for CsvLogger
-    copy_to_array(entry.module, "InferenceEngine");
-    copy_to_array(entry.event, "PerformanceMetrics");
-    // Clear details field as it is now structured
-    copy_to_array(entry.details, "");
-    // Preserve other specific metrics for the InferenceEngine module
-    entry.tpu_input_w = input_width_;
-    entry.tpu_input_h = input_height_;
-    // tpu_temp_c remains -1.0f as per current capabilities
-    
-    Logger::getInstance().log_csv(entry);
-    APP_LOG_INFO("--- Inference Performance Metrics ---");
-    APP_LOG_INFO("  Total Inferences: " + std::to_string(total_inferences_));
-    APP_LOG_INFO("  Average FPS: " + std::to_string(average_fps));
-    APP_LOG_INFO("  Average Latency: " + std::to_string(average_duration_ms) + " ms");
-    APP_LOG_INFO("  Latency Std Dev: " + std::to_string(std_dev_ms) + " ms");
-    APP_LOG_INFO("  50th Percentile Latency: " + std::to_string(p50_latency_ms) + " ms");
-    APP_LOG_INFO("  95th Percentile Latency: " + std::to_string(p95_latency_ms) + " ms");
-    APP_LOG_INFO("  99th Percentile Latency: " + std::to_string(p99_latency_ms) + " ms");
-    APP_LOG_INFO("-------------------------------------");
-
-    inference_times_ms_.clear();
-    total_inferences_ = 0;
-    performance_start_time_ = std::chrono::high_resolution_clock::now();
-}
 
 void InferenceEngine::get_state() const {
     APP_LOG_INFO("--- InferenceEngine State ---");

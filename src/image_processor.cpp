@@ -77,13 +77,14 @@ void ImageProcessor::worker_thread_func() {
     if (opencv_input_type == -1) {
         std::stringstream ss;
         ss << "ImageProcessor: Failed to determine OpenCV input type for format " << input_pixel_format_.toString().c_str() << ". Worker thread exiting.";
-        APP_LOG_ERROR(ss.str());
+        std::string log_message = ss.str(); // Make explicit string
+        APP_LOG_ERROR(log_message);
         running_ = false; // Signal that the thread is stopping
         return; // Exit the worker thread
     }
 
+    ImageData input_image;
     while (running_.load()) {
-        ImageData input_image;
         // Wait for an image to pop from the queue, with a small timeout to allow stopping
         if (input_queue_.pop(input_image)) {
             auto process_start_time = std::chrono::high_resolution_clock::now();
@@ -94,84 +95,71 @@ void ImageProcessor::worker_thread_func() {
                 continue;
             }
 
-            cv::Mat raw_image(input_image.height, input_image.width, opencv_input_type, input_image.buffer->data.data());
+        // 2. Process image (color conversion and/or resizing)
+        // Ensure that the input_pixel_format_ (which comes from config.json) is used here.
+        // We expect RGB888 from CameraCapture and we are configured for RGB888.
+        cv::Mat input_frame_mat;
+        if (input_image.format == libcamera::formats::RGB888) {
+            input_frame_mat = cv::Mat(input_image.height, input_image.width, CV_8UC3, input_image.buffer->data.data());
+        } else {
+            APP_LOG_ERROR("ImageProcessor: Unexpected input format (FOURCC: " + std::to_string(input_image.format.fourcc()) + "). Expected RGB888. Skipping frame.");
+            input_image.buffer.reset(); // Return buffer to pool
+            continue;
+        }
 
-            // Acquire buffer from pool for processed image
-            size_t required_size = tpu_input_width_ * tpu_input_height_ * 3; // Always BGR 3-channel output
-            BufferPool<uint8_t>::PooledPtr processed_buffer_data = buffer_pool_->acquire(); // Acquire without size, relies on pool's max size
+        cv::Mat processed_mat;
+        if (input_image.width == (unsigned int)tpu_input_width_ && input_image.height == (unsigned int)tpu_input_height_) {
+            // No resizing or color conversion needed, just copy data
+            input_frame_mat.copyTo(processed_mat);
+        } else {
+            // Resize if dimensions differ
+            APP_LOG_WARNING("ImageProcessor: Resizing RGB888 frame from " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) +
+                            " to " + std::to_string(tpu_input_width_) + "x" + std::to_string(tpu_input_height_) + ".");
+            cv::resize(input_frame_mat, processed_mat, cv::Size(tpu_input_width_, tpu_input_height_), 0, 0, cv::INTER_LINEAR);
+        }
 
-            if (!processed_buffer_data) {
-                APP_LOG_ERROR("ImageProcessor failed to acquire buffer from pool, dropping frame.");
-                continue;
-            }
-            
-            // Check if the acquired buffer has enough capacity
-            if (processed_buffer_data->data.capacity() < required_size) {
-                 {
-                     std::stringstream ss;
-                     ss << "Acquired buffer from pool is too small for processed image. Capacity: " << processed_buffer_data->data.capacity()
-                        << ", Required: " << required_size << ". Dropping frame.";
-                     APP_LOG_ERROR(ss.str());
-                 }
-                 // The buffer will be released when processed_buffer_data goes out of scope
-                 continue;
-            }
-            
-            // Create a Mat pointing to the acquired buffer
-            cv::Mat bgr_image_out(tpu_input_height_, tpu_input_width_, CV_8UC3, processed_buffer_data->data.data());
+        // 3. Acquire a buffer from the pool for the processed image.
+        auto processed_buffer_data = buffer_pool_->acquire();
+        if (!processed_buffer_data) {
+            APP_LOG_WARNING("ImageProcessor: Failed to acquire buffer for processed image. Dropping frame.");
+            input_image.buffer.reset(); // Return input buffer to pool
+            continue;
+        }
 
-            cv::Mat temp_bgr_image; // Temporary Mat for color conversion if needed
-            
-            // Perform color conversion first if necessary
-            if (input_pixel_format_ == libcamera::formats::BGRA8888) {
-                cv::cvtColor(raw_image, temp_bgr_image, cv::COLOR_BGRA2BGR);
-            } else if (input_pixel_format_ == libcamera::formats::BGR888) {
-                temp_bgr_image = raw_image; // No conversion needed, just reference
-            } else if (input_pixel_format_ == libcamera::formats::RGBA8888) {
-                cv::cvtColor(raw_image, temp_bgr_image, cv::COLOR_RGBA2BGR);
-            } else if (input_pixel_format_ == libcamera::formats::RGB888) {
-                cv::cvtColor(raw_image, temp_bgr_image, cv::COLOR_RGB2BGR);
-            } else if (input_pixel_format_ == libcamera::formats::YUYV) {
-                cv::cvtColor(raw_image, temp_bgr_image, cv::COLOR_YUV2BGR_YUYV);
-            }
-            else {
-                {
-                std::stringstream ss;
-                ss << "ImageProcessor: Unsupported input pixel format " << input_pixel_format_.toString().c_str() << " for color conversion. Dropping frame.";
-                APP_LOG_ERROR(ss.str());
-            }
-                continue;
-            }
-            
-            // Now resize the (potentially color-converted) image into the final output Mat
-            cv::resize(temp_bgr_image, bgr_image_out, cv::Size(tpu_input_width_, tpu_input_height_), 0, 0, cv::INTER_LINEAR);
-            
-            // CRITICAL: Explicitly set the size of the underlying std::vector to match the actual data length
-            processed_buffer_data->data.resize(required_size);
+        // Ensure processed_buffer_data->data has enough capacity
+        size_t required_size = processed_mat.total() * processed_mat.elemSize();
+        if (required_size > processed_buffer_data->data.capacity()) {
+            APP_LOG_ERROR("ImageProcessor: Processed image size (" + std::to_string(required_size) +
+                          ") exceeds buffer pool capacity (" + std::to_string(processed_buffer_data->data.capacity()) + "). Dropping frame.");
+            input_image.buffer.reset(); // Return input buffer to pool
+            processed_buffer_data.reset(); // Return acquired buffer to pool
+            continue;
+        }
+        
+        // Copy processed image data to the pooled buffer
+        std::memcpy(processed_buffer_data->data.data(), processed_mat.data, required_size);
+        processed_buffer_data->size = required_size;
+        // Explicitly resize the underlying std::vector to reflect the actual data size
+        processed_buffer_data->data.resize(required_size);
 
-            // Create new ImageData for the processed image
-            ImageData processed_image;
-            processed_image.buffer = processed_buffer_data; // Use the acquired buffer
-            processed_image.width = tpu_input_width_;
-            processed_image.height = tpu_input_height_;
-            processed_image.format = libcamera::formats::BGR888; // Output is always BGR
-            // CRITICAL: Set the size of the processed image buffer to match the BGR output size
-            processed_image.buffer->size = tpu_input_width_ * tpu_input_height_ * 3; 
-            // Preserve original timestamps and IDs
-            processed_image.timestamp_epoch_ms = input_image.timestamp_epoch_ms;
 
-            // Push to output queue for InferenceEngine
-            if (!output_queue_.push(processed_image)) {
-                APP_LOG_WARNING("ImageProcessor output queue is full, dropping frame.");
-            }
-            auto process_end_time = std::chrono::high_resolution_clock::now();
-            auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(process_end_time - process_start_time).count();
-            {
-                std::stringstream ss;
-                ss << "ImageProcessor processed frame in " << duration_ms << " ms. Input size " << input_image.width << "x" << input_image.height
-                   << ", Output size " << tpu_input_width_ << "x" << tpu_input_height_ << ", Format " << input_pixel_format_.toString().c_str();
-                APP_LOG_DEBUG(ss.str());
-            }
+        // 4. Create new ImageData object and push to output queue
+        ImageData output_image_data(input_image.timestamp_epoch_ms, input_image.frame_id);
+        output_image_data.width = tpu_input_width_;
+        output_image_data.height = tpu_input_height_;
+        output_image_data.format = libcamera::formats::RGB888; // Output is always RGB888 for TPU
+        output_image_data.buffer = std::move(processed_buffer_data);
+
+        if (!output_queue_.push(std::move(output_image_data))) {
+            APP_LOG_WARNING("ImageProcessor output queue is full. Dropping processed frame.");
+            // output_image_data.buffer will be destructed here, returning its buffer to the pool.
+        }
+
+        auto process_end_time = std::chrono::high_resolution_clock::now();
+        long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(process_end_time - process_start_time).count();
+        APP_LOG_DEBUG("ImageProcessor processed frame in " + std::to_string(duration_ms) + " ms. Input size " +
+                      std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Output size " +
+                      std::to_string(tpu_input_width_) + "x" + std::to_string(tpu_input_height_) + ", Format RGB888");
 
         } else {
             // Small sleep to prevent busy-waiting if queue is empty

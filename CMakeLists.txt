@@ -58,6 +58,7 @@ add_executable(detector
     src/orientation_sensor.cpp
     src/application_supervisor.cpp
     src/system_monitor.cpp
+    src/keyboard_monitor.cpp
     civetweb/src/civetweb.c
 )
 add_definitions(-DDEBUG_MODE)

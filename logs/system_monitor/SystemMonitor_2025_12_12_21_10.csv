@@ -1,0 +1,11 @@
+produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,camera_frame_id,camera_width,camera_height,camera_exposure_ms,camera_copy_time_ms,tpu_inference_ms,tpu_input_w,tpu_input_h,tpu_temp_c,encoder_encode_ms,encoder_total_encoded_frames,encoder_average_fps,logic_metric_ballistics,logic_metric_hit_scan,logic_metric_servo_actuation,sysmon_cpu_temp_c,sysmon_cpu_usage_percent,sysmon_mem_usage_percent,p50_latency_ms,p95_latency_ms,p99_latency_ms,average_fps,total_frames_processed_or_inferences,average_latency_ms,details
+1765570211476,SystemMonitor,2048546596794264540,sysmon_metrics,1765570211474,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,39.15,4.91803,56.8742,-1,-1,-1,-1,-1,-1,
+1765570216481,SystemMonitor,2048546596794264540,sysmon_metrics,1765570216478,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,40.8,14.2929,57.4891,-1,-1,-1,-1,-1,-1,
+1765570221485,SystemMonitor,2048546596794264540,sysmon_metrics,1765570221481,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,39.7,16.9585,57.5135,-1,-1,-1,-1,-1,-1,
+1765570226488,SystemMonitor,2048546596794264540,sysmon_metrics,1765570226485,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,41.35,16.0723,57.5318,-1,-1,-1,-1,-1,-1,
+1765570231492,SystemMonitor,2048546596794264540,sysmon_metrics,1765570231488,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,41.9,14.9043,57.581,-1,-1,-1,-1,-1,-1,
+1765570236496,SystemMonitor,2048546596794264540,sysmon_metrics,1765570236492,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,41.35,16.3399,57.5993,-1,-1,-1,-1,-1,-1,
+1765570241499,SystemMonitor,2048546596794264540,sysmon_metrics,1765570241496,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,41.9,13.25,57.6237,-1,-1,-1,-1,-1,-1,
+1765570246503,SystemMonitor,2048546596794264540,sysmon_metrics,1765570246499,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,42.45,16.0983,57.6667,-1,-1,-1,-1,-1,-1,
+1765570251507,SystemMonitor,2048546596794264540,sysmon_metrics,1765570251503,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,41.35,17.0512,57.7213,-1,-1,-1,-1,-1,-1,
+1765570256511,SystemMonitor,2048546596794264540,sysmon_metrics,1765570256507,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,41.9,17.7177,57.7951,-1,-1,-1,-1,-1,-1,

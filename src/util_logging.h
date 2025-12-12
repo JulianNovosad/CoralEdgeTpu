@@ -185,6 +185,7 @@ public:
     void write_header();
     void write_entry(const CsvLogEntry& entry);
     void rotate_log_file();
+    void flush_buffer_to_disk();
 
     int get_current_log_minute() const { return current_log_minute_; }
     bool is_file_open() const { return current_log_file_.is_open(); }
@@ -196,7 +197,8 @@ private:
     std::ofstream current_log_file_;
     std::recursive_mutex file_mutex_; // Protects access to the file
     int current_log_minute_; // New member to store the minute of the current log file
-
+    std::vector<CsvLogEntry> buffer_; // RAM buffer for log entries
+    std::mutex buffer_mutex_; // Protects access to the buffer
 };
 
 
@@ -290,7 +292,7 @@ public:
     /**
      * @brief Gets the current monotonic time in nanoseconds since epoch using CLOCK_MONOTONIC_RAW.
      *
-     * This uses `clock_gettime` with `CLOCK_MONOTONIC_RAW` for a strictly monotonic timestamp.
+     * This uses `clock_get_time` with `CLOCK_MONOTONIC_RAW` for a strictly monotonic timestamp.
      *
      * @return A long long representing nanoseconds since the `CLOCK_MONOTONIC_RAW` epoch.
      */
@@ -326,12 +328,11 @@ public: // Changed to public
     void writer_thread_func();
 
     /**
-     * @brief The main function executed by the asynchronous CSV log writer thread.
+     * @brief The main function executed by the asynchronous log flusher thread.
      *
-     * This thread continuously dequeues CsvLogEntry objects and writes them to
-     * their respective module-specific CSV log files, handling rotation.
+     * This thread periodically flushes the RAM buffers of all CsvLogger instances to disk.
      */
-    void csv_writer_thread_func();
+    void log_flusher_thread_func();
 
     /**
      * @brief Rotates the standard log file.
@@ -364,10 +365,7 @@ public: // Changed to public
     int max_standard_log_files_;
 
     // CSV log members
-
-
-    boost::lockfree::spsc_queue<CsvLogEntry, boost::lockfree::capacity<100>> csv_log_queue_;      ///< Queue for asynchronous CSV log processing.
-    std::thread csv_writer_thread_;              ///< Dedicated thread for writing CSV log messages.
+    std::thread log_flusher_thread_;              ///< Dedicated thread for periodically flushing CSV log messages.
     std::map<std::string, CsvLogger> csv_loggers_; ///< Map to manage CsvLogger instances per module.
     std::vector<SubsystemLogConfig> csv_subsystem_configs_; ///< Store CSV subsystem configurations
 

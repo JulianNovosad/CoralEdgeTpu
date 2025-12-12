@@ -350,6 +350,30 @@ src/inference.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/inference.cpp.s
 .PHONY : src/inference.cpp.s
 
+src/keyboard_monitor.o: src/keyboard_monitor.cpp.o
+.PHONY : src/keyboard_monitor.o
+
+# target to build an object file
+src/keyboard_monitor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o
+.PHONY : src/keyboard_monitor.cpp.o
+
+src/keyboard_monitor.i: src/keyboard_monitor.cpp.i
+.PHONY : src/keyboard_monitor.i
+
+# target to preprocess a source file
+src/keyboard_monitor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/keyboard_monitor.cpp.i
+.PHONY : src/keyboard_monitor.cpp.i
+
+src/keyboard_monitor.s: src/keyboard_monitor.cpp.s
+.PHONY : src/keyboard_monitor.s
+
+# target to generate assembly for a file
+src/keyboard_monitor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/keyboard_monitor.cpp.s
+.PHONY : src/keyboard_monitor.cpp.s
+
 src/logic.o: src/logic.cpp.o
 .PHONY : src/logic.o
 
@@ -556,6 +580,9 @@ help:
 	@echo "... src/inference.o"
 	@echo "... src/inference.i"
 	@echo "... src/inference.s"
+	@echo "... src/keyboard_monitor.o"
+	@echo "... src/keyboard_monitor.i"
+	@echo "... src/keyboard_monitor.s"
 	@echo "... src/logic.o"
 	@echo "... src/logic.i"
 	@echo "... src/logic.s"

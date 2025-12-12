@@ -16,6 +16,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/pi/CoralEdgeTpu/src/h264_encoder.cpp" "CMakeFiles/detector.dir/src/h264_encoder.cpp.o" "gcc" "CMakeFiles/detector.dir/src/h264_encoder.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/image_processor.cpp" "CMakeFiles/detector.dir/src/image_processor.cpp.o" "gcc" "CMakeFiles/detector.dir/src/image_processor.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/inference.cpp" "CMakeFiles/detector.dir/src/inference.cpp.o" "gcc" "CMakeFiles/detector.dir/src/inference.cpp.o.d"
+  "/home/pi/CoralEdgeTpu/src/keyboard_monitor.cpp" "CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o" "gcc" "CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/logic.cpp" "CMakeFiles/detector.dir/src/logic.cpp.o" "gcc" "CMakeFiles/detector.dir/src/logic.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/main.cpp" "CMakeFiles/detector.dir/src/main.cpp.o" "gcc" "CMakeFiles/detector.dir/src/main.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/orientation_sensor.cpp" "CMakeFiles/detector.dir/src/orientation_sensor.cpp.o" "gcc" "CMakeFiles/detector.dir/src/orientation_sensor.cpp.o.d"
