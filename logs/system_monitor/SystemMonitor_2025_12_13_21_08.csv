@@ -1,3 +1,4 @@
 produced_ts_epoch_ms,module,thread_id,event,call_ts_epoch_ms,camera_frame_id,camera_width,camera_height,camera_exposure_ms,camera_copy_time_ms,tpu_inference_ms,tpu_input_w,tpu_input_h,tpu_temp_c,encoder_encode_ms,encoder_total_encoded_frames,encoder_average_fps,logic_metric_ballistics,logic_metric_hit_scan,logic_metric_servo_actuation,sysmon_cpu_temp_c,sysmon_cpu_usage_percent,sysmon_mem_usage_percent,p50_latency_ms,p95_latency_ms,p99_latency_ms,average_fps,total_frames_processed_or_inferences,average_latency_ms,details
-1765653875569,SystemMonitor,-5222307569862188033,sysmon_metrics,1765653875566,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,44.1,12.5,52.3676,-1,-1,-1,-1,-1,-1,
-1765653880574,SystemMonitor,-5222307569862188033,sysmon_metrics,1765653880569,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,44.65,9.75855,53.1158,-1,-1,-1,-1,-1,-1,
+1765656492322,SystemMonitor,-7450837471369363905,sysmon_metrics,1765656492319,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,43,9.09091,43.7529,-1,-1,-1,-1,-1,-1,
+1765656497326,SystemMonitor,-7450837471369363905,sysmon_metrics,1765656497322,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,44.1,12.1817,44.4811,-1,-1,-1,-1,-1,-1,
+1765656502331,SystemMonitor,-7450837471369363905,sysmon_metrics,1765656502326,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,44.1,14.1123,44.5301,-1,-1,-1,-1,-1,-1,
