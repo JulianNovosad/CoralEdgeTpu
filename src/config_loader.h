@@ -77,6 +77,8 @@ public:
     float get_track_iou_threshold() const;
     /** @return Aantal gemiste frames voordat een track wordt verwijderd. Standaard: 5. */
     int get_track_missed_frames_threshold() const;
+    /** @return Minimale detectiebetrouwbaarheid om een nieuwe track aan te maken. Standaard: 0.6. */
+    float get_min_track_confidence() const;
 
     // --- Netwerkconfiguratie ---
     std::string get_listen_address() const;

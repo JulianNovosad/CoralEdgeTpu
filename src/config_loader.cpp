@@ -127,6 +127,10 @@ int ConfigLoader::get_track_missed_frames_threshold() const {
     return config_data_.value("/application/tracking/track_missed_frames_threshold"_json_pointer, 5);
 }
 
+float ConfigLoader::get_min_track_confidence() const {
+    return config_data_.value("/application/tracking/min_track_confidence"_json_pointer, 0.6f);
+}
+
 
 // --- Network Port Getters (Corrected) ---
 unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {

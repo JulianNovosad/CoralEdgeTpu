@@ -362,7 +362,15 @@ bool CameraCapture::start() {
     camera_->requestCompleted.connect(this, &CameraCapture::request_complete_callback);
 
     // 4. Start Capture
-    int ret = camera_->start();
+    // Prepare controls to set during camera start
+    libcamera::ControlList controls_to_set;
+    if (tpu_fps_ > 0) {
+        int64_t frame_duration_us = 1000000 / tpu_fps_; // Calculate microseconds per frame
+        controls_to_set.set(libcamera::controls::FrameDuration, frame_duration_us);
+        APP_LOG_INFO("Attempting to set FrameDuration to: " + std::to_string(frame_duration_us) + " us (" + std::to_string(tpu_fps_) + " FPS)");
+    }
+
+    int ret = camera_->start(&controls_to_set);
     if (ret) {
         APP_LOG_ERROR("Failed to start camera: " + std::to_string(ret));
         camera_->requestCompleted.disconnect(this, &CameraCapture::request_complete_callback);
@@ -372,6 +380,16 @@ bool CameraCapture::start() {
     }
     APP_LOG_INFO("Libcamera camera started successfully.");
     APP_LOG_INFO("Libcamera camera started.");
+
+    // Read back actual configured FrameDuration for logging
+    const libcamera::ControlList &properties = camera_->properties();
+    if (properties.get(libcamera::controls::FrameDuration)) {
+        int64_t actual_frame_duration = *properties.get(libcamera::controls::FrameDuration);
+        double actual_fps = 1000000.0 / actual_frame_duration;
+        APP_LOG_INFO("Actual configured FrameDuration: " + std::to_string(actual_frame_duration) + " us (" + std::to_string(actual_fps) + " FPS)");
+    } else {
+        APP_LOG_WARNING("Could not read actual configured FrameDuration from camera properties.");
+    }
 
     running_ = true;
     processing_running_ = true; // Set new flag for processing thread
@@ -467,13 +485,13 @@ bool CameraCapture::setup_camera() {
 
     // Configure main stream (index 0)
     libcamera::StreamConfiguration& mainCfg = config->at(0);
-    mainCfg.pixelFormat = libcamera::formats::YUYV; // Changed from BGR888
+    mainCfg.pixelFormat = libcamera::formats::YUYV;
     mainCfg.size.width = width_;
     mainCfg.size.height = height_;
 
     // Configure tpu stream (index 1)
     libcamera::StreamConfiguration& tpuCfg = config->at(1);
-    tpuCfg.pixelFormat = libcamera::formats::RGB888; // Changed from BGR888
+    tpuCfg.pixelFormat = libcamera::formats::RGB888;
     tpuCfg.size.width = tpu_width_;
     tpuCfg.size.height = tpu_height_;
     
@@ -504,7 +522,7 @@ bool CameraCapture::setup_camera() {
 
     APP_LOG_INFO("CameraCapture: Configured main stream format: " + pixelFormatToString(actual_pixel_format_) + 
              ", size: " + std::to_string(actual_size_.width) + "x" + std::to_string(actual_size_.height) +
-             ", stride: " + std::to_string(actual_stride_) + " (FOURCC: " + std::to_string(actual_pixel_format_.fourcc()) + ")");
+             ", stride: " + std::to_string(actual_stride_) + " (FOURCC: " + pixelFormatToString(actual_pixel_format_) + ")");
     
     ret = camera_->configure(config.get());
     if (ret) {
@@ -527,6 +545,9 @@ bool CameraCapture::setup_camera() {
     } else {
         APP_LOG_ERROR("TPU stream is null after configuration.");
     }
+
+
+
 
     // Allocate buffers for main video stream
     allocator_ = std::make_unique<libcamera::FrameBufferAllocator>(camera_);
@@ -784,6 +805,8 @@ void CameraCapture::request_processor_thread_func() {
         lock.unlock(); // Release lock before processing
 
         // --- Actual processing of the frame ---
+        std::chrono::high_resolution_clock::time_point start_process_time = std::chrono::high_resolution_clock::now();
+
         long long produced_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
                                   std::chrono::system_clock::now().time_since_epoch()).count();
         long long monotonic_raw_now_ns = Logger::getInstance().get_raw_monotonic_time_ns();
@@ -814,11 +837,14 @@ void CameraCapture::request_processor_thread_func() {
 
         libcamera::Request::BufferMap captured_buffers = request->buffers();
 
+        bool processed_any_frame = false; // Track if any frame was successfully processed
+
         if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
             const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
             const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
             bool processed_main = process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, call_ts, video_stream_->configuration().pixelFormat, frame_id, exposure_ms);
             if (processed_main) {
+                processed_any_frame = true;
                 // Log for main video stream
                 CsvLogEntry entry;
                 entry.produced_ts_epoch_ms = produced_ts;
@@ -830,8 +856,6 @@ void CameraCapture::request_processor_thread_func() {
                 entry.camera_width = video_cfg.size.width;
                 entry.camera_height = video_cfg.size.height;
                 entry.camera_exposure_ms = static_cast<float>(exposure_ms);
-                // Add estimated copy time if process_frame_buffer calculated it and it can be retrieved
-                // For now, it's not directly returned, so leaving at -1.0f.
                 Logger::getInstance().log_csv(entry);
             }
         } else if (captured_buffers.count(video_stream_)) {
@@ -845,6 +869,7 @@ void CameraCapture::request_processor_thread_func() {
             const libcamera::StreamConfiguration& tpu_cfg = tpu_stream_->configuration();
             bool processed_tpu = this->process_tpu_raw_frame_buffer(tpu_fb, tpu_cfg, call_ts, frame_id, exposure_ms);
             if (processed_tpu) {
+                processed_any_frame = true;
                 // Log for TPU stream
                 CsvLogEntry entry;
                 entry.produced_ts_epoch_ms = produced_ts;
@@ -860,6 +885,12 @@ void CameraCapture::request_processor_thread_func() {
             }
         } else {
             APP_LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");
+        }
+        
+        std::chrono::high_resolution_clock::time_point end_process_time = std::chrono::high_resolution_clock::now();
+        long long total_process_us = std::chrono::duration_cast<std::chrono::microseconds>(end_process_time - start_process_time).count();
+        if (processed_any_frame) {
+            APP_LOG_INFO("CameraCapture: Total time to process request (frame_id=" + std::to_string(frame_id) + "): " + std::to_string(total_process_us) + " us");
         }
     
         // --- REQUEUE ---

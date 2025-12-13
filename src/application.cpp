@@ -21,7 +21,14 @@ void Application::setup_pools_and_queues() {
     const unsigned int cam_h = config_loader_.get_high_res_height();
     
     size_t image_buffer_size = cam_w * cam_h * 3; // BGR888
-    image_pool_ = std::make_shared<BufferPool<uint8_t>>(80, image_buffer_size, "ImagePool");
+    APP_LOG_INFO("Image buffer size per frame (BGR888): " + std::to_string(image_buffer_size) + " bytes.");
+    
+    // Determine pool size for images from config, default to a reasonable value if not set or invalid
+    // For now, let's keep it at 80 as it's what's been tested, but log the memory usage.
+    size_t image_pool_count = 10; // Reduced to a more reasonable number
+
+    image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
+    APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
     detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(20, 100, "DetectionPool");
     h264_pool_ = std::make_shared<BufferPool<uint8_t>>(200, 1024 * 1024, "H264Pool");
 }
