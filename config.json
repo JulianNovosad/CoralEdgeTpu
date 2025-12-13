@@ -33,17 +33,24 @@
     "model_path": "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite",
     "labels_path": "coco_labels.txt",
     "listen_address": "0.0.0.0",
-    "high_res_width": 1536,
-    "high_res_height": 864,
+    "high_res_width": 1280,
+    "high_res_height": 720,
     "camera_watchdog_timeout_seconds": 10,
     "camera_fps": 120.0,
+    "inference_worker_threads": 4,
     "detection_score_threshold": 0.5,
     "log_path": "/home/pi/CoralEdgeTpu/logs",
+    "tracking": {
+      "max_active_tracks": 100,
+      "track_iou_threshold": 0.5,
+      "track_missed_frames_threshold": 10,
+      "min_track_confidence": 0.6
+    },
     "tpu_stream": {
       "width": 300,
       "height": 300,
       "pixel_format": "RGB888",
-      "fps": 30.0
+      "fps": 120.0
     },
     "video_stream": {
       "protocol": "RTP",

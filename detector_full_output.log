@@ -1,0 +1,151 @@
+INFO: Configuration loaded successfully from ./build/../config.json
+[INFO] Logger: Creating standard writer thread.
+[INFO] Logger: Creating CSV log flusher thread.
+[INFO] CoralEdgeTpu Detector Starting...
+[INFO] Signal handlers for SIGINT and SIGTERM set up.
+[INFO] Image buffer size per frame (BGR888): 2764800 bytes.
+[INFO] Logger: Standard writer thread started.
+[INFO] Logger: CSV log flusher thread started.
+[INFO] ImagePool created with 10 buffers, total memory: 26 MB.
+[INFO] Initializing modules...
+[INFO] Creating CameraCapture...
+[21:32:36.140993217] [106168] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:330 [0mlibcamera v0.5.2+99-bfd68f78
+[21:32:36.152650745] [106173] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:720 [0mlibpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[21:32:36.243821194] [106173] [1;32m INFO [1;37mIPAProxy [1;34mipa_proxy.cpp:180 [0mUsing tuning file /usr/share/libcamera/ipa/rpi/pisp/imx708.json
+[21:32:36.251797824] [106173] [1;32m INFO [1;37mCamera [1;34mcamera_manager.cpp:220 [0mAdding camera '/base/axi/pcie@120000/rp1/i2c@88000/imx708@1a' for pipeline handler rpi/pisp
+[21:32:36.251831157] [106173] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1179 [0mRegistered camera /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a to CFE device /dev/media0 and ISP device /dev/media3 using PiSP variant BCM2712_C0
+[INFO] Libcamera CameraManager started.
+[INFO] CameraCapture created.
+[INFO] Creating ImageProcessor...
+[INFO] ConfigLoader: Found TPU stream pixel format in config: 'RGB888'
+[INFO] ImageProcessor initialized with TPU input size: 300x300, input format: RGB888
+[INFO] ImageProcessor created.
+[INFO] Creating InferenceEngine...
+[INFO] Model Input Dimensions: 300x300x3
+[INFO] Edge TPU delegate creation starting...
+[INFO] Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: 368225913312
+[INFO] InferenceEngine created.
+[INFO] Creating OrientationSensor...
+[INFO] OrientationSensor created (mock data provider). Yaw Port: 2001, Pitch Port: 2002, Roll Port: 2003
+[INFO] OrientationSensor created.
+[INFO] Creating LogicModule...
+[INFO] Calculating zero pitch for 100.000000m...
+[WARNING] Zero pitch calculation did not converge within 30 iterations. Best estimate: 0.050000 rad.
+[INFO] BallisticsSolver created and zero pitch calculated.
+[INFO] LogicModule created with 3D Ballistics Solver, configured from file.
+[INFO] LogicModule created.
+[INFO] Creating SystemMonitor...
+[INFO] SystemMonitor created with interval: 5 seconds.
+[INFO] SystemMonitor created.
+[INFO] Creating H264Encoder...
+[INFO] H264Encoder created.
+[INFO] Creating KeyboardMonitor...
+[INFO] KeyboardMonitor created.
+[INFO] Modules initialized.
+[INFO] Starting modules...
+[INFO] Starting all modules...
+[INFO] ImageProcessor worker thread started.
+[INFO] ImageProcessor worker thread running.
+[INFO] InferenceEngine started with 4 worker threads.
+[INFO] CameraCapture::start() called.
+[INFO] Selected Camera ID: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a
+[INFO] Acquire: Camera acquired successfully.
+[INFO] Camera acquired successfully. Proceeding to setup.
+[INFO] Camera acquired and confirmed to be non-null. Proceeding to setup.
+[INFO] setup_camera: Configuring camera: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a
+[21:32:36.281123291] [106168] [1;32m INFO [1;37mCamera [1;34mcamera.cpp:1215 [0mconfiguring streams: (0) 1280x720-YUYV/Rec709 (1) 300x300-RGB888/Rec709/Rec709/None/Full
+[21:32:36.281588105] [106173] [1;32m INFO [1;37mRPI [1;34mpisp.cpp:1483 [0mSensor: /base/axi/pcie@120000/rp1/i2c@88000/imx708@1a - Selected sensor format: 1536x864-SBGGR10_1X10/RAW - Selected CFE format: 1536x864-PC1B/RAW
+[INFO] CameraConfiguration validate() -> Status: 1
+[WARNING] Camera configuration adjusted by libcamera for dual streams.
+[INFO] Final stream[0] size=1280x720 fmt='56595559'
+[INFO] Final stream[1] size=300x300 fmt='34324752'
+[INFO] CameraCapture: Configured main stream format: '56595559', size: 1280x720, stride: 2560 (FOURCC: '56595559')
+[INFO] Libcamera dual streams configured.
+[INFO] Actual Video Stream Config: 1280x720 format: '56595559'
+[INFO] Actual TPU Stream Config: 300x300 format: '34324752' stride: 960
+[INFO] Libcamera buffers allocated for main video stream. Number of buffers: 4
+[21:32:36.286639259] [106194] [1;33m WARN [1;37mIPARPI [1;34mipa_base.cpp:1516 [0mCtrl FrameDuration is not handled.
+[INFO] Libcamera buffers allocated for TPU stream. Number of buffers: 4
+[INFO] Libcamera requests created and buffers added for both streams.
+[INFO] Initializing H.264 encoder...
+[INFO] H.264 encoder initialized (placeholder).
+[INFO] Camera setup completed successfully.
+[INFO] Attempting to set FrameDuration to: 8333 us (120 FPS)
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10058 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10057 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10055 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10055 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10050 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10163 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10068 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10059 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10061 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10057 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10060 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10054 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10056 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10054 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10034 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10054 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10054 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10052 us
+[INFO] Libcamera camera started successfully.
+[INFO] Libcamera camera started.
+[WARNING] Could not read actual configured FrameDuration from camera properties.
+[INFO] CameraCapture: All initial requests successfully queued.
+[INFO] CameraCapture: Request processor thread started.
+[INFO] OrientationSensor started.
+[INFO] LogicModule started.
+[INFO] LogicModule worker thread started.
+[DEBUG] LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.
+[INFO] OrientationSensor worker thread started (mocking data).
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 10053 us
+[INFO] SystemMonitor started.
+[INFO] SystemMonitor worker thread started.
+[INFO] H264Encoder started.
+[INFO] KeyboardMonitor thread started.
+[INFO] H264Encoder worker thread started.
+[INFO] H264Encoder: Initializing x264 with width=1280, height=720, fps=120.000000
+[INFO] Shutdown signal (15) received. Initiating graceful shutdown.
+[DEBUG] LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.
+[INFO] H264Encoder: x264 parameters - width=1280, height=720, csp=2, fps_num=120, fps_den=1, keyint_max=120, threads=1
+[INFO] H264Encoder: Attempting to open x264 encoder...
+[DEBUG] InferenceEngine: Total worker thread loop iteration time: 29589215 us

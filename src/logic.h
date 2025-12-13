@@ -149,6 +149,7 @@ private:
     std::atomic<bool> running_ = false;
     std::thread worker_thread_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
+    const ConfigLoader& config_;
 
     std::vector<TrackedObject> active_tracks_;
     static long next_track_id_;
@@ -159,6 +160,7 @@ private:
     int max_active_tracks_;
     float track_iou_threshold_;
     int track_missed_frames_threshold_;
+    float min_track_confidence_;
 
     FallbackMode current_fallback_mode_ = NORMAL_OPERATION;
     long current_hit_scan_count_ = 0;

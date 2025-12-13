@@ -186,12 +186,17 @@ void InferenceEngine::worker_thread_func() {
             
             long long call_ts = input_image.timestamp_epoch_ms;
 
-            // 2. Set input tensor
+            // Preprocessing (e.g., resizing, format conversion) is assumed to be done before data is put into the queue.
+            // We log the time taken for this implicitly by measuring from pop to set_input_start.
+            auto preprocessing_end = std::chrono::high_resolution_clock::now(); // Assuming pop_end is the end of preprocessing if it happened before queueing
+            APP_LOG_DEBUG("InferenceEngine: Time for preprocessing (implicit from pop to set_input_start): " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(preprocessing_end - pop_end).count()) + " us");
+
+            // 2. Set input tensor (copy data to interpreter input)
             auto set_input_start = std::chrono::high_resolution_clock::now();
             set_input_tensor(interpreter.get(), input_image);
             input_image.buffer.reset(); // Explicitly release the buffer here!
             auto set_input_end = std::chrono::high_resolution_clock::now();
-            APP_LOG_DEBUG("InferenceEngine: Time to set input tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(set_input_end - set_input_start).count()) + " us");
+            APP_LOG_DEBUG("InferenceEngine: Time to copy data to input tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(set_input_end - set_input_start).count()) + " us");
 
 
             // 3. Invoke interpreter
@@ -297,6 +302,13 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     const float* detection_scores = interpreter->typed_output_tensor<float>(2);
     const int num_detections = static_cast<int>(*interpreter->typed_output_tensor<float>(3));
 
+    APP_LOG_DEBUG("Raw model output - num_detections: " + std::to_string(num_detections));
+    std::string scores_log = "Raw model output - top 5 scores: ";
+    for (int i = 0; i < std::min(num_detections, 5); ++i) {
+        scores_log += std::to_string(detection_scores[i]) + " ";
+    }
+    APP_LOG_DEBUG(scores_log);
+
     auto timestamp = std::chrono::high_resolution_clock::now();
     size_t result_count = 0;
 
@@ -309,6 +321,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
             DetectionResult& res = results_buffer->data[result_count];
             res.class_id = static_cast<int>(detection_classes[i]);
             res.score = detection_scores[i];
+            APP_LOG_DEBUG("InferenceEngine: Detected class_id: " + std::to_string(res.class_id) + " with score: " + std::to_string(res.score));
             res.timestamp = timestamp;
 
             res.ymin = detection_boxes[i * 4 + 0] * input_height_;

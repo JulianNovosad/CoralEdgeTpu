@@ -169,9 +169,11 @@ float LogicModule::calculate_iou(const DetectionResult& det1, const DetectionRes
 LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor, const ConfigLoader& config)
     : detection_input_queue_(detection_input_queue),
       orientation_sensor_(orientation_sensor),
+      config_(config),
       max_active_tracks_(config.get_max_active_tracks()),
       track_iou_threshold_(config.get_track_iou_threshold()),
       track_missed_frames_threshold_(config.get_track_missed_frames_threshold()),
+      min_track_confidence_(config.get_min_track_confidence()),
       current_fallback_mode_(NORMAL_OPERATION) {
     
     BallisticProfile profile = {
@@ -394,16 +396,19 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
 
         if (best_match_track) {
             best_match_track->last_detection = new_detection;
-            best_match_track->position.x = 50.0f; // Placeholder: afstand is nu X
+            best_match_track->position.z = config_.get_zero_distance_m(); // Use configured zero distance
             best_match_track->last_update_time = new_detection.timestamp;
             best_match_track->hit_streak++;
             best_match_track->missed_frames = 0;
             best_match_track->associated_this_frame = true;
         } else {
-            if (active_tracks_.size() < static_cast<size_t>(max_active_tracks_)) {
-                active_tracks_.emplace_back(++next_track_id_, new_detection, 50.0f);
-            } else {
-                APP_LOG_WARNING("Max active tracks reached (" + std::to_string(max_active_tracks_) + "). New detection ignored.");
+            // Only create a new track if the detection score is above the minimum confidence threshold
+            if (new_detection.score >= min_track_confidence_) {
+                if (active_tracks_.size() < static_cast<size_t>(max_active_tracks_)) {
+                    active_tracks_.emplace_back(++next_track_id_, new_detection, config_.get_zero_distance_m()); // Use configured zero distance
+                } else {
+                    APP_LOG_WARNING("Max active tracks reached (" + std::to_string(max_active_tracks_) + "). New detection ignored.");
+                }
             }
         }
     }
@@ -416,7 +421,7 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
 }
 
 // --- Onveranderde of licht aangepaste functies ---
-const int MIN_HIT_STREAK = 3;
+const int MIN_HIT_STREAK = 1;
 const float MAX_PREDICTED_UNCERTAINTY = 0.75f;
 
 SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObject& target, float predicted_impact_uncertainty, std::string& safety_status_message) {
