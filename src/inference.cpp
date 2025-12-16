@@ -197,7 +197,13 @@ void InferenceEngine::worker_thread_func() {
 
             // 2. Set input tensor (copy data to interpreter input)
             auto set_input_start = std::chrono::high_resolution_clock::now();
-            set_input_tensor(interpreter.get(), input_image);
+            try {
+                set_input_tensor(interpreter.get(), input_image);
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("Failed to set input tensor: " + std::string(e.what()) + ". Skipping frame.");
+                input_image.buffer.reset(); // Explicitly release the buffer here!
+                continue;
+            }
             input_image.buffer.reset(); // Explicitly release the buffer here!
             auto set_input_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to copy data to input tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(set_input_end - set_input_start).count()) + " us");
@@ -318,20 +324,20 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
     // This is the critical check - the tensor name must match what the Edge TPU delegate expects
     if (tensor_name_str != "normalized_input_image_tensor") {
         APP_LOG_ERROR("Input tensor name mismatch. Expected: normalized_input_image_tensor, Actual: " + tensor_name_str);
-        // This is a critical invariant violation - abort to make it deterministic
-        std::abort();
+        // This is a critical invariant violation - throw exception for graceful handling
+        throw std::runtime_error("Input tensor name mismatch. Expected: normalized_input_image_tensor, Actual: " + tensor_name_str);
     }
 
     // 3. Check tensor type
     if (input_tensor->type != kTfLiteUInt8) {
         APP_LOG_ERROR("Input tensor type is not kTfLiteUInt8 as expected. Current type: " + std::to_string(input_tensor->type) + ".");
-        std::abort();
+        throw std::runtime_error("Input tensor type is not kTfLiteUInt8 as expected. Current type: " + std::to_string(input_tensor->type) + ".");
     }
 
     // 4. Check tensor dimensions
     if (input_tensor->dims->size != 4) {
         APP_LOG_ERROR("Input tensor dimensions incorrect. Expected: 4D, Actual: " + std::to_string(input_tensor->dims->size) + "D");
-        std::abort();
+        throw std::runtime_error("Input tensor dimensions incorrect. Expected: 4D, Actual: " + std::to_string(input_tensor->dims->size) + "D");
     }
 
     // Log tensor information for debugging
@@ -348,29 +354,36 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
     // 5. Check tensor data pointer is valid
     if (!tensor_data) {
         APP_LOG_ERROR("Input tensor data pointer is null.");
-        std::abort();
+        throw std::runtime_error("Input tensor data pointer is null.");
     }
 
     // Validate buffer sizes before memcpy
     size_t expected_tensor_size = input_tensor->bytes;
-    size_t image_buffer_actual_size = image.buffer->data.size(); // Use .data.size() for actual vector size
+    size_t image_buffer_capacity = image.buffer->data.size(); // Actual vector capacity
+    size_t image_buffer_valid_size = image.buffer->size; // Amount of valid data in buffer
 
     APP_LOG_DEBUG("Expected tensor size: " + std::to_string(expected_tensor_size) + " bytes");
-    APP_LOG_DEBUG("Image buffer actual size: " + std::to_string(image_buffer_actual_size) + " bytes");
-    APP_LOG_DEBUG("Image buffer->size: " + std::to_string(image.buffer->size) + " bytes");
+    APP_LOG_DEBUG("Image buffer capacity: " + std::to_string(image_buffer_capacity) + " bytes");
+    APP_LOG_DEBUG("Image buffer valid size: " + std::to_string(image_buffer_valid_size) + " bytes");
 
-    // 6. Check buffer sizes match
-    if (image_buffer_actual_size != expected_tensor_size) {
+    // 6. Check that we have enough data in the buffer for the tensor
+    if (image_buffer_valid_size != expected_tensor_size) {
         APP_LOG_ERROR("Mismatch in input tensor size (" + std::to_string(expected_tensor_size) + 
-                      " bytes) and image buffer size (" + std::to_string(image_buffer_actual_size) + 
+                      " bytes) and image buffer valid size (" + std::to_string(image_buffer_valid_size) + 
                       " bytes).");
-        std::abort();
+        throw std::runtime_error("Mismatch in input tensor size (" + std::to_string(expected_tensor_size) + 
+                      " bytes) and image buffer valid size (" + std::to_string(image_buffer_valid_size) + 
+                      " bytes).");
     }
-    if (image.buffer->size != expected_tensor_size) {
-        APP_LOG_ERROR("Mismatch in input tensor size (" + std::to_string(expected_tensor_size) + 
-                      " bytes) and image.buffer->size (" + std::to_string(image.buffer->size) + 
-                      " bytes). This indicates an internal buffer management issue.");
-        std::abort();
+    
+    // Additional check: Ensure the buffer has sufficient capacity
+    if (image_buffer_capacity < expected_tensor_size) {
+        APP_LOG_ERROR("Image buffer capacity (" + std::to_string(image_buffer_capacity) + 
+                      " bytes) is less than required tensor size (" + std::to_string(expected_tensor_size) + 
+                      " bytes).");
+        throw std::runtime_error("Image buffer capacity (" + std::to_string(image_buffer_capacity) + 
+                      " bytes) is less than required tensor size (" + std::to_string(expected_tensor_size) + 
+                      " bytes).");
     }
 
     APP_LOG_DEBUG("Copying " + std::to_string(image.buffer->size) + " bytes from image buffer to input tensor.");

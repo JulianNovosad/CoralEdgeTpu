@@ -8,6 +8,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory> // For std::shared_ptr
+#include <zmq.hpp> // ZeroMQ C++ bindings
 
 /**
  * @brief Interface for an Orientation sensor module.
@@ -41,6 +42,12 @@ private:
     std::thread worker_thread_;
     mutable std::mutex orientation_data_mutex_; // Mutable to allow const get_latest_orientation_data to lock
     OrientationData latest_orientation_data_; // Store the latest orientation data
+    
+    // ZeroMQ sockets for receiving orientation data
+    std::unique_ptr<zmq::context_t> zmq_context_;
+    std::unique_ptr<zmq::socket_t> yaw_socket_;
+    std::unique_ptr<zmq::socket_t> pitch_socket_;
+    std::unique_ptr<zmq::socket_t> roll_socket_;
 };
 
 #endif // ORIENTATION_SENSOR_H
