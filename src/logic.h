@@ -4,12 +4,14 @@
 #include "pipeline_structs.h"
 #include "orientation_sensor.h"
 #include "config_loader.h" // Include de config loader
+#include "pca9685_controller.h" // PCA9685 LED controller
 #include <chrono>
 #include <thread>
 #include <vector>
 #include <atomic>
 #include <memory>
 #include <cmath>
+#include <zmq.hpp> // ZeroMQ C++ bindings
 
 // --- Nieuwe 3D Ballistiek Structuren ---
 
@@ -143,7 +145,7 @@ private:
     void perform_sensor_fusion(const OrientationData& imu_data);
     void calculate_ballistics_for_tracks(const OrientationData& imu_data);
     void perform_safety_and_actuation(const OrientationData& imu_data);
-
+    void send_telemetry_data(const std::string& telemetry_message);
 
     DetectionResultsQueue& detection_input_queue_;
     std::atomic<bool> running_ = false;
@@ -165,6 +167,18 @@ private:
     FallbackMode current_fallback_mode_ = NORMAL_OPERATION;
     long current_hit_scan_count_ = 0;
     long current_servo_command_count_ = 0;
+    
+    // ZeroMQ socket for sending telemetry data
+    std::unique_ptr<zmq::context_t> zmq_context_;
+    std::unique_ptr<zmq::socket_t> telemetry_socket_;
+    
+    // PCA9685 LED controller
+    std::unique_ptr<PCA9685Controller> led_controller_;
+    
+    // Servo control variables for thread safety
+    float servo_position_ = 0.0f;
+    bool servo_direction_ = true;
+    std::chrono::steady_clock::time_point last_direction_change_;
 
 };
 

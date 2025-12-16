@@ -4,6 +4,7 @@
 #include "orientation_sensor.h"
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <iostream> // Added for std::cerr/cout
 
 // --- Fysieke en wiskundige constanten ---
@@ -174,7 +175,10 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
       track_iou_threshold_(config.get_track_iou_threshold()),
       track_missed_frames_threshold_(config.get_track_missed_frames_threshold()),
       min_track_confidence_(config.get_min_track_confidence()),
-      current_fallback_mode_(NORMAL_OPERATION) {
+      current_fallback_mode_(NORMAL_OPERATION),
+      servo_position_(0.0f),
+      servo_direction_(true),
+      last_direction_change_(std::chrono::steady_clock::now()) {
     
     BallisticProfile profile = {
         .muzzle_velocity_mps = config.get_muzzle_velocity_mps(),
@@ -186,6 +190,19 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
         .temperature_c = config.get_temperature_c()
     };
     ballistics_solver_ = std::make_unique<BallisticsSolver>(profile);
+    
+    // Initialize ZeroMQ context for telemetry
+    zmq_context_ = std::make_unique<zmq::context_t>(1);
+    
+    // Initialize PCA9685 LED controller (bus 1, default address 0x40) with 333Hz for servo
+    led_controller_ = std::make_unique<PCA9685Controller>(1, 0x40);
+    if (!led_controller_->initialize(333)) {
+        APP_LOG_WARNING("Failed to initialize PCA9685 LED controller");
+    } else {
+        APP_LOG_INFO("PCA9685 LED controller initialized successfully");
+        // Set servo 0 to middle position as indicator that system is running
+        led_controller_->set_servo_position(0, 0.5f); // 50% position (middle)
+    }
 
     APP_LOG_INFO("LogicModule created with 3D Ballistics Solver, configured from file.");
 }
@@ -193,6 +210,22 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
 LogicModule::~LogicModule() { stop(); APP_LOG_INFO("LogicModule destroyed."); }
 bool LogicModule::start() {
     if (running_.exchange(true)) { APP_LOG_ERROR("LogicModule is already running."); return false; }
+    
+    try {
+        // Initialize ZeroMQ publisher socket for telemetry
+        telemetry_socket_ = std::make_unique<zmq::socket_t>(*zmq_context_, zmq::socket_type::pub);
+        
+        // Get telemetry configuration from config
+        std::string telemetry_address = config_.get_telemetry_pub_address();
+        telemetry_socket_->bind(telemetry_address);
+        
+        APP_LOG_INFO("LogicModule telemetry socket bound to: " + telemetry_address);
+    } catch (const std::exception& e) {
+        APP_LOG_ERROR("Failed to initialize telemetry socket: " + std::string(e.what()));
+        running_ = false;
+        return false;
+    }
+    
     worker_thread_ = std::thread(&LogicModule::worker_thread_func, this);
     APP_LOG_INFO("LogicModule started.");
     return true;
@@ -201,7 +234,28 @@ void LogicModule::stop() {
     if (running_.exchange(false)) {
         APP_LOG_INFO("Stopping LogicModule...");
         if (worker_thread_.joinable()) worker_thread_.join();
+        
+        // Clean up ZeroMQ sockets
+        telemetry_socket_.reset();
+        zmq_context_.reset();
+        
         APP_LOG_INFO("LogicModule stopped.");
+    }
+}
+
+void LogicModule::send_telemetry_data(const std::string& telemetry_message) {
+    if (!telemetry_socket_) {
+        APP_LOG_ERROR("Telemetry socket not initialized");
+        return;
+    }
+    
+    try {
+        zmq::message_t msg(telemetry_message.size());
+        memcpy(msg.data(), telemetry_message.c_str(), telemetry_message.size());
+        telemetry_socket_->send(msg, zmq::send_flags::none);
+        APP_LOG_DEBUG("Telemetry data sent: " + telemetry_message);
+    } catch (const std::exception& e) {
+        APP_LOG_ERROR("Failed to send telemetry data: " + std::string(e.what()));
     }
 }
 
@@ -339,14 +393,18 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 // Calculate impact point and send as telemetry instead of servo commands
                 if (predict_impact_point(track, imu_data, impact_point)) {
                     current_hit_scan_count_++; // Increment hit scan count
+                    
+                    // Issue servo commands to control LEDs
+                    issue_servo_commands(impact_point.x, impact_point.y, impact_point.z);
+                    
                     // Format the impact point as JSON for telemetry
                     // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
                     std::string telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
                                                     ", \"impact_point\": {\"x\": " + std::to_string(impact_point.x) +
                                                     ", \"y\": " + std::to_string(impact_point.y) +
                                                     ", \"z\": " + std::to_string(impact_point.z) + "}}";
-                    // In a real system, this telemetry_message would be sent over ZeroMQ to tcp://*:6000
-                    APP_LOG_INFO("Telemetry (simulated): Sending impact point data: " + telemetry_message);
+                    // Send telemetry data via ZeroMQ
+                    send_telemetry_data(telemetry_message);
                 }
                 break;
             case SAFETY_WARNING_UNCERTAINTY:
@@ -437,11 +495,46 @@ SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObj
     return SAFETY_OK;
 }
 
+
 void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z) {
-    char log_buffer[256];
-    snprintf(log_buffer, sizeof(log_buffer), "Issuing servo commands for target: (%.2f, %.2f, %.2f)", target_x, target_y, target_z);
-    APP_LOG_INFO(log_buffer);
+    // Controlled servo oscillation with 0.3s cooldown
+    if (led_controller_ && led_controller_->is_initialized()) {
+        // Oscillate servo 0 with precise timing control
+        auto current_time = std::chrono::steady_clock::now();
+        auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_direction_change_);
+        
+        // Change direction every 300ms (0.3 seconds)
+        if (elapsed_time.count() >= 300) {
+            if (servo_direction_) {
+                servo_position_ += 0.2f;  // Move 20% toward max
+                if (servo_position_ >= 1.0f) {
+                    servo_position_ = 1.0f;
+                    servo_direction_ = false;
+                }
+            } else {
+                servo_position_ -= 0.2f;  // Move 20% toward min
+                if (servo_position_ <= 0.0f) {
+                    servo_position_ = 0.0f;
+                    servo_direction_ = true;
+                }
+            }
+            
+            // Send command immediately when direction changes
+            led_controller_->set_servo_position(0, servo_position_);
+            last_direction_change_ = current_time;
+        }
+    }
+    
+    // Log only occasionally to reduce overhead
+    static int call_count = 0;
+    if (++call_count % 20 == 0) {  // Log every 20th call
+        char log_buffer[256];
+        snprintf(log_buffer, sizeof(log_buffer), "Servo actuated: (%.2f, %.2f, %.2f)", target_x, target_y, target_z);
+        APP_LOG_INFO(log_buffer);
+    }
+    
     current_servo_command_count_++; // Increment servo command count
 }
+
 
 void LogicModule::perform_sensor_fusion(const OrientationData& /*imu_data*/) { /* Implement sensor fusion logic */ }

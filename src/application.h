@@ -18,6 +18,10 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <map>
 
 /**
  * @brief Een applicatieklasse die de volledige CoralEdgeTpu-pijplijn beheert.
@@ -47,6 +51,15 @@ private:
     bool start_modules();
     void register_shutdown_handlers();
     void main_loop();
+    
+    // Recovery mechanisms
+    void recovery_thread_func();
+    bool restart_camera_subsystem();
+    bool restart_inference_subsystem();
+    bool restart_logic_subsystem();
+    bool restart_image_processor_subsystem();
+    bool restart_encoder_subsystem();
+    bool restart_orientation_subsystem();
     
     int argc_;
     char** argv_;
@@ -84,6 +97,15 @@ private:
     std::unique_ptr<LogicModule> logic_module_;
     std::unique_ptr<SystemMonitor> system_monitor_;
     std::unique_ptr<KeyboardMonitor> keyboard_monitor_;
+
+    // Recovery mechanisms
+    std::atomic<bool> recovery_running_{false};
+    std::thread recovery_thread_;
+    std::mutex recovery_mutex_;
+    
+    // Recovery counters for each subsystem
+    std::map<std::string, int> recovery_attempts_;
+    const int max_recovery_attempts_ = 5; // Maximum attempts per second
 
     std::vector<std::string> labels_;
 };

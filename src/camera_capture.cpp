@@ -287,9 +287,15 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
 CameraCapture::~CameraCapture() {
     stop();
     if (camera_manager_) {
-        camera_manager_->stop();
-        APP_LOG_INFO("Libcamera CameraManager stopped.");
+        try {
+            camera_manager_->stop();
+            APP_LOG_INFO("Libcamera CameraManager stopped.");
+        } catch (const std::exception& e) {
+            APP_LOG_ERROR("Exception while stopping CameraManager: " + std::string(e.what()));
+        }
     }
+    // Add a small delay to ensure resources are fully released
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
 
 /**
@@ -422,34 +428,73 @@ void CameraCapture::stop() {
     processing_running_ = false; // Signal processing thread to stop
     request_queue_cond_var_.notify_one(); // Wake up processing thread
 
-    if (request_processor_thread_.joinable()) {
-        request_processor_thread_.join(); // Wait for processing thread to finish
+    // Use try-catch blocks to ensure all cleanup steps are attempted even if some fail
+    try {
+        if (request_processor_thread_.joinable()) {
+            request_processor_thread_.join(); // Wait for processing thread to finish
+        }
+    } catch (const std::exception& e) {
+        APP_LOG_ERROR("Exception while joining request processor thread: " + std::string(e.what()));
     }
 
-    if (camera_) {
-        // 3. CRITICAL: Disconnect the callback first.
-        camera_->requestCompleted.disconnect(this, &CameraCapture::request_complete_callback);
+    try {
+        if (camera_) {
+            // 3. CRITICAL: Disconnect the callback first.
+            try {
+                camera_->requestCompleted.disconnect(this, &CameraCapture::request_complete_callback);
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("Exception while disconnecting callback: " + std::string(e.what()));
+            }
 
-        // 4. Stop the camera. This blocks until all pending requests return (flushing).
-        camera_->stop();
-        APP_LOG_INFO("Libcamera camera stopped.");
-        
-        camera_->release();
-        APP_LOG_INFO("Libcamera camera released.");
+            // 4. Stop the camera. This blocks until all pending requests return (flushing).
+            try {
+                camera_->stop();
+                APP_LOG_INFO("Libcamera camera stopped.");
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("Exception while stopping camera: " + std::string(e.what()));
+            }
+            
+            try {
+                camera_->release();
+                APP_LOG_INFO("Libcamera camera released.");
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("Exception while releasing camera: " + std::string(e.what()));
+            }
+        }
+    } catch (const std::exception& e) {
+        APP_LOG_ERROR("Exception in camera cleanup section: " + std::string(e.what()));
     }
     
     // 5. Free buffers
-    if (allocator_) {
-        if (video_stream_) allocator_->free(video_stream_);
-        if (tpu_stream_) allocator_->free(tpu_stream_);
-        allocator_.reset();
-        APP_LOG_INFO("Libcamera buffers freed.");
+    try {
+        if (allocator_) {
+            try {
+                if (video_stream_) allocator_->free(video_stream_);
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("Exception while freeing video stream buffers: " + std::string(e.what()));
+            }
+            
+            try {
+                if (tpu_stream_) allocator_->free(tpu_stream_);
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("Exception while freeing TPU stream buffers: " + std::string(e.what()));
+            }
+            
+            allocator_.reset();
+            APP_LOG_INFO("Libcamera buffers freed.");
+        }
+    } catch (const std::exception& e) {
+        APP_LOG_ERROR("Exception in buffer allocator cleanup: " + std::string(e.what()));
     }
     
     // 6. NOW it is safe to destroy the requests and camera shared_ptr.
-    requests_.clear(); // Explicit clear for Request objects
-    camera_.reset();
-    APP_LOG_INFO("Requests and camera pointer cleared.");
+    try {
+        requests_.clear(); // Explicit clear for Request objects
+        camera_.reset();
+        APP_LOG_INFO("Requests and camera pointer cleared.");
+    } catch (const std::exception& e) {
+        APP_LOG_ERROR("Exception while clearing requests or resetting camera: " + std::string(e.what()));
+    }
 
     APP_LOG_INFO("CameraCapture stopped.");
 }
