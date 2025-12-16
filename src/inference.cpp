@@ -170,6 +170,10 @@ void InferenceEngine::worker_thread_func() {
         return;
     }
     
+    // Counter for periodic delegate recreation
+    int inference_count = 0;
+    const int RECREATE_INTERVAL = 100; // Recreate delegate every 100 inferences (more aggressive)
+    
     ImageData input_image;
     while (running_) {
         auto total_loop_start = std::chrono::high_resolution_clock::now();
@@ -201,11 +205,44 @@ void InferenceEngine::worker_thread_func() {
 
             // 3. Invoke interpreter
             auto invoke_start_time = std::chrono::high_resolution_clock::now();
-            if (interpreter->Invoke() != kTfLiteOk) {
-                APP_LOG_ERROR("Failed to invoke interpreter. Skipping frame.");
-                continue;
-            }
+            TfLiteStatus invoke_status = interpreter->Invoke();
             auto invoke_end_time = std::chrono::high_resolution_clock::now();
+            
+            // Check if we need to recreate the interpreter due to delegate issues
+            if (invoke_status != kTfLiteOk) {
+                APP_LOG_ERROR("Failed to invoke interpreter with status: " + std::to_string(invoke_status) + ". Attempting to recreate interpreter.");
+                
+                // Try to recreate the interpreter with a fresh delegate
+                interpreter = create_interpreter();
+                if (!interpreter) {
+                    APP_LOG_ERROR("Worker thread failed to recreate interpreter. Exiting thread.");
+                    return;
+                }
+                APP_LOG_INFO("Successfully recreated interpreter with fresh delegate.");
+                
+                // Try inference again with the new interpreter
+                invoke_start_time = std::chrono::high_resolution_clock::now();
+                invoke_status = interpreter->Invoke();
+                invoke_end_time = std::chrono::high_resolution_clock::now();
+                
+                if (invoke_status != kTfLiteOk) {
+                    APP_LOG_ERROR("Failed to invoke interpreter even after recreation with status: " + std::to_string(invoke_status) + ". Skipping frame.");
+                    continue;
+                }
+            }
+            
+            // Periodically recreate the interpreter to prevent resource accumulation
+            inference_count++;
+            if (inference_count % RECREATE_INTERVAL == 0) {
+                APP_LOG_INFO("Periodically recreating interpreter to prevent resource accumulation. Inference count: " + std::to_string(inference_count));
+                interpreter = create_interpreter();
+                if (!interpreter) {
+                    APP_LOG_ERROR("Worker thread failed to recreate interpreter during periodic refresh. Exiting thread.");
+                    return;
+                }
+                APP_LOG_INFO("Successfully recreated interpreter during periodic refresh.");
+            }
+            
             long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(invoke_end_time - invoke_start_time).count();
             APP_LOG_DEBUG("InferenceEngine: Time to invoke interpreter (inference_done): " + std::to_string(duration_ms) + " ms");
             
@@ -253,31 +290,87 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
         return;
     }
 
-    int input_tensor_idx = interpreter->inputs()[0];
-    TfLiteTensor* input_tensor = interpreter->tensor(input_tensor_idx);
-
-    if (input_tensor->type != kTfLiteUInt8) {
-        APP_LOG_ERROR("Input tensor type is not kTfLiteUInt8 as expected. Current type: " + std::to_string(input_tensor->type) + ". Skipping frame.");
+    // Invariant checks before setting input tensor
+    // 1. Check that we have inputs
+    if (interpreter->inputs().size() == 0) {
+        APP_LOG_ERROR("Interpreter has no input tensors.");
         return;
     }
 
+    int input_tensor_idx = interpreter->inputs()[0];
+    TfLiteTensor* input_tensor = interpreter->tensor(input_tensor_idx);
+
+    // 2. Check tensor exists by index and name
+    if (!input_tensor) {
+        APP_LOG_ERROR("Input tensor at index " + std::to_string(input_tensor_idx) + " is null.");
+        return;
+    }
+
+    const char* tensor_name = input_tensor->name;
+    if (!tensor_name) {
+        APP_LOG_ERROR("Input tensor name is null.");
+        return;
+    }
+
+    std::string tensor_name_str(tensor_name);
+    APP_LOG_DEBUG("Input tensor name: " + tensor_name_str);
+    
+    // This is the critical check - the tensor name must match what the Edge TPU delegate expects
+    if (tensor_name_str != "normalized_input_image_tensor") {
+        APP_LOG_ERROR("Input tensor name mismatch. Expected: normalized_input_image_tensor, Actual: " + tensor_name_str);
+        // This is a critical invariant violation - abort to make it deterministic
+        std::abort();
+    }
+
+    // 3. Check tensor type
+    if (input_tensor->type != kTfLiteUInt8) {
+        APP_LOG_ERROR("Input tensor type is not kTfLiteUInt8 as expected. Current type: " + std::to_string(input_tensor->type) + ".");
+        std::abort();
+    }
+
+    // 4. Check tensor dimensions
+    if (input_tensor->dims->size != 4) {
+        APP_LOG_ERROR("Input tensor dimensions incorrect. Expected: 4D, Actual: " + std::to_string(input_tensor->dims->size) + "D");
+        std::abort();
+    }
+
+    // Log tensor information for debugging
+    APP_LOG_DEBUG("Input tensor index: " + std::to_string(input_tensor_idx));
+    APP_LOG_DEBUG("Input tensor name: " + tensor_name_str);
+    APP_LOG_DEBUG("Input tensor type: " + std::to_string(input_tensor->type));
+    APP_LOG_DEBUG("Input tensor dimensions: " + std::to_string(input_tensor->dims->size) + "D");
+    for (int i = 0; i < input_tensor->dims->size; i++) {
+        APP_LOG_DEBUG("  Dimension " + std::to_string(i) + ": " + std::to_string(input_tensor->dims->data[i]));
+    }
+
     uint8_t* tensor_data = interpreter->typed_input_tensor<uint8_t>(0);
+    
+    // 5. Check tensor data pointer is valid
+    if (!tensor_data) {
+        APP_LOG_ERROR("Input tensor data pointer is null.");
+        std::abort();
+    }
 
     // Validate buffer sizes before memcpy
     size_t expected_tensor_size = input_tensor->bytes;
     size_t image_buffer_actual_size = image.buffer->data.size(); // Use .data.size() for actual vector size
 
+    APP_LOG_DEBUG("Expected tensor size: " + std::to_string(expected_tensor_size) + " bytes");
+    APP_LOG_DEBUG("Image buffer actual size: " + std::to_string(image_buffer_actual_size) + " bytes");
+    APP_LOG_DEBUG("Image buffer->size: " + std::to_string(image.buffer->size) + " bytes");
+
+    // 6. Check buffer sizes match
     if (image_buffer_actual_size != expected_tensor_size) {
         APP_LOG_ERROR("Mismatch in input tensor size (" + std::to_string(expected_tensor_size) + 
                       " bytes) and image buffer size (" + std::to_string(image_buffer_actual_size) + 
-                      " bytes). Skipping frame to prevent memcpy crash.");
-        return;
+                      " bytes).");
+        std::abort();
     }
     if (image.buffer->size != expected_tensor_size) {
         APP_LOG_ERROR("Mismatch in input tensor size (" + std::to_string(expected_tensor_size) + 
                       " bytes) and image.buffer->size (" + std::to_string(image.buffer->size) + 
-                      " bytes). This indicates an internal buffer management issue. Skipping frame.");
-        return;
+                      " bytes). This indicates an internal buffer management issue.");
+        std::abort();
     }
 
     APP_LOG_DEBUG("Copying " + std::to_string(image.buffer->size) + " bytes from image buffer to input tensor.");
