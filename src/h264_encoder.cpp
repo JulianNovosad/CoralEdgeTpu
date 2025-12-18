@@ -14,6 +14,10 @@ H264Encoder::H264Encoder(ImageQueue& input_queue,
       fps_(fps),
       running_(false),
       encoder_(nullptr) {
+    // Initialize x264 structures
+    x264_param_default(&param_);
+    x264_picture_init(&picture_in_);
+    x264_picture_init(&picture_out_);
 }
 
 H264Encoder::~H264Encoder() {
@@ -69,63 +73,61 @@ void H264Encoder::worker_thread_func() {
 
     
 
-    // Initialize x264 parameters
+    // Initialize x264 parameters using member variable
 
-    x264_param_t param;
+    x264_param_default(&param_); // Start with sane defaults
 
-    x264_param_default(&param); // Start with sane defaults
-
-    x264_param_default_preset(&param, "ultrafast", "zerolatency");
+    x264_param_default_preset(&param_, "ultrafast", "zerolatency");
 
     
 
     // Configure input resolution and pixel format
 
-    param.i_width = width_;
+    param_.i_width = width_;
 
-    param.i_height = height_;
+    param_.i_height = height_;
 
-    param.i_fps_num = static_cast<int>(fps_);
+    param_.i_fps_num = static_cast<int>(fps_);
 
-    param.i_fps_den = 1;
+    param_.i_fps_den = 1;
 
-    param.i_keyint_max = static_cast<int>(fps_); // Keyframe every second
+    param_.i_keyint_max = static_cast<int>(fps_); // Keyframe every second
 
-    param.b_intra_refresh = 1; // IDR frames instead of full I-frames to help with seeking
+    param_.b_intra_refresh = 1; // IDR frames instead of full I-frames to help with seeking
 
     
 
     // Input pixel format (OpenCV uses BGR, but we convert to YUV420p for x264)
 
-        param.i_csp = X264_CSP_I420; 
+    param_.i_csp = X264_CSP_I420; 
 
     
 
-        // Stream parameters
+    // Stream parameters
 
-        param.i_threads = 1; // Simplify to 1 thread for debugging
+    param_.i_threads = 1; // Simplify to 1 thread for debugging
 
-        param.b_vfr_input = 0; // Constant frame rate
+    param_.b_vfr_input = 0; // Constant frame rate
 
-        param.b_repeat_headers = 1; // Repeat SPS/PPS before IDR frames
+    param_.b_repeat_headers = 1; // Repeat SPS/PPS before IDR frames
 
-        param.b_annexb = 1; // Annex B byte stream format
-
-    
-
-        // Apply profile and tune settings
-
-        x264_param_apply_profile(&param, "baseline"); // Baseline profile for broad compatibility
+    param_.b_annexb = 1; // Annex B byte stream format
 
     
 
-        // Simplify keyframe interval for debugging
+    // Apply profile and tune settings
 
-        param.i_keyint_max = static_cast<int>(fps_);
+    x264_param_apply_profile(&param_, "baseline"); // Baseline profile for broad compatibility
 
     
 
-        APP_LOG_INFO("H264Encoder: x264 parameters - width=" + std::to_string(param.i_width) +
+    // Simplify keyframe interval for debugging
+
+    param_.i_keyint_max = static_cast<int>(fps_);
+
+    
+
+    APP_LOG_INFO("H264Encoder: x264 parameters - width=" + std::to_string(param_.i_width) +
 
                  ", height=" + std::to_string(param.i_height) +
 
@@ -282,6 +284,4 @@ void H264Encoder::worker_thread_func() {
     }
     APP_LOG_INFO("H264Encoder worker thread stopped.");
 }
-
-
 
