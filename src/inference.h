@@ -5,6 +5,7 @@
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/kernels/register.h" // Required for BuiltinOpResolver
 #include "tensorflow/lite/c/common.h"       // Required for TfLiteDelegate
+#include "edgetpu_c.h"                      // Required for Edge TPU delegate functions
 
 #include <vector>
 #include <string>

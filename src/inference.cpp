@@ -6,17 +6,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
-
-// Edge TPU delegate C API functions
-extern "C" {
-    TfLiteDelegate* tflite_plugin_create_delegate(char** options_keys, char** options_values, size_t num_options, void (*report_error)(const char *));
-    void tflite_plugin_destroy_delegate(TfLiteDelegate* delegate);
-}
-
-// Custom error reporting function for the Edge TPU delegate
-void edgetpu_error_reporter(const char* msg) {
-    APP_LOG_ERROR("Edge TPU Delegate: " + std::string(msg));
-}
+#include "edgetpu.h"
 
 float InferenceEngine::get_tpu_temperature() {
     std::ifstream temp_file("/sys/class/apex/apex_0/temp");
@@ -62,6 +52,10 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
         throw std::runtime_error("Failed to load model: " + model_path_ + ". Please ensure the model path is correct and the file exists.");
     }
 
+    // Register Edge TPU custom op to allow loading models with Edge TPU operations
+    // even when the delegate is not available (fallback to CPU)
+    resolver_.AddCustom(edgetpu::kCustomOp, edgetpu::RegisterCustomOp());
+
     // Create a temporary interpreter for model inspection (e.g., getting dimensions).
     std::unique_ptr<tflite::Interpreter> interpreter;
     tflite::InterpreterBuilder(*model_, resolver_)(&interpreter);
@@ -88,20 +82,77 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
 
     // Create the Edge TPU delegate once for the entire InferenceEngine instance.
     APP_LOG_INFO("Edge TPU delegate creation starting...");
-    edgetpu_delegate_ = tflite_plugin_create_delegate(nullptr, nullptr, 0, edgetpu_error_reporter);
-    if (!edgetpu_delegate_) {
-        APP_LOG_ERROR("Edge TPU delegate creation failed (tflite_plugin_create_delegate returned nullptr).");
-        // Explicitly report error if delegate creation failed
-        edgetpu_error_reporter("tflite_plugin_create_delegate returned nullptr.");
-        throw std::runtime_error("Failed to create EdgeTPU delegate in constructor. Ensure libedgetpu1-std is installed and device is connected.");
+    
+    // List Edge TPU devices
+    size_t num_devices;
+    std::unique_ptr<edgetpu_device, decltype(&edgetpu_free_devices)> devices(
+        edgetpu_list_devices(&num_devices), &edgetpu_free_devices);
+    
+    APP_LOG_INFO("Found " + std::to_string(num_devices) + " Edge TPU devices.");
+    
+    if (num_devices > 0) {
+        // Use the first available device
+        const auto& device = devices.get()[0];
+        APP_LOG_INFO("Using Edge TPU device: " + std::string(device.path) + " (type: " + std::to_string(device.type) + ")");
+        
+        // Try to create delegate with options first
+        APP_LOG_INFO("Creating Edge TPU delegate with options...");
+        std::vector<edgetpu_option> options;
+        options.push_back({"verbose", "1"});
+        
+        edgetpu_delegate_ = edgetpu_create_delegate(
+            device.type, 
+            device.path,
+            options.data(), 
+            options.size());
+        
+        if (!edgetpu_delegate_) {
+            APP_LOG_ERROR("Edge TPU delegate creation failed with options.");
+            // Try without options
+            APP_LOG_INFO("Trying to create Edge TPU delegate without options...");
+            edgetpu_delegate_ = edgetpu_create_delegate(
+                device.type, 
+                device.path,
+                nullptr, 
+                0);
+                
+            if (!edgetpu_delegate_) {
+                APP_LOG_ERROR("Edge TPU delegate creation failed even without options.");
+                // Try with USB device type explicitly
+                APP_LOG_INFO("Trying to create Edge TPU delegate with USB device type...");
+                edgetpu_delegate_ = edgetpu_create_delegate(
+                    EDGETPU_APEX_USB, 
+                    device.path,
+                    nullptr, 
+                    0);
+                    
+                if (!edgetpu_delegate_) {
+                    APP_LOG_ERROR("Edge TPU delegate creation failed with USB device type.");
+                    APP_LOG_WARNING("Continuing without Edge TPU delegate. Inference will run on CPU.");
+                } else {
+                    APP_LOG_INFO("Edge TPU delegate created successfully with USB device type.");
+                }
+            } else {
+                APP_LOG_INFO("Edge TPU delegate created successfully without options.");
+            }
+        } else {
+            APP_LOG_INFO("Edge TPU delegate created successfully with options.");
+        }
+    } else {
+        APP_LOG_WARNING("No Edge TPU devices found. Inference will run on CPU.");
     }
-    APP_LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: " + std::to_string(reinterpret_cast<uintptr_t>(edgetpu_delegate_)));
+    
+    if (edgetpu_delegate_) {
+        APP_LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: " + std::to_string(reinterpret_cast<uintptr_t>(edgetpu_delegate_)));
+    } else {
+        APP_LOG_WARNING("Edge TPU delegate not available. Inference will run on CPU.");
+    }
 }
 
 InferenceEngine::~InferenceEngine() {
     stop();
     if (edgetpu_delegate_) {
-        tflite_plugin_destroy_delegate(edgetpu_delegate_);
+        edgetpu_free_delegate(edgetpu_delegate_);
         APP_LOG_INFO("Edge TPU delegate destroyed.");
     }
 }

@@ -23,6 +23,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/detector.dir/src/main.cpp.o.d"
   "CMakeFiles/detector.dir/src/orientation_sensor.cpp.o"
   "CMakeFiles/detector.dir/src/orientation_sensor.cpp.o.d"
+  "CMakeFiles/detector.dir/src/pca9685_controller.cpp.o"
+  "CMakeFiles/detector.dir/src/pca9685_controller.cpp.o.d"
   "CMakeFiles/detector.dir/src/system_monitor.cpp.o"
   "CMakeFiles/detector.dir/src/system_monitor.cpp.o.d"
   "CMakeFiles/detector.dir/src/util_logging.cpp.o"

@@ -77,9 +77,9 @@ The application follows a modular architecture with these key components:
 
 ### Key Data Structures
 - `DetectionResult` - Contains bounding box, class, and confidence information
-- `ImageBuffer` - Holds raw image data with metadata
+- `ImageData` - Holds raw image data with metadata using pooled buffers
 - `BallisticsData` - Contains trajectory and targeting information
-- Various queue types for inter-module communication
+- Various queue types for inter-module communication using lock-free SPSC queues
 
 ## Configuration
 
@@ -111,4 +111,26 @@ All modules log to timestamped CSV files in `/logs/<module>/` directories. Logs 
 4. All modules must gracefully handle shutdown signals
 5. Performance is critical - maintain ≥120 FPS for camera and TPU inference
 6. All inter-module communication uses lock-free queues where possible
-- Do not work aroud build.sh issues by building directly with `cmake` shell commands
+7. Do not work around build.sh issues by building directly with `cmake` shell commands
+
+## Stage-Gate Development Plan
+
+The project follows a 4-stage development plan:
+
+### Stage 0: Technical Feasibility & Performance Limits
+- Measure baseline throughput and latency of core subsystems
+- Requirements: ≥120 FPS for camera and TPU inference, no segfaults
+
+### Stage 1: System-wide C++ Implementation & Bottleneck Analysis
+- Implement all core real-time actions via `logic` module
+- Use mutex-based `ThreadSafeQueue` for synchronization
+- Requirements: No deadlocks, consistent performance with Stage 0
+
+### Stage 2: Full Integration & Zero-Copy Optimization
+- End-to-end pipeline with DMA-sharing buffers
+- Validate over 100,000 frames
+- Requirements: End-to-end latency <100ms, TPU throughput ≥90 FPS
+
+### Stage 3: Validation & Verification
+- 4-hour stress test and shooting range validation
+- Requirements: Stable E2E latency within 5% of nominal value

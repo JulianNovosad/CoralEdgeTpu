@@ -727,4 +727,5 @@ CMakeFiles/detector.dir/src/orientation_sensor.cpp.o: \
  /usr/include/boost/predef/version.h \
  /usr/include/boost/lockfree/lockfree_forward.hpp \
  /usr/include/c++/12/iostream \
- /usr/include/libcamera/libcamera/pixel_format.h
+ /usr/include/libcamera/libcamera/pixel_format.h /usr/include/zmq.hpp \
+ /usr/include/zmq.h /usr/include/c++/12/optional

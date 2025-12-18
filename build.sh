@@ -94,17 +94,19 @@ fi
 
 # 2. FlatBuffers v1.12.0 (clone, build, local install)
 echo "2. Building and installing FlatBuffers v1.12.0..."
-if [ ! -d "flatbuffers-src" ]; then
-    echo "Cloning FlatBuffers v1.12.0..."
-    git clone --branch v1.12.0 https://github.com/google/flatbuffers.git flatbuffers-src || {
-        echo "ERROR: Failed to clone FlatBuffers, trying alternative method..."
-        # Try shallow clone
-        git clone --branch v1.12.0 --depth 1 https://github.com/google/flatbuffers.git flatbuffers-src || {
-            echo "ERROR: Failed to clone FlatBuffers"
-            exit 1
-        }
+# Remove existing directories to ensure clean build
+rm -rf flatbuffers-src flatbuffers
+
+echo "Cloning FlatBuffers v1.12.0..."
+git clone --branch v1.12.0 https://github.com/google/flatbuffers.git flatbuffers-src || {
+    echo "ERROR: Failed to clone FlatBuffers, trying alternative method..."
+    # Try shallow clone
+    rm -rf flatbuffers-src
+    git clone --branch v1.12.0 --depth 1 https://github.com/google/flatbuffers.git flatbuffers-src || {
+        echo "ERROR: Failed to clone FlatBuffers"
+        exit 1
     }
-fi
+}
 
 cd flatbuffers-src
 echo "Configuring FlatBuffers..."
@@ -119,24 +121,25 @@ cmake --build build -j$(nproc) || {
 }
 cd ..
 
-mkdir -p flatbuffers
+mkdir -p flatbuffers/lib
 cp -r flatbuffers-src/include flatbuffers/
-cp -r flatbuffers-src/build/lib* flatbuffers/lib 2>/dev/null || true
+cp flatbuffers-src/build/libflatbuffers.a flatbuffers/lib/ || {
+    echo "ERROR: Failed to copy FlatBuffers library"
+    exit 1
+}
 
 # 3. CivetWeb (clone and copy)
 echo "3. Cloning and copying CivetWeb..."
-if [ ! -d "civetweb_temp" ]; then
-    echo "Cloning CivetWeb v1.16..."
-    git clone https://github.com/civetweb/civetweb.git --branch v1.16 --depth 1 civetweb_temp || {
-        echo "ERROR: Failed to clone CivetWeb"
-        exit 1
-    }
-else
-    echo "CivetWeb already cloned."
-fi
+# Remove existing directories to ensure clean setup
+rm -rf civetweb_temp civetweb
+
+echo "Cloning CivetWeb v1.16..."
+git clone https://github.com/civetweb/civetweb.git --branch v1.16 --depth 1 civetweb_temp || {
+    echo "ERROR: Failed to clone CivetWeb"
+    exit 1
+}
 
 # Ensure the target civetweb directory is clean before copying
-rm -rf civetweb/*
 mkdir -p civetweb/src
 mkdir -p civetweb/include
 
@@ -152,31 +155,24 @@ fi
 
 # 4. TensorFlow v2.5.0 checkout, patch, and build TFLite shared lib
 echo "4. Setting up TensorFlow Lite v2.5.0..."
-if [ ! -d "tensorflow_2.5.0" ]; then
-    echo "Cloning TensorFlow v2.5.0..."
-    git clone https://github.com/tensorflow/tensorflow.git tensorflow_2.5.0 || {
-        echo "ERROR: Failed to clone TensorFlow"
-        exit 1
-    }
-    cd tensorflow_2.5.0
-    git checkout v2.5.0 || {
-        echo "ERROR: Failed to checkout TensorFlow v2.5.0"
-        exit 1
-    }
-    cd ..
-else
-    echo "TensorFlow v2.5.0 already cloned. Ensuring correct version..."
-    cd tensorflow_2.5.0
-    git fetch origin 2>/dev/null || echo "WARNING: Failed to fetch TensorFlow updates"
-    git checkout v2.5.0 || {
-        echo "ERROR: Failed to checkout TensorFlow v2.5.0"
-        exit 1
-    }
-    cd ..
-fi
+# Remove existing directory to ensure clean setup
+rm -rf tensorflow_2.5.0
+
+echo "Cloning TensorFlow v2.5.0..."
+git clone https://github.com/tensorflow/tensorflow.git tensorflow_2.5.0 || {
+    echo "ERROR: Failed to clone TensorFlow"
+    exit 1
+}
+cd tensorflow_2.5.0
+git checkout v2.5.0 || {
+    echo "ERROR: Failed to checkout TensorFlow v2.5.0"
+    exit 1
+}
+cd ..
 
 # 5. Build final C++ app with CMake
 echo "5. Building final C++ application..."
+# Clean build directory
 rm -rf build
 mkdir -p build
 cd build

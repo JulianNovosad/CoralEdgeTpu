@@ -977,8 +977,9 @@ CMakeFiles/detector.dir/src/main.cpp.o: \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/verifier.h \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/mutable_op_resolver.h \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/kernels/register.h \
- /home/pi/CoralEdgeTpu/src/logic.h \
- /home/pi/CoralEdgeTpu/src/orientation_sensor.h \
+ /usr/include/edgetpu_c.h /home/pi/CoralEdgeTpu/src/logic.h \
+ /home/pi/CoralEdgeTpu/src/orientation_sensor.h /usr/include/zmq.hpp \
+ /usr/include/zmq.h /home/pi/CoralEdgeTpu/src/pca9685_controller.h \
  /home/pi/CoralEdgeTpu/src/system_monitor.h \
  /home/pi/CoralEdgeTpu/src/image_processor.h \
  /home/pi/CoralEdgeTpu/src/keyboard_monitor.h /usr/include/termios.h \

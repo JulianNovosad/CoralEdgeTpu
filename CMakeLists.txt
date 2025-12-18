@@ -53,6 +53,7 @@ add_executable(detector
     src/util_logging.cpp
     src/config_loader.cpp
     src/logic.cpp
+    src/pca9685_controller.cpp
 
     src/h264_encoder.cpp
     src/orientation_sensor.cpp

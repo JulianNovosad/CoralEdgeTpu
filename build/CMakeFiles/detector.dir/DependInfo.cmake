@@ -20,6 +20,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/pi/CoralEdgeTpu/src/logic.cpp" "CMakeFiles/detector.dir/src/logic.cpp.o" "gcc" "CMakeFiles/detector.dir/src/logic.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/main.cpp" "CMakeFiles/detector.dir/src/main.cpp.o" "gcc" "CMakeFiles/detector.dir/src/main.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/orientation_sensor.cpp" "CMakeFiles/detector.dir/src/orientation_sensor.cpp.o" "gcc" "CMakeFiles/detector.dir/src/orientation_sensor.cpp.o.d"
+  "/home/pi/CoralEdgeTpu/src/pca9685_controller.cpp" "CMakeFiles/detector.dir/src/pca9685_controller.cpp.o" "gcc" "CMakeFiles/detector.dir/src/pca9685_controller.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/system_monitor.cpp" "CMakeFiles/detector.dir/src/system_monitor.cpp.o" "gcc" "CMakeFiles/detector.dir/src/system_monitor.cpp.o.d"
   "/home/pi/CoralEdgeTpu/src/util_logging.cpp" "CMakeFiles/detector.dir/src/util_logging.cpp.o" "gcc" "CMakeFiles/detector.dir/src/util_logging.cpp.o.d"
   )

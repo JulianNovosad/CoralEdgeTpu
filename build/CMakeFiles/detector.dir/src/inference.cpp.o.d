@@ -242,7 +242,8 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/verifier.h \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/mutable_op_resolver.h \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/kernels/register.h \
- /usr/include/c++/12/thread /usr/include/c++/12/bits/std_thread.h \
+ /usr/include/edgetpu_c.h /usr/include/c++/12/thread \
+ /usr/include/c++/12/bits/std_thread.h \
  /usr/include/c++/12/bits/this_thread_sleep.h \
  /usr/include/c++/12/bits/chrono.h /usr/include/c++/12/ratio \
  /usr/include/c++/12/ctime /usr/include/c++/12/bits/parse_numbers.h \
@@ -780,4 +781,5 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /usr/include/boost/predef/version.h \
  /usr/include/boost/lockfree/lockfree_forward.hpp \
  /usr/include/c++/12/iostream \
- /usr/include/libcamera/libcamera/pixel_format.h
+ /usr/include/libcamera/libcamera/pixel_format.h /usr/include/edgetpu.h \
+ /home/pi/CoralEdgeTpu/include/tensorflow/lite/context.h

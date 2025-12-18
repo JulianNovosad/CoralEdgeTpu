@@ -446,6 +446,30 @@ src/orientation_sensor.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/orientation_sensor.cpp.s
 .PHONY : src/orientation_sensor.cpp.s
 
+src/pca9685_controller.o: src/pca9685_controller.cpp.o
+.PHONY : src/pca9685_controller.o
+
+# target to build an object file
+src/pca9685_controller.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.o
+.PHONY : src/pca9685_controller.cpp.o
+
+src/pca9685_controller.i: src/pca9685_controller.cpp.i
+.PHONY : src/pca9685_controller.i
+
+# target to preprocess a source file
+src/pca9685_controller.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.i
+.PHONY : src/pca9685_controller.cpp.i
+
+src/pca9685_controller.s: src/pca9685_controller.cpp.s
+.PHONY : src/pca9685_controller.s
+
+# target to generate assembly for a file
+src/pca9685_controller.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.s
+.PHONY : src/pca9685_controller.cpp.s
+
 src/system_monitor.o: src/system_monitor.cpp.o
 .PHONY : src/system_monitor.o
 
@@ -592,6 +616,9 @@ help:
 	@echo "... src/orientation_sensor.o"
 	@echo "... src/orientation_sensor.i"
 	@echo "... src/orientation_sensor.s"
+	@echo "... src/pca9685_controller.o"
+	@echo "... src/pca9685_controller.i"
+	@echo "... src/pca9685_controller.s"
 	@echo "... src/system_monitor.o"
 	@echo "... src/system_monitor.i"
 	@echo "... src/system_monitor.s"

@@ -770,4 +770,5 @@ CMakeFiles/detector.dir/src/logic.cpp.o: \
  /usr/include/boost/predef/version.h \
  /usr/include/boost/lockfree/lockfree_forward.hpp \
  /usr/include/c++/12/iostream \
- /home/pi/CoralEdgeTpu/src/orientation_sensor.h
+ /home/pi/CoralEdgeTpu/src/orientation_sensor.h /usr/include/zmq.hpp \
+ /usr/include/zmq.h /home/pi/CoralEdgeTpu/src/pca9685_controller.h
