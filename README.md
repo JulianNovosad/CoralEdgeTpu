@@ -1,8 +1,79 @@
+---
+# Avant-garde M1-Delta Mk II Wapenveiligheidssysteem
+
+Dit project bevat de broncode en documentatie voor het **Avant-garde M1-Delta Mk II**, een geavanceerd vuurleidings- en veiligheidssysteem ontwikkeld als profielwerkstuk (PWS).
+
+## Wat is het?
+
+Het Avant-garde systeem is een compact, *real-time* computerplatform dat op een wapen (of replica/airsoft) gemonteerd kan worden. Het koppelt AI-objectherkenning aan ballistische modellering om de veiligheid en nauwkeurigheid van de gebruiker te verhogen.
+
+Het systeem fungeert als een "slimme beveiliging": het blokkeert de trekker fysiek en geeft deze alleen vrij wanneer de gebruiker op een gevalideerd doelwit mikt en de raakkans >90% is.
+
+## Wat doet het?
+
+Het systeem voert continu de volgende taken uit in een *high-performance* loop:
+
+* 
+**Doeldetectie:** Herkent specifieke schietschijven met behulp van een zelf-getraind *MobileNetSSD* model (INT8 quantized).
+
+
+* **Safety Gating:** Een servomotor blokkeert de trekker. Het systeem deblokkeert alleen als het ballistische raakpunt binnen de 'bullseye' (13x13cm) valt.
+
+
+* 
+**Ballistische Berekeningen:** Berekent het inslagpunt op basis van afstand, kogelbaan en sensordata.
+
+
+* 
+**Feedback:** Streamt video met *augmented reality* overlay (bounding boxes, status) naar een Android-app.
+
+
+
+## Hoe doet hij het?
+
+Het systeem is ontworpen met een extreem strak **latency-budget**.
+
+### Latency Budget & Prestaties
+
+De harde eis voor de totale *end-to-end* latentie (van foton tot servobeweging) is **<100 ms**.
+
+* 
+**Actuatie-vertraging:** De mechanische servomotor heeft een gemeten gemiddelde reactietijd van **70 ms**.
+
+
+* **Software-budget:** Dit laat slechts **30 ms** over voor de volledige software-pipeline (camera capture, AI-inferentie, ballistiek en logica).
+
+Om dit budget te halen, zijn de volgende optimalisaties toegepast:
+
+### Software Architectuur (Plan Delta)
+
+De software is geschreven in **C++** zonder runtime-overhead (geen Python/Containers in productie).
+
+* 
+**Zero-Copy Pipelines:** Gebruik van DMA-buffers en `memfd` om data tussen Camera, TPU en Display te delen zonder CPU-kopieerslagen.
+
+
+* 
+**Custom Kernel:** Een handmatig gepatched Linux Kernel (6.6.51+) om 128 MSI-X interrupts te forceren voor de Coral TPU.
+
+
+* 
+**CPU Isolatie:** Kritieke processen draaien op geisoleerde CPU-cores om *jitter* te minimaliseren.
+
+
+
+### Hardware
+
+* **Compute:** Raspberry Pi 5.
+* **AI:** Google Coral M.2 Edge TPU (PCIe).
+* 
+**Actuatie:** MG995 Servo via PCA9685 PWM-driver.
+
+
 
 ---
 
-```markdown
-## Stage-Gate Plan (Full)
+### STAGE GATE PLAN
 
 ### Stage 0: Technische haalbaarheid & prestatiegrenzen
 
