@@ -1,0 +1,450 @@
+Starting build process...
+1. Installing required packages...
+Updating package lists...
+Hit:1 http://deb.debian.org/debian bookworm InRelease
+Hit:2 http://deb.debian.org/debian-security bookworm-security InRelease
+Hit:3 http://archive.raspberrypi.com/debian bookworm InRelease
+Hit:4 http://deb.debian.org/debian bookworm-updates InRelease
+Hit:5 https://storage.googleapis.com/bazel-apt stable InRelease
+Hit:6 https://deb.nodesource.com/node_22.x nodistro InRelease
+Hit:7 https://packages.cloud.google.com/apt coral-edgetpu-stable InRelease
+Reading package lists...
+W: Skipping acquire of configured file 'main/binary-arm64/Packages' as repository 'https://storage.googleapis.com/bazel-apt stable InRelease' doesn't have the component 'main' (component misspelt in sources.list?)
+W: Skipping acquire of configured file 'main/i18n/Translation-en_GB' as repository 'https://storage.googleapis.com/bazel-apt stable InRelease' doesn't have the component 'main' (component misspelt in sources.list?)
+W: Skipping acquire of configured file 'main/i18n/Translation-en' as repository 'https://storage.googleapis.com/bazel-apt stable InRelease' doesn't have the component 'main' (component misspelt in sources.list?)
+W: https://packages.cloud.google.com/apt/dists/coral-edgetpu-stable/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+Package lists updated successfully
+Installing build essentials (build-essential)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+build-essential is already the newest version (12.9).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed build essentials
+Installing CMake (cmake)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+cmake is already the newest version (3.25.1-1).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed CMake
+Installing pkg-config (pkg-config)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+pkg-config is already the newest version (1.8.1-1).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed pkg-config
+Installing libcamera development files (libcamera-dev)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libcamera-dev is already the newest version (0.5.2+rpt20250903-1~bpo12+1).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed libcamera development files
+Installing ZeroMQ development files (libzmq3-dev)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libzmq3-dev is already the newest version (4.3.4-6).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed ZeroMQ development files
+Installing JPEG development files (libjpeg-dev)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libjpeg-dev is already the newest version (1:2.1.5-2).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed JPEG development files
+Installing OpenCV development files (libopencv-dev)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libopencv-dev is already the newest version (4.6.0+dfsg-12).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed OpenCV development files
+Installing x264 development files (libx264-dev)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libx264-dev is already the newest version (2:0.164.3095+gitbaee400-3).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Successfully installed x264 development files
+Installing EdgeTPU runtime (optional)...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+libedgetpu-dev is already the newest version (16.0).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libc++1-16 libc++abi1-16 libgroupsock8
+  liblivemedia77 libunwind-16 libvncclient1 libwlroots12 vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 27 not upgraded.
+Checking for EdgeTPU devices and libraries...
+NOTE: libedgetpu not found in /usr/lib
+crw-rw----  1 root apex    120,   0 Dec 18 21:53 apex_0
+Setting up EdgeTPU library symlinks...
+Successfully created Edge TPU library symlinks
+2. Building and installing FlatBuffers v1.12.0...
+Cloning FlatBuffers v1.12.0...
+Cloning into 'flatbuffers-src'...
+Note: switching to '6df40a2471737b27271bdd9b900ab5f3aec746c7'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Configuring FlatBuffers...
+-- The C compiler identification is GNU 12.2.0
+-- The CXX compiler identification is GNU 12.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Looking for strtof_l
+-- Looking for strtof_l - found
+-- Looking for strtoull_l
+-- Looking for strtoull_l - found
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/pi/CoralEdgeTpu/flatbuffers-src/build
+Building FlatBuffers...
+[  8%] Building CXX object CMakeFiles/flatbuffers.dir/src/idl_parser.cpp.o
+[  8%] Building CXX object CMakeFiles/flatbuffers.dir/src/idl_gen_text.cpp.o
+[  8%] Building CXX object CMakeFiles/flatc.dir/src/idl_parser.cpp.o
+[ 11%] Building CXX object CMakeFiles/flathash.dir/src/flathash.cpp.o
+[ 13%] Linking CXX executable flathash
+[ 13%] Built target flathash
+[ 16%] Building CXX object CMakeFiles/flatbuffers.dir/src/reflection.cpp.o
+[ 19%] Building CXX object CMakeFiles/flatbuffers.dir/src/util.cpp.o
+[ 22%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_text.cpp.o
+[ 25%] Building CXX object CMakeFiles/flatc.dir/src/reflection.cpp.o
+[ 27%] Building CXX object CMakeFiles/flatc.dir/src/util.cpp.o
+[ 30%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_cpp.cpp.o
+[ 33%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_csharp.cpp.o
+[ 36%] Linking CXX static library libflatbuffers.a
+[ 38%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_dart.cpp.o
+[ 38%] Built target flatbuffers
+[ 41%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_kotlin.cpp.o
+[ 44%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_java.cpp.o
+[ 47%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_go.cpp.o
+[ 50%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_js_ts.cpp.o
+[ 52%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_php.cpp.o
+[ 55%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_python.cpp.o
+[ 58%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_lobster.cpp.o
+[ 61%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_lua.cpp.o
+[ 69%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_grpc.cpp.o
+[ 69%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_rust.cpp.o
+[ 66%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_fbs.cpp.o
+[ 72%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_json_schema.cpp.o
+[ 75%] Building CXX object CMakeFiles/flatc.dir/src/idl_gen_swift.cpp.o
+[ 77%] Building CXX object CMakeFiles/flatc.dir/src/flatc.cpp.o
+[ 80%] Building CXX object CMakeFiles/flatc.dir/src/flatc_main.cpp.o
+[ 83%] Building CXX object CMakeFiles/flatc.dir/src/code_generators.cpp.o
+[ 86%] Building CXX object CMakeFiles/flatc.dir/grpc/src/compiler/cpp_generator.cc.o
+[ 88%] Building CXX object CMakeFiles/flatc.dir/grpc/src/compiler/go_generator.cc.o
+[ 91%] Building CXX object CMakeFiles/flatc.dir/grpc/src/compiler/java_generator.cc.o
+[ 94%] Building CXX object CMakeFiles/flatc.dir/grpc/src/compiler/python_generator.cc.o
+[ 97%] Building CXX object CMakeFiles/flatc.dir/grpc/src/compiler/swift_generator.cc.o
+[100%] Linking CXX executable flatc
+[100%] Built target flatc
+3. Cloning and copying CivetWeb...
+Cloning CivetWeb v1.16...
+Cloning into 'civetweb_temp'...
+Note: switching to 'd7ba35bbb649209c66e582d5a0244ba988a15159'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Successfully copied CivetWeb files
+4. Setting up TensorFlow Lite v2.5.0...
+TensorFlow directory exists, checking version and integrity...
+TensorFlow v2.5.0 already cloned and verified.
+Skipping TensorFlow download - valid version already exists
+5. Building final C++ application...
+Configuring with CMake...
+-- The CXX compiler identification is GNU 12.2.0
+-- The C compiler identification is GNU 12.2.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found PkgConfig: /usr/bin/pkg-config (found version "1.8.1") 
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Checking for module 'libzmq'
+--   Found libzmq, version 4.3.4
+-- Found ZeroMQ: zmq
+-- Found GTest: /usr/lib/aarch64-linux-gnu/cmake/GTest/GTestConfig.cmake (found version "1.12.1")  
+-- Checking for module 'libcamera'
+--   Found libcamera, version 0.5.2
+-- Found libcamera: camera;camera-base
+-- Checking for module 'libjpeg'
+--   Found libjpeg, version 2.1.5
+-- Found OpenCV: /usr (found version "4.6.0") 
+-- Found libjpeg: jpeg
+-- Found OpenCV: opencv_calib3d;opencv_core;opencv_dnn;opencv_features2d;opencv_flann;opencv_highgui;opencv_imgcodecs;opencv_imgproc;opencv_ml;opencv_objdetect;opencv_photo;opencv_stitching;opencv_video;opencv_videoio;opencv_alphamat;opencv_aruco;opencv_barcode;opencv_bgsegm;opencv_bioinspired;opencv_ccalib;opencv_cvv;opencv_datasets;opencv_dnn_objdetect;opencv_dnn_superres;opencv_dpm;opencv_face;opencv_freetype;opencv_fuzzy;opencv_hdf;opencv_hfs;opencv_img_hash;opencv_intensity_transform;opencv_line_descriptor;opencv_mcc;opencv_optflow;opencv_phase_unwrapping;opencv_plot;opencv_quality;opencv_rapid;opencv_reg;opencv_rgbd;opencv_saliency;opencv_shape;opencv_stereo;opencv_structured_light;opencv_superres;opencv_surface_matching;opencv_text;opencv_tracking;opencv_videostab;opencv_viz;opencv_wechat_qrcode;opencv_ximgproc;opencv_xobjdetect;opencv_xphoto
+-- Found x264: x264
+-- Target 'detector' configured. Ready to build.
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/pi/CoralEdgeTpu/build
+Compiling with make...
+[ 13%] Building CXX object CMakeFiles/config_loader_test.dir/src/config_loader.cpp.o
+[ 13%] Building CXX object CMakeFiles/config_loader_test.dir/tests/config_loader_test.cpp.o
+[ 13%] Building CXX object CMakeFiles/detector.dir/src/main.cpp.o
+[ 18%] Building CXX object CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o
+[ 22%] Linking CXX executable dlopen_test
+[ 22%] Built target dlopen_test
+[ 27%] Building CXX object CMakeFiles/config_loader_test.dir/src/util_logging.cpp.o
+[ 31%] Building CXX object CMakeFiles/detector.dir/src/application.cpp.o
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:37,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:4,
+                 from /home/pi/CoralEdgeTpu/src/application.h:8,
+                 from /home/pi/CoralEdgeTpu/src/main.cpp:1:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::EndEvent(uint32_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:34: warning: unused parameter ‘event_handle’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:56: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                                                ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:74:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   74 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::AddEvent(const char*, EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:37: warning: unused parameter ‘tag’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                         ~~~~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:52: warning: unused parameter ‘event_type’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                          ~~~~~~~~~~^~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:73: warning: unused parameter ‘start’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                                                ~~~~~~~~~^~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:34: warning: unused parameter ‘end’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:47: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                                       ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:93:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   93 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+[ 36%] Building CXX object CMakeFiles/detector.dir/src/camera_capture.cpp.o
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:38:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual uint32_t tflite::Subgraph::SubgraphAwareProfiler::BeginEvent(const char*, tflite::Profiler::EventType, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:370:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  370 |                         int64_t event_metadata2) override {
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual void tflite::Subgraph::SubgraphAwareProfiler::AddEvent(const char*, tflite::Profiler::EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:389:27: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  389 |                   int64_t event_metadata2) override {
+      |                   ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter_builder.h:28,
+                 from /home/pi/CoralEdgeTpu/include/tensorflow/lite/model.h:21,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:5:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h: In member function ‘virtual tflite::OpResolver::TfLiteDelegatePtrVector tflite::OpResolver::GetDelegates(int) const’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h:44:52: warning: unused parameter ‘num_threads’ [-Wunused-parameter]
+   44 |   virtual TfLiteDelegatePtrVector GetDelegates(int num_threads) const {
+      |                                                ~~~~^~~~~~~~~~~
+[ 40%] Linking CXX executable config_loader_test
+[ 40%] Built target config_loader_test
+[ 45%] Building CXX object CMakeFiles/detector.dir/src/inference.cpp.o
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:37,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:4,
+                 from /home/pi/CoralEdgeTpu/src/inference.cpp:1:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::EndEvent(uint32_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:34: warning: unused parameter ‘event_handle’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:56: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                                                ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:74:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   74 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::AddEvent(const char*, EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:37: warning: unused parameter ‘tag’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                         ~~~~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:52: warning: unused parameter ‘event_type’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                          ~~~~~~~~~~^~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:73: warning: unused parameter ‘start’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                                                ~~~~~~~~~^~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:34: warning: unused parameter ‘end’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:47: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                                       ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:93:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   93 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:38:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual uint32_t tflite::Subgraph::SubgraphAwareProfiler::BeginEvent(const char*, tflite::Profiler::EventType, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:370:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  370 |                         int64_t event_metadata2) override {
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual void tflite::Subgraph::SubgraphAwareProfiler::AddEvent(const char*, tflite::Profiler::EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:389:27: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  389 |                   int64_t event_metadata2) override {
+      |                   ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:37,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:4,
+                 from /home/pi/CoralEdgeTpu/src/application.h:8,
+                 from /home/pi/CoralEdgeTpu/src/application.cpp:1:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::EndEvent(uint32_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:34: warning: unused parameter ‘event_handle’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:73:56: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   73 |   virtual void EndEvent(uint32_t event_handle, int64_t event_metadata1,
+      |                                                ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:74:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   74 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h: In member function ‘virtual void tflite::Profiler::AddEvent(const char*, EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:37: warning: unused parameter ‘tag’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                         ~~~~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:52: warning: unused parameter ‘event_type’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                          ~~~~~~~~~~^~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:91:73: warning: unused parameter ‘start’ [-Wunused-parameter]
+   91 |   virtual void AddEvent(const char* tag, EventType event_type, uint64_t start,
+      |                                                                ~~~~~~~~~^~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:34: warning: unused parameter ‘end’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                         ~~~~~~~~~^~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:92:47: warning: unused parameter ‘event_metadata1’ [-Wunused-parameter]
+   92 |                         uint64_t end, int64_t event_metadata1,
+      |                                       ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/profiler.h:93:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+   93 |                         int64_t event_metadata2) {}
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter.h:38:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual uint32_t tflite::Subgraph::SubgraphAwareProfiler::BeginEvent(const char*, tflite::Profiler::EventType, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:370:33: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  370 |                         int64_t event_metadata2) override {
+      |                         ~~~~~~~~^~~~~~~~~~~~~~~
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h: In member function ‘virtual void tflite::Subgraph::SubgraphAwareProfiler::AddEvent(const char*, tflite::Profiler::EventType, uint64_t, uint64_t, int64_t, int64_t)’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/subgraph.h:389:27: warning: unused parameter ‘event_metadata2’ [-Wunused-parameter]
+  389 |                   int64_t event_metadata2) override {
+      |                   ~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter_builder.h:28,
+                 from /home/pi/CoralEdgeTpu/include/tensorflow/lite/model.h:21,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:5:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h: In member function ‘virtual tflite::OpResolver::TfLiteDelegatePtrVector tflite::OpResolver::GetDelegates(int) const’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h:44:52: warning: unused parameter ‘num_threads’ [-Wunused-parameter]
+   44 |   virtual TfLiteDelegatePtrVector GetDelegates(int num_threads) const {
+      |                                                ~~~~^~~~~~~~~~~
+[ 50%] Building CXX object CMakeFiles/detector.dir/src/image_processor.cpp.o
+In file included from /home/pi/CoralEdgeTpu/include/tensorflow/lite/interpreter_builder.h:28,
+                 from /home/pi/CoralEdgeTpu/include/tensorflow/lite/model.h:21,
+                 from /home/pi/CoralEdgeTpu/src/inference.h:5:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h: In member function ‘virtual tflite::OpResolver::TfLiteDelegatePtrVector tflite::OpResolver::GetDelegates(int) const’:
+/home/pi/CoralEdgeTpu/include/tensorflow/lite/core/api/op_resolver.h:44:52: warning: unused parameter ‘num_threads’ [-Wunused-parameter]
+   44 |   virtual TfLiteDelegatePtrVector GetDelegates(int num_threads) const {
+      |                                                ~~~~^~~~~~~~~~~
+[ 54%] Building CXX object CMakeFiles/detector.dir/src/util_logging.cpp.o
+[ 59%] Building CXX object CMakeFiles/detector.dir/src/config_loader.cpp.o
+[ 63%] Building CXX object CMakeFiles/detector.dir/src/logic.cpp.o
+[ 68%] Building CXX object CMakeFiles/detector.dir/src/pca9685_controller.cpp.o
+[ 72%] Building CXX object CMakeFiles/detector.dir/src/h264_encoder.cpp.o
+[ 77%] Building CXX object CMakeFiles/detector.dir/src/orientation_sensor.cpp.o
+[ 81%] Building CXX object CMakeFiles/detector.dir/src/application_supervisor.cpp.o
+[ 86%] Building CXX object CMakeFiles/detector.dir/src/system_monitor.cpp.o
+[ 90%] Building CXX object CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o
+[ 95%] Building C object CMakeFiles/detector.dir/civetweb/src/civetweb.c.o
+[100%] Linking CXX executable detector
+[100%] Built target detector
+Build process completed successfully!

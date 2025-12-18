@@ -129,17 +129,17 @@ void H264Encoder::worker_thread_func() {
 
     APP_LOG_INFO("H264Encoder: x264 parameters - width=" + std::to_string(param_.i_width) +
 
-                 ", height=" + std::to_string(param.i_height) +
+                 ", height=" + std::to_string(param_.i_height) +
 
-                 ", csp=" + std::to_string(param.i_csp) +
+                 ", csp=" + std::to_string(param_.i_csp) +
 
-                 ", fps_num=" + std::to_string(param.i_fps_num) +
+                 ", fps_num=" + std::to_string(param_.i_fps_num) +
 
-                 ", fps_den=" + std::to_string(param.i_fps_den) +
+                 ", fps_den=" + std::to_string(param_.i_fps_den) +
 
-                 ", keyint_max=" + std::to_string(param.i_keyint_max) +
+                 ", keyint_max=" + std::to_string(param_.i_keyint_max) +
 
-                 ", threads=" + std::to_string(param.i_threads));
+                 ", threads=" + std::to_string(param_.i_threads));
 
     
 
@@ -147,7 +147,7 @@ void H264Encoder::worker_thread_func() {
 
         // Open the encoder
 
-        encoder_ = x264_encoder_open(&param); 
+        encoder_ = x264_encoder_open(&param_); 
 
         if (!encoder_) {
 
@@ -167,7 +167,7 @@ void H264Encoder::worker_thread_func() {
 
                 // Allocate pictures
 
-                if (x264_picture_alloc(&picture_in_, param.i_csp, param.i_width, param.i_height) < 0) {
+                if (x264_picture_alloc(&picture_in_, param_.i_csp, param_.i_width, param_.i_height) < 0) {
 
                     APP_LOG_ERROR("H264Encoder: Failed to allocate x264 picture_in_.");
 
@@ -284,4 +284,3 @@ void H264Encoder::worker_thread_func() {
     }
     APP_LOG_INFO("H264Encoder worker thread stopped.");
 }
-

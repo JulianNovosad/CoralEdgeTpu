@@ -155,32 +155,46 @@ fi
 
 # 4. TensorFlow v2.5.0 checkout, patch, and build TFLite shared lib
 echo "4. Setting up TensorFlow Lite v2.5.0..."
+TF_VALID=false
+
 # Check if TensorFlow is already cloned and has the correct version
 if [ -d "tensorflow_2.5.0" ]; then
-    echo "TensorFlow directory exists, checking version..."
-    cd tensorflow_2.5.0
-    # Check if it's a git repository and has the correct tag
-    if git rev-parse --git-dir > /dev/null 2>&1; then
-        CURRENT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "none")
-        if [ "$CURRENT_TAG" = "v2.5.0" ]; then
-            echo "TensorFlow v2.5.0 already cloned and verified."
-            cd ..
+    echo "TensorFlow directory exists, checking version and integrity..."
+    if [ -d "tensorflow_2.5.0/.git" ]; then
+        cd tensorflow_2.5.0
+        # Check if it's a git repository and has the correct tag
+        if git rev-parse --git-dir > /dev/null 2>&1; then
+            CURRENT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "none")
+            if [ "$CURRENT_TAG" = "v2.5.0" ]; then
+                # Additional check: verify that key files exist and the repository is not corrupted
+                if [ -f "tensorflow/lite/BUILD" ] && [ -f "WORKSPACE" ]; then
+                    echo "TensorFlow v2.5.0 already cloned and verified."
+                    TF_VALID=true
+                else
+                    echo "TensorFlow directory exists but appears to be corrupted (missing key files)"
+                fi
+            else
+                echo "TensorFlow directory exists but is not v2.5.0 (found tag: $CURRENT_TAG)"
+            fi
         else
-            echo "TensorFlow directory exists but is not v2.5.0, removing and re-cloning..."
-            cd ..
-            rm -rf tensorflow_2.5.0
+            echo "TensorFlow directory exists but is not a valid git repository"
         fi
-    else
-        echo "TensorFlow directory exists but is not a git repository, removing and re-cloning..."
         cd ..
+    else
+        echo "TensorFlow directory exists but is not a git repository"
+    fi
+    
+    # If TF is not valid, remove it
+    if [ "$TF_VALID" = "false" ]; then
+        echo "Removing existing TensorFlow directory..."
         rm -rf tensorflow_2.5.0
     fi
 else
-    echo "TensorFlow directory does not exist, cloning..."
+    echo "TensorFlow directory does not exist"
 fi
 
-# Clone TensorFlow v2.5.0 if directory doesn't exist
-if [ ! -d "tensorflow_2.5.0" ]; then
+# Clone TensorFlow v2.5.0 if needed
+if [ "$TF_VALID" = "false" ]; then
     echo "Cloning TensorFlow v2.5.0..."
     git clone https://github.com/tensorflow/tensorflow.git tensorflow_2.5.0 || {
         echo "ERROR: Failed to clone TensorFlow"
@@ -192,6 +206,8 @@ if [ ! -d "tensorflow_2.5.0" ]; then
         exit 1
     }
     cd ..
+else
+    echo "Skipping TensorFlow download - valid version already exists"
 fi
 
 # 5. Build final C++ app with CMake
