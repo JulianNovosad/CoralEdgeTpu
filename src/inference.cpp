@@ -223,7 +223,11 @@ void InferenceEngine::worker_thread_func() {
     
     // Counter for periodic delegate recreation
     int inference_count = 0;
-    const int RECREATE_INTERVAL = 100; // Recreate delegate every 100 inferences (more aggressive)
+    const int RECREATE_INTERVAL = 50; // Recreate delegate every 50 inferences (even more aggressive)
+                                  // WORKAROUND: This is reduced from 100 to prevent resource accumulation
+                                  // and delegate issues in the Edge TPU delegate which appears to have
+                                  // memory management bugs causing "Node number X (EdgeTpuDelegateForCustomOp) 
+                                  // failed to invoke" errors.
     
     ImageData input_image;
     while (running_) {
@@ -266,32 +270,51 @@ void InferenceEngine::worker_thread_func() {
             auto invoke_end_time = std::chrono::high_resolution_clock::now();
             
             // Check if we need to recreate the interpreter due to delegate issues
+            // WORKAROUND: The Edge TPU delegate occasionally fails with "Node number X (EdgeTpuDelegateForCustomOp) failed to invoke"
+            // This appears to be a memory corruption bug in the delegate where it might be looking for incorrect tensor names
+            // (e.g., "normalizdd_input_image_tensor" instead of "normalized_input_image_tensor").
+            // To work around this issue, we retry interpreter creation multiple times and provide detailed error logging.
             if (invoke_status != kTfLiteOk) {
                 APP_LOG_ERROR("Failed to invoke interpreter with status: " + std::to_string(invoke_status) + ". Attempting to recreate interpreter.");
                 
-                // Try to recreate the interpreter with a fresh delegate
-                interpreter = create_interpreter();
-                if (!interpreter) {
-                    APP_LOG_ERROR("Worker thread failed to recreate interpreter. Exiting thread.");
-                    return;
+                // Try to recreate the interpreter with a fresh delegate multiple times
+                int max_retries = 3;
+                bool recreate_success = false;
+                for (int retry = 0; retry < max_retries; ++retry) {
+                    APP_LOG_INFO("Attempt " + std::to_string(retry + 1) + " to recreate interpreter.");
+                    
+                    // Try to recreate the interpreter with a fresh delegate
+                    interpreter = create_interpreter();
+                    if (!interpreter) {
+                        APP_LOG_ERROR("Worker thread failed to recreate interpreter on attempt " + std::to_string(retry + 1) + ". Retrying...");
+                        continue;
+                    }
+                    APP_LOG_INFO("Successfully recreated interpreter with fresh delegate on attempt " + std::to_string(retry + 1) + ".");
+                    
+                    // Try inference again with the new interpreter
+                    invoke_start_time = std::chrono::high_resolution_clock::now();
+                    invoke_status = interpreter->Invoke();
+                    invoke_end_time = std::chrono::high_resolution_clock::now();
+                    
+                    if (invoke_status == kTfLiteOk) {
+                        recreate_success = true;
+                        APP_LOG_INFO("Successfully invoked interpreter after recreation on attempt " + std::to_string(retry + 1) + ".");
+                        break;
+                    } else {
+                        APP_LOG_ERROR("Failed to invoke interpreter on attempt " + std::to_string(retry + 1) + " with status: " + std::to_string(invoke_status) + ". Retrying...");
+                    }
                 }
-                APP_LOG_INFO("Successfully recreated interpreter with fresh delegate.");
                 
-                // Try inference again with the new interpreter
-                invoke_start_time = std::chrono::high_resolution_clock::now();
-                invoke_status = interpreter->Invoke();
-                invoke_end_time = std::chrono::high_resolution_clock::now();
-                
-                if (invoke_status != kTfLiteOk) {
-                    APP_LOG_ERROR("Failed to invoke interpreter even after recreation with status: " + std::to_string(invoke_status) + ". Skipping frame.");
+                if (!recreate_success) {
+                    APP_LOG_ERROR("Failed to invoke interpreter even after " + std::to_string(max_retries) + " recreation attempts with status: " + std::to_string(invoke_status) + ". Skipping frame.");
                     continue;
                 }
             }
             
-            // Periodically recreate the interpreter to prevent resource accumulation
+            // Periodically recreate the interpreter to prevent resource accumulation and delegate issues
             inference_count++;
             if (inference_count % RECREATE_INTERVAL == 0) {
-                APP_LOG_INFO("Periodically recreating interpreter to prevent resource accumulation. Inference count: " + std::to_string(inference_count));
+                APP_LOG_INFO("Periodically recreating interpreter to prevent resource accumulation and delegate issues. Inference count: " + std::to_string(inference_count));
                 interpreter = create_interpreter();
                 if (!interpreter) {
                     APP_LOG_ERROR("Worker thread failed to recreate interpreter during periodic refresh. Exiting thread.");

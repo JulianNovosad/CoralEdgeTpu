@@ -133,3 +133,16 @@ target_include_directories(servo_test PRIVATE
 
 add_executable(dlopen_test tests/dlopen_test.cpp)
 target_link_libraries(dlopen_test PRIVATE dl)
+
+add_executable(inspect_model_tensors inspect_model_tensors.cpp)
+target_link_libraries(inspect_model_tensors PRIVATE
+    tensorflowlite
+)
+target_include_directories(inspect_model_tensors PRIVATE
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+)
+# Disable strict warnings for this utility
+target_compile_options(inspect_model_tensors PRIVATE
+    -Wno-error
+)

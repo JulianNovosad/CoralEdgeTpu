@@ -2,5 +2,6 @@
 /home/pi/CoralEdgeTpu/CMakeFiles/config_loader_test.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/servo_test.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/dlopen_test.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/inspect_model_tensors.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/edit_cache.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/rebuild_cache.dir

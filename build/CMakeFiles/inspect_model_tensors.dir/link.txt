@@ -1,0 +1,1 @@
+/usr/bin/c++ -Werror -Wall -Wextra -Werror -g CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.o -o inspect_model_tensors  -ltensorflowlite 

@@ -168,6 +168,19 @@ dlopen_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/build
 .PHONY : dlopen_test/fast
 
+#=============================================================================
+# Target rules for targets named inspect_model_tensors
+
+# Build rule for target.
+inspect_model_tensors: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 inspect_model_tensors
+.PHONY : inspect_model_tensors
+
+# fast build rule for target.
+inspect_model_tensors/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/build
+.PHONY : inspect_model_tensors/fast
+
 civetweb/src/civetweb.o: civetweb/src/civetweb.c.o
 .PHONY : civetweb/src/civetweb.o
 
@@ -191,6 +204,30 @@ civetweb/src/civetweb.s: civetweb/src/civetweb.c.s
 civetweb/src/civetweb.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
 .PHONY : civetweb/src/civetweb.c.s
+
+inspect_model_tensors.o: inspect_model_tensors.cpp.o
+.PHONY : inspect_model_tensors.o
+
+# target to build an object file
+inspect_model_tensors.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.o
+.PHONY : inspect_model_tensors.cpp.o
+
+inspect_model_tensors.i: inspect_model_tensors.cpp.i
+.PHONY : inspect_model_tensors.i
+
+# target to preprocess a source file
+inspect_model_tensors.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.i
+.PHONY : inspect_model_tensors.cpp.i
+
+inspect_model_tensors.s: inspect_model_tensors.cpp.s
+.PHONY : inspect_model_tensors.s
+
+# target to generate assembly for a file
+inspect_model_tensors.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.s
+.PHONY : inspect_model_tensors.cpp.s
 
 src/application.o: src/application.cpp.o
 .PHONY : src/application.o
@@ -623,10 +660,14 @@ help:
 	@echo "... config_loader_test"
 	@echo "... detector"
 	@echo "... dlopen_test"
+	@echo "... inspect_model_tensors"
 	@echo "... servo_test"
 	@echo "... civetweb/src/civetweb.o"
 	@echo "... civetweb/src/civetweb.i"
 	@echo "... civetweb/src/civetweb.s"
+	@echo "... inspect_model_tensors.o"
+	@echo "... inspect_model_tensors.i"
+	@echo "... inspect_model_tensors.s"
 	@echo "... src/application.o"
 	@echo "... src/application.i"
 	@echo "... src/application.s"

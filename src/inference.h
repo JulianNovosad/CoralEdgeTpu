@@ -18,6 +18,15 @@
 #include "pipeline_structs.h" // Use the new central header for queue types and data structures
 #include "buffer_pool.h"      // For BufferPool
 
+// WORKAROUND FOR EDGE TPU DELEGATE BUG:
+// There appears to be a memory corruption issue in the Edge TPU delegate where it 
+// occasionally fails with "Node number X (EdgeTpuDelegateForCustomOp) failed to invoke".
+// This is likely caused by resource leaks or state corruption in the delegate.
+// To mitigate this issue, we implement aggressive delegate recreation strategies:
+// 1. Retry interpreter creation multiple times when there's an invoke error
+// 2. Recreate the delegate more frequently (every 50 inferences instead of 100)
+// 3. Add detailed error logging to help diagnose issues
+
 /**
  * @brief Manages the TensorFlow Lite inference pipeline with Edge TPU acceleration.
  *
