@@ -12,6 +12,14 @@ constexpr float GRAVITY_CONST = 9.81f;      // Zwaartekrachtversnelling in m/s^2
 constexpr float R_DRY_AIR = 287.058f;   // Specifieke gasconstante voor droge lucht in J/(kg·K)
 constexpr float PI = 3.14159265358979323846f;
 
+// --- Camera Parameters ---
+constexpr float CAMERA_FOCAL_LENGTH_CM = 4.74f;  // Camera focal length in cm
+constexpr float TARGET_WIDTH_CM = 50.0f;         // Preset target width in cm
+constexpr float TARGET_HEIGHT_CM = 50.0f;        // Preset target height in cm
+constexpr float SENSOR_WIDTH_CM = 0.64f;         // Raspberry Pi Camera Module 3 sensor width in cm
+constexpr float SENSOR_HEIGHT_CM = 0.48f;        // Raspberry Pi Camera Module 3 sensor height in cm
+
+
 // Initializeer de statische leden
 long LogicModule::next_track_id_ = 0;
 
@@ -29,8 +37,37 @@ float BallisticsSolver::get_air_density() const {
 
 Vec3 BallisticsSolver::drag_force(const Vec3& velocity, float air_density) {
     float v = velocity.magnitude();
-    if (v < 1e-6) return {0.0f, 0.0f, 0.0f}; // Vermijd deling door nul
-    float drag_magnitude = 0.5f * air_density * v * v * (profile_.bullet_mass_kg / profile_.ballistic_coefficient_si);
+    if (v < 1e-6) return {0.0f, 0.0f, 0.0f}; // Avoid division by zero
+    
+    // Implement standard G1 drag model approximation
+    // For G1 model, drag coefficient varies with velocity
+    // Using simplified G1 approximation based on velocity ranges
+    float cd = 0.0f;
+    
+    if (v <= 200.0f) {
+        // Subsonic region - simplified linear approximation
+        cd = 0.25f + (0.35f - 0.25f) * (v / 200.0f);
+    } else if (v <= 400.0f) {
+        // Transonic region
+        cd = 0.35f + (0.28f - 0.35f) * ((v - 200.0f) / 200.0f);
+    } else if (v <= 800.0f) {
+        // Supersonic region
+        cd = 0.28f + (0.20f - 0.28f) * ((v - 400.0f) / 400.0f);
+    } else {
+        // Hypersonic region
+        cd = 0.20f;
+    }
+    
+    // Drag force = 0.5 * rho * v² * Cd * A
+    // For mass-based BC: Cd * A = BC * m / (BC_ref * m_ref)
+    // Simplified: drag_magnitude = 0.5 * air_density * v² * (profile_.ballistic_coefficient_si / profile_.bullet_mass_kg)
+    // When ballistic_coefficient_si <= 0, disable drag (vacuum model)
+    if (profile_.ballistic_coefficient_si <= 0.0f) {
+        return {0.0f, 0.0f, 0.0f}; // No drag
+    }
+    
+    // Use mass-based formulation for drag calculation
+    float drag_magnitude = 0.5f * air_density * v * v * (profile_.ballistic_coefficient_si / profile_.bullet_mass_kg) * cd;
     return velocity * (-drag_magnitude / v);
 }
 
@@ -93,29 +130,30 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
 
 float BallisticsSolver::calculate_zero_pitch() {
     APP_LOG_INFO("Calculating zero pitch for " + std::to_string(profile_.zero_distance_m) + "m...");
-
-    float low_angle_rad = -0.05f; // -~3 degrees, a reasonable lower bound
-    float high_angle_rad = 0.05f; // +~3 degrees, a reasonable upper bound
     
-    constexpr int max_iterations = 30;
+    // Expanded bounds for better convergence
+    float low_angle_rad = -0.2f; // -~11 degrees
+    float high_angle_rad = 0.2f; // +~11 degrees
+    
+    constexpr int max_iterations = 100; // Further increased iterations for better convergence
     constexpr float tolerance_m = 0.001f; // 1 mm
-
+    
     for (int i = 0; i < max_iterations; ++i) {
         float mid_angle_rad = (low_angle_rad + high_angle_rad) / 2.0f;
         // Use profile_.zero_distance_m directly as max_distance
         auto trajectory = calculate_trajectory(mid_angle_rad, profile_.zero_distance_m);
-
+        
         if (trajectory.empty()) {
             APP_LOG_ERROR("Failed to calculate trajectory during zero pitch calculation for mid_angle_rad: " + std::to_string(mid_angle_rad));
             // If trajectory is empty, something is wrong. Return 0.0f.
             return 0.0f; 
         }
-
+        
         float height_at_zero = 0.0f;
         bool reached_zero_distance = false;
         for (size_t j = 1; j < trajectory.size(); ++j) {
             if (trajectory[j].position.x >= profile_.zero_distance_m) {
-                // Lineaire interpolatie voor de hoogte
+                // Linear interpolation for height
                 const auto& p1 = trajectory[j-1].position;
                 const auto& p2 = trajectory[j].position;
                 float t = (profile_.zero_distance_m - p1.x) / (p2.x - p1.x);
@@ -134,22 +172,80 @@ float BallisticsSolver::calculate_zero_pitch() {
             low_angle_rad = mid_angle_rad;
             continue; // Skip to next iteration
         }
-
-        // Vergelijk de hoogte met de zichtlijn (die op y=0 ligt in ons coördinatensysteem)
+        
+        // Compare height with sight line (which is at y=0 in our coordinate system)
         if (std::abs(height_at_zero) < tolerance_m) {
             APP_LOG_INFO("Zero pitch found after " + std::to_string(i + 1) + " iterations: " + std::to_string(mid_angle_rad) + " rad");
             return mid_angle_rad;
         }
-
-        if (height_at_zero < 0) { // Kogel te laag, dus hoek moet omhoog
+        
+        if (height_at_zero < 0) { // Bullet too low, angle needs to go up
             low_angle_rad = mid_angle_rad;
-        } else { // Kogel te hoog, dus hoek moet omlaag
+        } else { // Bullet too high, angle needs to go down
             high_angle_rad = mid_angle_rad;
         }
+        
+        // Additional debugging for convergence issues
+        if (i == max_iterations - 1) {
+            APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations. "
+                           "Best estimate: " + std::to_string((low_angle_rad + high_angle_rad) / 2.0f) + " rad. "
+                           "Last height_at_zero: " + std::to_string(height_at_zero) + "m. "
+                           "Range: [" + std::to_string(low_angle_rad) + ", " + std::to_string(high_angle_rad) + "]");
+        }
     }
+    
+    float result = (low_angle_rad + high_angle_rad) / 2.0f;
+    APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations. Best estimate: " + std::to_string(result) + " rad.");
+    return result; // Return the best estimate
+}
 
-    APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations. Best estimate: " + std::to_string((low_angle_rad + high_angle_rad) / 2.0f) + " rad.");
-    return (low_angle_rad + high_angle_rad) / 2.0f; // Geef de beste schatting terug
+float BallisticsSolver::calculate_flight_time(float distance) {
+    // Simple approximation: time = distance / muzzle_velocity
+    if (profile_.muzzle_velocity_mps > 0.0f) {
+        return distance / profile_.muzzle_velocity_mps;
+    }
+    return 0.0f;
+}
+
+bool BallisticsSolver::calculate_impact_point(const TrackedObject& target, const OrientationData& imu_data, Vec3& out_impact_point, float& out_flight_time) {
+    // Calculate distance to target
+    float target_distance = target.position.z; // Assuming z is the forward distance
+    if (target_distance <= 0.0f) return false;
+    
+    // Calculate bullet flight time to target
+    out_flight_time = calculate_flight_time(target_distance);
+    if (out_flight_time <= 0.0f) return false;
+    
+    // Predict target position after flight time using kinematic equations
+    // position = initial_position + velocity * time + 0.5 * acceleration * time^2
+    Vec3 predicted_position = target.position + target.velocity * out_flight_time + target.acceleration * (0.5f * out_flight_time * out_flight_time);
+    
+    // Apply IMU orientation correction to predicted position
+    // Simple correction using pitch and yaw angles
+    float pitch_correction = imu_data.pitch * 0.01f; // Small correction factor
+    float yaw_correction = imu_data.yaw * 0.01f;     // Small correction factor
+    
+    predicted_position.y += pitch_correction * target_distance; // Vertical adjustment based on pitch
+    predicted_position.x += yaw_correction * target_distance;   // Lateral adjustment based on yaw
+    
+    // Calculate ballistic trajectory to predicted target position
+    // Calculate angle needed to hit the predicted position
+    float horizontal_distance = std::sqrt(predicted_position.x * predicted_position.x + predicted_position.z * predicted_position.z);
+    float vertical_offset = predicted_position.y - (-profile_.sight_height_m); // Relative to sight line
+    float angle_to_target = std::atan2(vertical_offset, horizontal_distance);
+    
+    auto trajectory = calculate_trajectory(angle_to_target, horizontal_distance + 50.0f);
+    if (trajectory.empty()) return false;
+    
+    // Find impact point in trajectory
+    Vec3 ballistic_impact = trajectory.back().position;
+    
+    // Combine target movement prediction with ballistic calculation
+    out_impact_point.x = predicted_position.x; // Lateral movement prediction
+    out_impact_point.y = ballistic_impact.y;   // Vertical drop from ballistics
+    out_impact_point.z = predicted_position.z; // Forward distance prediction
+    
+    return true;
 }
 
 // --- Implementatie van LogicModule ---
@@ -335,33 +431,24 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
     APP_LOG_DEBUG("LogicModule: Total time for process function: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_process_end - total_process_start).count()) + " us");
 }
 
-bool LogicModule::predict_impact_point(const TrackedObject& target, const OrientationData& /*current_imu_data*/, Vec3& out_impact_point) {
-    if (!ballistics_solver_) return false;
-
-    float target_distance = target.position.x;
-    float target_height = target.position.y;
-    float angle_to_target = std::atan2(target_height, target_distance);
-    
-    auto trajectory = ballistics_solver_->calculate_trajectory(angle_to_target, target_distance + 50.0f);
-    if (trajectory.empty()) return false;
-
-    for (const auto& state : trajectory) {
-        if (state.position.x >= target_distance) {
-            out_impact_point = state.position;
-            return true;
-        }
-    }
-    out_impact_point = trajectory.back().position;
-    return true;
-}
 
 void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_data) {
     char log_buffer[256];
     for (auto& track : active_tracks_) {
         Vec3 impact_point;
-        if (predict_impact_point(track, imu_data, impact_point)) {
-            snprintf(log_buffer, sizeof(log_buffer), "Predicted Impact Point for Track ID %ld: (x:%.2f, y:%.2f, z:%.2f)",
-                     track.id, impact_point.x, impact_point.y, impact_point.z);
+        float flight_time = 0.0f;
+        
+        // Use the enhanced ballistics solver with tracking integration
+        if (ballistics_solver_ && ballistics_solver_->calculate_impact_point(track, imu_data, impact_point, flight_time)) {
+            // Propagate uncertainty based on flight time
+            Uncertainty uncertainty = propagate_uncertainty(track, flight_time);
+            
+            // Store the impact point and uncertainty in the track for use in safety checks
+            track.predicted_impact_point = impact_point;
+            track.uncertainty = uncertainty;
+            
+            snprintf(log_buffer, sizeof(log_buffer), "Predicted Impact Point for Track ID %ld: (x:%.2f, y:%.2f, z:%.2f) with confidence: %.2f%%", 
+                     track.id, impact_point.x, impact_point.y, impact_point.z, uncertainty.total_confidence * 100.0f);
             APP_LOG_INFO(log_buffer);
         } else {
             snprintf(log_buffer, sizeof(log_buffer), "No Impact Point Predicted for Track ID %ld.", track.id);
@@ -372,14 +459,21 @@ void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_dat
 
 void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) {
     char log_buffer[256];
-    Vec3 impact_point; // Moved declaration outside the switch
     // --- 4. Uncertainty Propagation & Safety Checks ---
-    float predicted_impact_uncertainty = 0.5f; 
     std::string safety_message;
+    
+    // Declare variables that will be used in switch cases
+    Vec3 crosshair_point = {0.0f, 0.0f, 0.0f};
+    float impact_distance = 0.0f;
+    float distance_factor = 0.0f;
+    float combined_confidence = 0.0f;
+    float angular_error_degrees = 0.0f;
+    std::string telemetry_message;
     
     // Iterate through active tracks and perform safety checks
     for (auto& track : active_tracks_) {
-        SafetyStatus safety_status = perform_safety_and_uncertainty_checks(track, predicted_impact_uncertainty, safety_message);
+        // Use the uncertainty already calculated and stored in the track
+        SafetyStatus safety_status = perform_safety_and_uncertainty_checks(track, track.uncertainty, safety_message);
         
         switch (safety_status) {
             case SAFETY_OK:
@@ -390,21 +484,47 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 snprintf(log_buffer, sizeof(log_buffer), "Safety check PASSED for Track ID %ld: %s", track.id, safety_message.c_str());
                 APP_LOG_INFO(log_buffer);
                 
-                // Calculate impact point and send as telemetry instead of servo commands
-                if (predict_impact_point(track, imu_data, impact_point)) {
+                // Calculate distance between predicted impact point and crosshair
+                // Crosshair is at center of frame (0, 0, track.position.z)
+                crosshair_point = {0.0f, 0.0f, track.position.z};
+                impact_distance = calculate_impact_point_distance(track.predicted_impact_point, crosshair_point);
+                
+                // Calculate angular error between crosshair and impact point
+                angular_error_degrees = calculate_angular_error_degrees(track.predicted_impact_point, crosshair_point, track.position.z);
+                
+                // Hard angular veto: if angular error exceeds threshold, no servo command is issued
+                if (angular_error_degrees > config_.get_max_angular_error_degrees()) {
+                    snprintf(log_buffer, sizeof(log_buffer), "Skipping servo command for Track ID %ld: Angular error too high (%.2f° > %.2f°)", 
+                             track.id, angular_error_degrees, config_.get_max_angular_error_degrees());
+                    APP_LOG_INFO(log_buffer);
+                    break; // Exit the switch case without issuing servo command
+                }
+                
+                // Calculate confidence based on uncertainty and distance
+                // Higher distance from crosshair means lower confidence
+                distance_factor = std::exp(-impact_distance * config_.get_distance_confidence_factor()); // Adjust this factor as needed
+                combined_confidence = track.uncertainty.total_confidence * distance_factor;
+                
+                // Only issue servo commands if confidence is above 90%
+                if (combined_confidence > config_.get_servo_activate_confidence()) {
                     current_hit_scan_count_++; // Increment hit scan count
                     
                     // Issue servo commands to control LEDs
-                    issue_servo_commands(impact_point.x, impact_point.y, impact_point.z);
+                    issue_servo_commands(track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, combined_confidence);
                     
                     // Format the impact point as JSON for telemetry
                     // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
-                    std::string telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
-                                                    ", \"impact_point\": {\"x\": " + std::to_string(impact_point.x) +
-                                                    ", \"y\": " + std::to_string(impact_point.y) +
-                                                    ", \"z\": " + std::to_string(impact_point.z) + "}}";
+                    telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
+                                                    ", \"impact_point\": {\"x\": " + std::to_string(track.predicted_impact_point.x) +
+                                                    ", \"y\": " + std::to_string(track.predicted_impact_point.y) +
+                                                    ", \"z\": " + std::to_string(track.predicted_impact_point.z) + 
+                                                    ", \"confidence\": " + std::to_string(combined_confidence * 100.0f) + 
+                                                    ", \"angular_error\": " + std::to_string(angular_error_degrees) + "}";
                     // Send telemetry data via ZeroMQ
                     send_telemetry_data(telemetry_message);
+                } else {
+                    snprintf(log_buffer, sizeof(log_buffer), "Skipping servo command for Track ID %ld: Confidence too low (%.2f%%)", track.id, combined_confidence * 100.0f);
+                    APP_LOG_INFO(log_buffer);
                 }
                 break;
             case SAFETY_WARNING_UNCERTAINTY:
@@ -419,7 +539,7 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 break;
             case SAFETY_CRITICAL_UNCERTAINTY:
             case SAFETY_CRITICAL_OTHER:
-                if (current_fallback_mode_ < FALLBACK_B_WARNING_STATE) { // Promote to higher fallback if less severe mode
+                if (current_fallback_mode_ != FALLBACK_B_WARNING_STATE) { // Promote to higher fallback if less severe mode
                     APP_LOG_ERROR("Activating FALLBACK_B_WARNING_STATE due to critical issue: " + safety_message);
                     current_fallback_mode_ = FALLBACK_B_WARNING_STATE;
                 }
@@ -436,7 +556,32 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
 }
 
 void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detections) {
-    for (auto& track : active_tracks_) track.associated_this_frame = false;
+    // Update existing tracks
+    for (auto& track : active_tracks_) {
+        track.associated_this_frame = false;
+        
+        // Store previous position for velocity calculation
+        // Vec3 prev_position = track.position;  // Commented out as it's not used
+        auto prev_time = track.last_update_time;
+        
+        // Predict track position based on previous velocity and acceleration
+        auto current_time = std::chrono::high_resolution_clock::now();
+        float dt = std::chrono::duration<float>(current_time - prev_time).count();
+        
+        if (dt > 0.0f) {
+            // Update position based on velocity and acceleration
+            track.position = track.position + track.velocity * dt + track.acceleration * (0.5f * dt * dt);
+            
+            // Update velocity based on acceleration
+            Vec3 prev_velocity = track.velocity;
+            track.velocity = track.velocity + track.acceleration * dt;
+            
+            // Update acceleration based on change in velocity (simplified)
+            if (dt > 0.001f) { // Avoid division by zero
+                track.acceleration = (track.velocity - prev_velocity) * (1.0f / dt);
+            }
+        }
+    }
 
     for (const auto& new_detection : detections) {
         float best_iou = 0.0f;
@@ -453,17 +598,43 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         }
 
         if (best_match_track) {
+            // Update track with new detection
+            auto prev_position = best_match_track->position;
+            auto prev_time = best_match_track->last_update_time;
+            
             best_match_track->last_detection = new_detection;
-            best_match_track->position.z = config_.get_zero_distance_m(); // Use configured zero distance
+            
+            // Estimate distance using camera parameters
+            float estimated_distance = estimate_target_distance(new_detection);
+            best_match_track->position.z = estimated_distance;
+            
             best_match_track->last_update_time = new_detection.timestamp;
             best_match_track->hit_streak++;
             best_match_track->missed_frames = 0;
             best_match_track->associated_this_frame = true;
+            
+            // Calculate new velocity based on position change
+            auto current_time = new_detection.timestamp;
+            float dt = std::chrono::duration<float>(current_time - prev_time).count();
+            
+            if (dt > 0.001f) { // Avoid division by zero
+                Vec3 new_position = best_match_track->position;
+                Vec3 velocity = (new_position - prev_position) * (1.0f / dt);
+                
+                // Update velocity with smoothing factor
+                float alpha = 0.7f; // Smoothing factor
+                best_match_track->velocity = best_match_track->velocity * (1.0f - alpha) + velocity * alpha;
+                
+                // Update position uncertainty based on velocity
+                best_match_track->position_uncertainty = best_match_track->position_uncertainty + best_match_track->velocity_uncertainty * dt;
+            }
         } else {
             // Only create a new track if the detection score is above the minimum confidence threshold
             if (new_detection.score >= min_track_confidence_) {
                 if (active_tracks_.size() < static_cast<size_t>(max_active_tracks_)) {
-                    active_tracks_.emplace_back(++next_track_id_, new_detection, config_.get_zero_distance_m()); // Use configured zero distance
+                    // Estimate distance using camera parameters
+                    float estimated_distance = estimate_target_distance(new_detection);
+                    active_tracks_.emplace_back(++next_track_id_, new_detection, estimated_distance);
                 } else {
                     APP_LOG_WARNING("Max active tracks reached (" + std::to_string(max_active_tracks_) + "). New detection ignored.");
                 }
@@ -471,6 +642,7 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         }
     }
 
+    // Remove stale tracks
     active_tracks_.erase(std::remove_if(active_tracks_.begin(), active_tracks_.end(), 
         [&](TrackedObject& track) {
             if (!track.associated_this_frame) track.missed_frames++;
@@ -478,16 +650,117 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         }), active_tracks_.end());
 }
 
-// --- Onveranderde of licht aangepaste functies ---
-const int MIN_HIT_STREAK = 1;
-const float MAX_PREDICTED_UNCERTAINTY = 0.75f;
+float LogicModule::estimate_target_distance(const DetectionResult& detection) {
+    // Estimate distance using camera parameters and target dimensions
+    // Using pinhole camera model: distance = (real_world_size * focal_length) / pixel_size
+    
+    // Calculate pixel dimensions of the detection
+    float pixel_width = (detection.xmax - detection.xmin) * config_.get_tpu_target_width();
+    float pixel_height = (detection.ymax - detection.ymin) * config_.get_tpu_target_height();
+    
+    // Average pixel dimension
+    float avg_pixel_dim = (pixel_width + pixel_height) * 0.5f;
+    
+    // Avoid division by zero
+    if (avg_pixel_dim <= 0.0f) return config_.get_zero_distance_m();
+    
+    // Convert focal length to pixels using correct sensor dimensions
+    float focal_length_pixels = (CAMERA_FOCAL_LENGTH_CM * config_.get_tpu_target_width()) / SENSOR_WIDTH_CM;
+    
+    // Calculate average real-world dimension (in meters)
+    float avg_real_dim = ((TARGET_WIDTH_CM + TARGET_HEIGHT_CM) * 0.5f) / 100.0f;
+    
+    // Calculate distance
+    float distance = (avg_real_dim * focal_length_pixels) / avg_pixel_dim;
+    
+    // Clamp to reasonable values
+    return std::max(1.0f, std::min(1000.0f, distance));
+}
 
-SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObject& target, float predicted_impact_uncertainty, std::string& safety_status_message) {
-    if (predicted_impact_uncertainty > MAX_PREDICTED_UNCERTAINTY) {
-        safety_status_message = "CRITICAL: High predicted impact uncertainty.";
+float LogicModule::calculate_impact_point_distance(const Vec3& impact_point, const Vec3& crosshair_point) {
+    // Calculate 3D distance between impact point and crosshair
+    float dx = impact_point.x - crosshair_point.x;
+    float dy = impact_point.y - crosshair_point.y;
+    float dz = impact_point.z - crosshair_point.z;
+    return std::sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+float LogicModule::calculate_angular_error_degrees(const Vec3& impact_point, const Vec3& crosshair_point, float target_distance) {
+    // Calculate angular error in degrees between crosshair and impact point
+    // Using small angle approximation: angle ≈ displacement / distance
+    
+    // Calculate displacement in x and y directions (assuming z is depth)
+    float dx = impact_point.x - crosshair_point.x;
+    float dy = impact_point.y - crosshair_point.y;
+    
+    // Calculate radial displacement in pixels
+    float radial_displacement = std::sqrt(dx*dx + dy*dy);
+    
+    // Convert to angular displacement in radians
+    // Using small angle approximation: angle (radians) = displacement / distance
+    float angular_error_radians = (target_distance > 0.0f) ? (radial_displacement / target_distance) : 0.0f;
+    
+    // Convert to degrees
+    constexpr float RAD_TO_DEG = 180.0f / PI;
+    return angular_error_radians * RAD_TO_DEG;
+}
+// Safety thresholds - TODO: These should come from config
+    
+Uncertainty LogicModule::propagate_uncertainty(const TrackedObject& target, float flight_time) {
+    Uncertainty uncertainty;
+    
+    // Linear uncertainty propagation model
+    // σ_position = σ_initial_position + σ_velocity * time + 0.5 * σ_acceleration * time^2
+    
+    // Position uncertainty increases with time and velocity uncertainty
+    Vec3 position_uncertainty = target.position_uncertainty + 
+                               target.velocity_uncertainty * flight_time +
+                               target.acceleration * (0.5f * flight_time * flight_time);
+    
+    // Velocity uncertainty increases with acceleration uncertainty
+    Vec3 velocity_uncertainty = target.velocity_uncertainty + 
+                               target.acceleration * flight_time;
+    
+    // Calculate variance (square of standard deviation)
+    uncertainty.position_variance = position_uncertainty.x * position_uncertainty.x +
+                                  position_uncertainty.y * position_uncertainty.y +
+                                  position_uncertainty.z * position_uncertainty.z;
+    
+    uncertainty.velocity_variance = velocity_uncertainty.x * velocity_uncertainty.x +
+                                  velocity_uncertainty.y * velocity_uncertainty.y +
+                                  velocity_uncertainty.z * velocity_uncertainty.z;
+    
+    // Distance variance based on position uncertainty
+    uncertainty.distance_variance = target.position_uncertainty.z * target.position_uncertainty.z;
+    
+    // Calculate total confidence based on propagated uncertainties
+    // Lower uncertainty means higher confidence
+    float total_variance = uncertainty.position_variance + uncertainty.velocity_variance + uncertainty.distance_variance;
+    
+    // Convert variance to confidence (0.0 - 1.0)
+    // Using inverse exponential function for smoother transition
+    uncertainty.total_confidence = std::exp(-total_variance * config_.get_confidence_decay_factor());
+    
+    // Clamp confidence to [0.0, 1.0]
+    uncertainty.total_confidence = std::max(0.0f, std::min(1.0f, uncertainty.total_confidence));
+    
+    return uncertainty;
+}
+
+SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObject& target, const Uncertainty& uncertainty, std::string& safety_status_message) {
+    // Check if confidence is too low
+    if (uncertainty.total_confidence < config_.get_min_confidence_threshold()) { // Less than minimum confidence threshold
+        safety_status_message = "CRITICAL: Low confidence in target tracking.";
         return SAFETY_CRITICAL_UNCERTAINTY;
     }
-    if (target.hit_streak < MIN_HIT_STREAK) {
+    
+    // Check if position uncertainty is too high
+    if (uncertainty.position_variance > config_.get_max_position_variance()) {
+        safety_status_message = "CRITICAL: High predicted position uncertainty.";
+        return SAFETY_CRITICAL_UNCERTAINTY;
+    }
+    
+    if (target.hit_streak < 1) { // MIN_HIT_STREAK constant
         safety_status_message = "CRITICAL: Track is unstable.";
         return SAFETY_CRITICAL_OTHER;
     }
@@ -496,45 +769,63 @@ SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObj
 }
 
 
-void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z) {
-    // Controlled servo oscillation with 0.3s cooldown
-    if (led_controller_ && led_controller_->is_initialized()) {
-        // Oscillate servo 0 with precise timing control
-        auto current_time = std::chrono::steady_clock::now();
-        auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_direction_change_);
-        
-        // Change direction every 300ms (0.3 seconds)
-        if (elapsed_time.count() >= 300) {
-            if (servo_direction_) {
-                servo_position_ += 0.2f;  // Move 20% toward max
-                if (servo_position_ >= 1.0f) {
-                    servo_position_ = 1.0f;
-                    servo_direction_ = false;
-                }
-            } else {
-                servo_position_ -= 0.2f;  // Move 20% toward min
-                if (servo_position_ <= 0.0f) {
-                    servo_position_ = 0.0f;
-                    servo_direction_ = true;
-                }
-            }
-            
-            // Send command immediately when direction changes
-            led_controller_->set_servo_position(0, servo_position_);
-            last_direction_change_ = current_time;
-        }
+void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z, float confidence) {
+    // Only issue servo commands if confidence is above activation threshold
+    if (confidence <= config_.get_servo_activate_confidence()) {
+        APP_LOG_INFO("Skipping servo command: Confidence too low (" + std::to_string(confidence * 100.0f) + "%)");
+        return;
     }
     
-    // Log only occasionally to reduce overhead
-    static int call_count = 0;
-    if (++call_count % 20 == 0) {  // Log every 20th call
-        char log_buffer[256];
-        snprintf(log_buffer, sizeof(log_buffer), "Servo actuated: (%.2f, %.2f, %.2f)", target_x, target_y, target_z);
-        APP_LOG_INFO(log_buffer);
+    // Set servo position based on target coordinates deterministically
+    // Map target_x from [-frame_width/2, frame_width/2] to [0.0, 1.0]
+    // Map target_y from [-frame_height/2, frame_height/2] to [0.0, 1.0]
+    if (led_controller_ && led_controller_->is_initialized()) {
+        // Normalize coordinates to [0, 1] range
+        float normalized_x = 0.5f + (target_x / static_cast<float>(config_.get_tpu_target_width()));
+        float normalized_y = 0.5f + (target_y / static_cast<float>(config_.get_tpu_target_height()));
+        
+        // Clamp to valid range [0.0, 1.0]
+        normalized_x = std::max(0.0f, std::min(1.0f, normalized_x));
+        normalized_y = std::max(0.0f, std::min(1.0f, normalized_y));
+        
+        // Use average of x and y positions for servo (can be adjusted as needed)
+        servo_position_ = (normalized_x + normalized_y) * 0.5f;
+        
+        // Set servo position directly without timing-dependent oscillation
+        led_controller_->set_servo_position(0, servo_position_);
     }
+    
+    // Log servo command
+    char log_buffer[256];
+    snprintf(log_buffer, sizeof(log_buffer), "Servo actuated: (%.2f, %.2f, %.2f) with confidence: %.2f%%, position: %.2f", 
+            target_x, target_y, target_z, confidence * 100.0f, servo_position_);
+    APP_LOG_INFO(log_buffer);
     
     current_servo_command_count_++; // Increment servo command count
 }
 
 
-void LogicModule::perform_sensor_fusion(const OrientationData& /*imu_data*/) { /* Implement sensor fusion logic */ }
+void LogicModule::perform_sensor_fusion(const OrientationData& imu_data) { 
+    // Store latest IMU data for use in other calculations
+    latest_imu_data_ = imu_data;
+    
+    // Apply orientation correction to active tracks
+    for (auto& track : active_tracks_) {
+        // Apply IMU orientation correction to track position
+        // Simple correction using pitch and yaw angles
+        float pitch_correction = imu_data.pitch * 0.01f; // Small correction factor
+        float yaw_correction = imu_data.yaw * 0.01f;     // Small correction factor
+        
+        // Apply corrections to track position
+        track.position.y += pitch_correction * track.position.z; // Vertical adjustment based on pitch
+        track.position.x += yaw_correction * track.position.z;   // Lateral adjustment based on yaw
+        
+        // Also apply to predicted impact point
+        track.predicted_impact_point.y += pitch_correction * track.position.z;
+        track.predicted_impact_point.x += yaw_correction * track.position.z;
+    }
+    
+    APP_LOG_DEBUG("Sensor fusion updated - Yaw: " + std::to_string(imu_data.yaw) + 
+                  ", Pitch: " + std::to_string(imu_data.pitch) + 
+                  ", Roll: " + std::to_string(imu_data.roll));
+}

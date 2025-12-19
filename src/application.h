@@ -100,6 +100,7 @@ private:
 
     // Recovery mechanisms
     std::atomic<bool> recovery_running_{false};
+    std::atomic<bool> recovery_enabled_{false}; // New flag to control when recovery is active
     std::thread recovery_thread_;
     std::mutex recovery_mutex_;
     

@@ -325,9 +325,14 @@ void InferenceEngine::worker_thread_func() {
             auto push_output_start = std::chrono::high_resolution_clock::now();
             if (results_buffer && results_buffer->size > 0) {
                 APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to overlay queue.");
-                detection_results_for_overlay_queue_.push(results_buffer);
+                bool overlay_pushed = detection_results_for_overlay_queue_.push(results_buffer);
                 APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to logic queue.");
-                detection_results_for_logic_queue_.push(results_buffer);
+                bool logic_pushed = detection_results_for_logic_queue_.push(results_buffer);
+                
+                if (!overlay_pushed || !logic_pushed) {
+                    APP_LOG_WARNING("InferenceEngine: Failed to push detections to one or more queues. Overlay: " + 
+                                   std::to_string(overlay_pushed) + ", Logic: " + std::to_string(logic_pushed));
+                }
             } else {
                 APP_LOG_WARNING("InferenceEngine: No detections to push or results_buffer is null.");
             }
@@ -460,6 +465,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     const int num_detections = static_cast<int>(*interpreter->typed_output_tensor<float>(3));
 
     APP_LOG_DEBUG("Raw model output - num_detections: " + std::to_string(num_detections));
+    APP_LOG_DEBUG("Score threshold: " + std::to_string(score_threshold_));
     std::string scores_log = "Raw model output - top 5 scores: ";
     for (int i = 0; i < std::min(num_detections, 5); ++i) {
         scores_log += std::to_string(detection_scores[i]) + " ";

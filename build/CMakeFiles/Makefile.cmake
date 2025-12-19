@@ -144,5 +144,6 @@ set(CMAKE_MAKEFILE_PRODUCTS
 set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/detector.dir/DependInfo.cmake"
   "CMakeFiles/config_loader_test.dir/DependInfo.cmake"
+  "CMakeFiles/servo_test.dir/DependInfo.cmake"
   "CMakeFiles/dlopen_test.dir/DependInfo.cmake"
   )

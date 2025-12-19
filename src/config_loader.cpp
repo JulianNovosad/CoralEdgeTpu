@@ -114,6 +114,14 @@ float ConfigLoader::get_temperature_c() const {
     return config_data_.value("/application/ballistics/temperature_c"_json_pointer, 15.0f);
 }
 
+std::string ConfigLoader::get_drag_model() const {
+    return config_data_.value("/application/ballistics/drag_model"_json_pointer, "G1");
+}
+
+float ConfigLoader::get_drag_coefficient_reference() const {
+    return config_data_.value("/application/ballistics/drag_coefficient_reference"_json_pointer, 0.25f);
+}
+
 // --- Tracking ---
 int ConfigLoader::get_max_active_tracks() const {
     return config_data_.value("/application/tracking/max_active_tracks"_json_pointer, 100);
@@ -129,6 +137,31 @@ int ConfigLoader::get_track_missed_frames_threshold() const {
 
 float ConfigLoader::get_min_track_confidence() const {
     return config_data_.value("/application/tracking/min_track_confidence"_json_pointer, 0.6f);
+}
+
+// --- Safety Thresholds ---
+float ConfigLoader::get_min_confidence_threshold() const {
+    return config_data_.value("/application/safety/min_confidence_threshold"_json_pointer, 0.1f);
+}
+
+float ConfigLoader::get_max_position_variance() const {
+    return config_data_.value("/application/safety/max_position_variance"_json_pointer, 0.75f);
+}
+
+float ConfigLoader::get_servo_activate_confidence() const {
+    return config_data_.value("/application/safety/servo_activate_confidence"_json_pointer, 0.9f);
+}
+
+float ConfigLoader::get_confidence_decay_factor() const {
+    return config_data_.value("/application/safety/confidence_decay_factor"_json_pointer, 0.1f);
+}
+
+float ConfigLoader::get_distance_confidence_factor() const {
+    return config_data_.value("/application/safety/distance_confidence_factor"_json_pointer, 0.1f);
+}
+
+float ConfigLoader::get_max_angular_error_degrees() const {
+    return config_data_.value("/application/safety/max_angular_error_degrees"_json_pointer, 1.0f);
 }
 
 

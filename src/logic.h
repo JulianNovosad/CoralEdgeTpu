@@ -25,6 +25,9 @@ struct Vec3 {
     Vec3 operator-(const Vec3& other) const { return {x - other.x, y - other.y, z - other.z}; }
     Vec3 operator*(float scalar) const { return {x * scalar, y * scalar, z * scalar}; }
     float magnitude() const { return std::sqrt(x*x + y*y + z*z); }
+    float dot(const Vec3& other) const { return x*other.x + y*other.y + z*other.z; }
+    Vec3 cross(const Vec3& other) const { return {y*other.z - z*other.y, z*other.x - x*other.z, x*other.y - y*other.x}; }
+    Vec3 normalize() const { float mag = magnitude(); return mag > 0 ? Vec3{x/mag, y/mag, z/mag} : Vec3{0,0,0}; }
 };
 
 /**
@@ -53,8 +56,19 @@ struct BallisticState {
     Vec3 velocity;
 };
 
-// --- Einde Nieuwe 3D Ballistiek Structuren ---
+/**
+ * @brief Enumeratie voor de fallback-modi van het systeem.
+ */
 
+/**
+ * @brief Structuur voor het bijhouden van onzekerheid in metingen.
+ */
+struct Uncertainty {
+    float position_variance;     // Variantie in positie (m^2)
+    float velocity_variance;     // Variantie in snelheid (m^2/s^2)
+    float distance_variance;     // Variantie in afstand (m^2)
+    float total_confidence;     // Totale betrouwbaarheid (0.0 - 1.0)
+};
 
 /**
  * @brief Representeert een enkel gevolgd object.
@@ -65,18 +79,32 @@ struct TrackedObject {
     
     Vec3 position; // Gebruikt nu Vec3
     Vec3 velocity; // Gebruikt nu Vec3
+    Vec3 acceleration; // Nieuw: versnelling voor betere voorspellingen
 
     std::chrono::high_resolution_clock::time_point last_update_time;
     int hit_streak;
     int missed_frames;
     bool associated_this_frame;
+    
+    // Nieuw: onzekerheid in positie en snelheid
+    Vec3 position_uncertainty;
+    Vec3 velocity_uncertainty;
+    
+    // Nieuw: voorspelde impact punt en onzekerheid
+    Vec3 predicted_impact_point;
+    Uncertainty uncertainty;
 
     TrackedObject(long _id, const DetectionResult& detection, float initial_distance)
         : id(_id), last_detection(detection), 
           position({0.0f, 0.0f, initial_distance}), // Init positie
           velocity({0.0f, 0.0f, 0.0f}),
+          acceleration({0.0f, 0.0f, 0.0f}),
           last_update_time(detection.timestamp),
-          hit_streak(1), missed_frames(0), associated_this_frame(true) {}
+          hit_streak(1), missed_frames(0), associated_this_frame(true),
+          position_uncertainty({0.1f, 0.1f, 0.1f}), // Initiële onzekerheid
+          velocity_uncertainty({0.1f, 0.1f, 0.1f}),
+          predicted_impact_point({0.0f, 0.0f, 0.0f}),
+          uncertainty() {}
 };
 
 /**
@@ -97,7 +125,7 @@ enum FallbackMode {
     NORMAL_OPERATION,
     FALLBACK_A_REDUCED_PERFORMANCE,
     FALLBACK_B_WARNING_STATE,
-    FALLBACK_C_SAFE_SHUTDOWN
+    FALLBACK_C_CRITICAL_STATE
 };
 
 
@@ -110,6 +138,10 @@ public:
     
     std::vector<BallisticState> calculate_trajectory(float initial_pitch, float max_distance, float time_step = 0.0f);
     float calculate_zero_pitch();
+    float calculate_flight_time(float distance);
+    
+    // New method for calculating impact point based on target movement and orientation
+    bool calculate_impact_point(const TrackedObject& target, const OrientationData& imu_data, Vec3& out_impact_point, float& out_flight_time);
 
 private:
     BallisticProfile profile_;
@@ -119,6 +151,7 @@ private:
     BallisticState derivatives(const BallisticState& state, float air_density);
     BallisticState rk4_step(const BallisticState& state, float dt, float air_density);
     float get_air_density() const;
+    
 };
 
 
@@ -138,14 +171,19 @@ private:
     void worker_thread_func();
     void process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data);
     void update_object_tracks(const std::vector<DetectionResult>& detections);
-    SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, float predicted_impact_uncertainty, std::string& safety_status_message);
-    void issue_servo_commands(float target_x, float target_y, float target_z);
-    bool predict_impact_point(const TrackedObject& target, const OrientationData& current_imu_data, Vec3& out_impact_point);
+    SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, const Uncertainty& uncertainty, std::string& safety_status_message);
+    void issue_servo_commands(float target_x, float target_y, float target_z, float confidence);
     float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
     void perform_sensor_fusion(const OrientationData& imu_data);
     void calculate_ballistics_for_tracks(const OrientationData& imu_data);
     void perform_safety_and_actuation(const OrientationData& imu_data);
     void send_telemetry_data(const std::string& telemetry_message);
+    
+    // New methods for enhanced ballistics and uncertainty
+    Uncertainty propagate_uncertainty(const TrackedObject& target, float flight_time);
+    float estimate_target_distance(const DetectionResult& detection);
+    float calculate_impact_point_distance(const Vec3& impact_point, const Vec3& crosshair_point);
+    float calculate_angular_error_degrees(const Vec3& impact_point, const Vec3& crosshair_point, float target_distance);
 
     DetectionResultsQueue& detection_input_queue_;
     std::atomic<bool> running_ = false;
@@ -179,6 +217,9 @@ private:
     float servo_position_ = 0.0f;
     bool servo_direction_ = true;
     std::chrono::steady_clock::time_point last_direction_change_;
+    
+    // Storage for latest IMU data
+    OrientationData latest_imu_data_;
 
 };
 

@@ -118,5 +118,18 @@ target_include_directories(config_loader_test PRIVATE
     /usr/include/libcamera # Added for libcamera headers
 )
 
+add_executable(servo_test
+    src/servo_test.cpp
+    src/pca9685_controller.cpp
+    src/util_logging.cpp
+)
+target_link_libraries(servo_test PRIVATE
+    Threads::Threads
+)
+target_include_directories(servo_test PRIVATE
+    src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 add_executable(dlopen_test tests/dlopen_test.cpp)
 target_link_libraries(dlopen_test PRIVATE dl)

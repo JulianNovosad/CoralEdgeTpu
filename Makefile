@@ -129,6 +129,45 @@ detector/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/build
 .PHONY : detector/fast
 
+#=============================================================================
+# Target rules for targets named config_loader_test
+
+# Build rule for target.
+config_loader_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 config_loader_test
+.PHONY : config_loader_test
+
+# fast build rule for target.
+config_loader_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/build
+.PHONY : config_loader_test/fast
+
+#=============================================================================
+# Target rules for targets named servo_test
+
+# Build rule for target.
+servo_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 servo_test
+.PHONY : servo_test
+
+# fast build rule for target.
+servo_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/build
+.PHONY : servo_test/fast
+
+#=============================================================================
+# Target rules for targets named dlopen_test
+
+# Build rule for target.
+dlopen_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 dlopen_test
+.PHONY : dlopen_test
+
+# fast build rule for target.
+dlopen_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/build
+.PHONY : dlopen_test/fast
+
 civetweb/src/civetweb.o: civetweb/src/civetweb.c.o
 .PHONY : civetweb/src/civetweb.o
 
@@ -153,29 +192,53 @@ civetweb/src/civetweb.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
 .PHONY : civetweb/src/civetweb.c.s
 
-src/ballistics.o: src/ballistics.cpp.o
-.PHONY : src/ballistics.o
+src/application.o: src/application.cpp.o
+.PHONY : src/application.o
 
 # target to build an object file
-src/ballistics.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/ballistics.cpp.o
-.PHONY : src/ballistics.cpp.o
+src/application.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/application.cpp.o
+.PHONY : src/application.cpp.o
 
-src/ballistics.i: src/ballistics.cpp.i
-.PHONY : src/ballistics.i
+src/application.i: src/application.cpp.i
+.PHONY : src/application.i
 
 # target to preprocess a source file
-src/ballistics.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/ballistics.cpp.i
-.PHONY : src/ballistics.cpp.i
+src/application.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/application.cpp.i
+.PHONY : src/application.cpp.i
 
-src/ballistics.s: src/ballistics.cpp.s
-.PHONY : src/ballistics.s
+src/application.s: src/application.cpp.s
+.PHONY : src/application.s
 
 # target to generate assembly for a file
-src/ballistics.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/ballistics.cpp.s
-.PHONY : src/ballistics.cpp.s
+src/application.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/application.cpp.s
+.PHONY : src/application.cpp.s
+
+src/application_supervisor.o: src/application_supervisor.cpp.o
+.PHONY : src/application_supervisor.o
+
+# target to build an object file
+src/application_supervisor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/application_supervisor.cpp.o
+.PHONY : src/application_supervisor.cpp.o
+
+src/application_supervisor.i: src/application_supervisor.cpp.i
+.PHONY : src/application_supervisor.i
+
+# target to preprocess a source file
+src/application_supervisor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/application_supervisor.cpp.i
+.PHONY : src/application_supervisor.cpp.i
+
+src/application_supervisor.s: src/application_supervisor.cpp.s
+.PHONY : src/application_supervisor.s
+
+# target to generate assembly for a file
+src/application_supervisor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/application_supervisor.cpp.s
+.PHONY : src/application_supervisor.cpp.s
 
 src/camera_capture.o: src/camera_capture.cpp.o
 .PHONY : src/camera_capture.o
@@ -207,6 +270,7 @@ src/config_loader.o: src/config_loader.cpp.o
 # target to build an object file
 src/config_loader.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.o
 .PHONY : src/config_loader.cpp.o
 
 src/config_loader.i: src/config_loader.cpp.i
@@ -215,6 +279,7 @@ src/config_loader.i: src/config_loader.cpp.i
 # target to preprocess a source file
 src/config_loader.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.i
 .PHONY : src/config_loader.cpp.i
 
 src/config_loader.s: src/config_loader.cpp.s
@@ -223,31 +288,56 @@ src/config_loader.s: src/config_loader.cpp.s
 # target to generate assembly for a file
 src/config_loader.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.s
 .PHONY : src/config_loader.cpp.s
 
-src/http_server.o: src/http_server.cpp.o
-.PHONY : src/http_server.o
+src/h264_encoder.o: src/h264_encoder.cpp.o
+.PHONY : src/h264_encoder.o
 
 # target to build an object file
-src/http_server.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_server.cpp.o
-.PHONY : src/http_server.cpp.o
+src/h264_encoder.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/h264_encoder.cpp.o
+.PHONY : src/h264_encoder.cpp.o
 
-src/http_server.i: src/http_server.cpp.i
-.PHONY : src/http_server.i
+src/h264_encoder.i: src/h264_encoder.cpp.i
+.PHONY : src/h264_encoder.i
 
 # target to preprocess a source file
-src/http_server.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_server.cpp.i
-.PHONY : src/http_server.cpp.i
+src/h264_encoder.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/h264_encoder.cpp.i
+.PHONY : src/h264_encoder.cpp.i
 
-src/http_server.s: src/http_server.cpp.s
-.PHONY : src/http_server.s
+src/h264_encoder.s: src/h264_encoder.cpp.s
+.PHONY : src/h264_encoder.s
 
 # target to generate assembly for a file
-src/http_server.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_server.cpp.s
-.PHONY : src/http_server.cpp.s
+src/h264_encoder.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/h264_encoder.cpp.s
+.PHONY : src/h264_encoder.cpp.s
+
+src/image_processor.o: src/image_processor.cpp.o
+.PHONY : src/image_processor.o
+
+# target to build an object file
+src/image_processor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/image_processor.cpp.o
+.PHONY : src/image_processor.cpp.o
+
+src/image_processor.i: src/image_processor.cpp.i
+.PHONY : src/image_processor.i
+
+# target to preprocess a source file
+src/image_processor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/image_processor.cpp.i
+.PHONY : src/image_processor.cpp.i
+
+src/image_processor.s: src/image_processor.cpp.s
+.PHONY : src/image_processor.s
+
+# target to generate assembly for a file
+src/image_processor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/image_processor.cpp.s
+.PHONY : src/image_processor.cpp.s
 
 src/inference.o: src/inference.cpp.o
 .PHONY : src/inference.o
@@ -273,6 +363,54 @@ src/inference.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/inference.cpp.s
 .PHONY : src/inference.cpp.s
 
+src/keyboard_monitor.o: src/keyboard_monitor.cpp.o
+.PHONY : src/keyboard_monitor.o
+
+# target to build an object file
+src/keyboard_monitor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o
+.PHONY : src/keyboard_monitor.cpp.o
+
+src/keyboard_monitor.i: src/keyboard_monitor.cpp.i
+.PHONY : src/keyboard_monitor.i
+
+# target to preprocess a source file
+src/keyboard_monitor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/keyboard_monitor.cpp.i
+.PHONY : src/keyboard_monitor.cpp.i
+
+src/keyboard_monitor.s: src/keyboard_monitor.cpp.s
+.PHONY : src/keyboard_monitor.s
+
+# target to generate assembly for a file
+src/keyboard_monitor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/keyboard_monitor.cpp.s
+.PHONY : src/keyboard_monitor.cpp.s
+
+src/logic.o: src/logic.cpp.o
+.PHONY : src/logic.o
+
+# target to build an object file
+src/logic.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/logic.cpp.o
+.PHONY : src/logic.cpp.o
+
+src/logic.i: src/logic.cpp.i
+.PHONY : src/logic.i
+
+# target to preprocess a source file
+src/logic.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/logic.cpp.i
+.PHONY : src/logic.cpp.i
+
+src/logic.s: src/logic.cpp.s
+.PHONY : src/logic.s
+
+# target to generate assembly for a file
+src/logic.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/logic.cpp.s
+.PHONY : src/logic.cpp.s
+
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
 
@@ -297,12 +435,113 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/orientation_sensor.o: src/orientation_sensor.cpp.o
+.PHONY : src/orientation_sensor.o
+
+# target to build an object file
+src/orientation_sensor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/orientation_sensor.cpp.o
+.PHONY : src/orientation_sensor.cpp.o
+
+src/orientation_sensor.i: src/orientation_sensor.cpp.i
+.PHONY : src/orientation_sensor.i
+
+# target to preprocess a source file
+src/orientation_sensor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/orientation_sensor.cpp.i
+.PHONY : src/orientation_sensor.cpp.i
+
+src/orientation_sensor.s: src/orientation_sensor.cpp.s
+.PHONY : src/orientation_sensor.s
+
+# target to generate assembly for a file
+src/orientation_sensor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/orientation_sensor.cpp.s
+.PHONY : src/orientation_sensor.cpp.s
+
+src/pca9685_controller.o: src/pca9685_controller.cpp.o
+.PHONY : src/pca9685_controller.o
+
+# target to build an object file
+src/pca9685_controller.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.o
+.PHONY : src/pca9685_controller.cpp.o
+
+src/pca9685_controller.i: src/pca9685_controller.cpp.i
+.PHONY : src/pca9685_controller.i
+
+# target to preprocess a source file
+src/pca9685_controller.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.i
+.PHONY : src/pca9685_controller.cpp.i
+
+src/pca9685_controller.s: src/pca9685_controller.cpp.s
+.PHONY : src/pca9685_controller.s
+
+# target to generate assembly for a file
+src/pca9685_controller.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.s
+.PHONY : src/pca9685_controller.cpp.s
+
+src/servo_test.o: src/servo_test.cpp.o
+.PHONY : src/servo_test.o
+
+# target to build an object file
+src/servo_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/servo_test.cpp.o
+.PHONY : src/servo_test.cpp.o
+
+src/servo_test.i: src/servo_test.cpp.i
+.PHONY : src/servo_test.i
+
+# target to preprocess a source file
+src/servo_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/servo_test.cpp.i
+.PHONY : src/servo_test.cpp.i
+
+src/servo_test.s: src/servo_test.cpp.s
+.PHONY : src/servo_test.s
+
+# target to generate assembly for a file
+src/servo_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/servo_test.cpp.s
+.PHONY : src/servo_test.cpp.s
+
+src/system_monitor.o: src/system_monitor.cpp.o
+.PHONY : src/system_monitor.o
+
+# target to build an object file
+src/system_monitor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/system_monitor.cpp.o
+.PHONY : src/system_monitor.cpp.o
+
+src/system_monitor.i: src/system_monitor.cpp.i
+.PHONY : src/system_monitor.i
+
+# target to preprocess a source file
+src/system_monitor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/system_monitor.cpp.i
+.PHONY : src/system_monitor.cpp.i
+
+src/system_monitor.s: src/system_monitor.cpp.s
+.PHONY : src/system_monitor.s
+
+# target to generate assembly for a file
+src/system_monitor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/system_monitor.cpp.s
+.PHONY : src/system_monitor.cpp.s
+
 src/util_logging.o: src/util_logging.cpp.o
 .PHONY : src/util_logging.o
 
 # target to build an object file
 src/util_logging.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.o
 .PHONY : src/util_logging.cpp.o
 
 src/util_logging.i: src/util_logging.cpp.i
@@ -311,6 +550,8 @@ src/util_logging.i: src/util_logging.cpp.i
 # target to preprocess a source file
 src/util_logging.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.i
 .PHONY : src/util_logging.cpp.i
 
 src/util_logging.s: src/util_logging.cpp.s
@@ -319,31 +560,57 @@ src/util_logging.s: src/util_logging.cpp.s
 # target to generate assembly for a file
 src/util_logging.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.s
 .PHONY : src/util_logging.cpp.s
 
-src/video_overlay_processor.o: src/video_overlay_processor.cpp.o
-.PHONY : src/video_overlay_processor.o
+tests/config_loader_test.o: tests/config_loader_test.cpp.o
+.PHONY : tests/config_loader_test.o
 
 # target to build an object file
-src/video_overlay_processor.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.o
-.PHONY : src/video_overlay_processor.cpp.o
+tests/config_loader_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/tests/config_loader_test.cpp.o
+.PHONY : tests/config_loader_test.cpp.o
 
-src/video_overlay_processor.i: src/video_overlay_processor.cpp.i
-.PHONY : src/video_overlay_processor.i
+tests/config_loader_test.i: tests/config_loader_test.cpp.i
+.PHONY : tests/config_loader_test.i
 
 # target to preprocess a source file
-src/video_overlay_processor.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.i
-.PHONY : src/video_overlay_processor.cpp.i
+tests/config_loader_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/tests/config_loader_test.cpp.i
+.PHONY : tests/config_loader_test.cpp.i
 
-src/video_overlay_processor.s: src/video_overlay_processor.cpp.s
-.PHONY : src/video_overlay_processor.s
+tests/config_loader_test.s: tests/config_loader_test.cpp.s
+.PHONY : tests/config_loader_test.s
 
 # target to generate assembly for a file
-src/video_overlay_processor.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/video_overlay_processor.cpp.s
-.PHONY : src/video_overlay_processor.cpp.s
+tests/config_loader_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/tests/config_loader_test.cpp.s
+.PHONY : tests/config_loader_test.cpp.s
+
+tests/dlopen_test.o: tests/dlopen_test.cpp.o
+.PHONY : tests/dlopen_test.o
+
+# target to build an object file
+tests/dlopen_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o
+.PHONY : tests/dlopen_test.cpp.o
+
+tests/dlopen_test.i: tests/dlopen_test.cpp.i
+.PHONY : tests/dlopen_test.i
+
+# target to preprocess a source file
+tests/dlopen_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.i
+.PHONY : tests/dlopen_test.cpp.i
+
+tests/dlopen_test.s: tests/dlopen_test.cpp.s
+.PHONY : tests/dlopen_test.s
+
+# target to generate assembly for a file
+tests/dlopen_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.s
+.PHONY : tests/dlopen_test.cpp.s
 
 # Help Target
 help:
@@ -353,34 +620,64 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
+	@echo "... config_loader_test"
 	@echo "... detector"
+	@echo "... dlopen_test"
+	@echo "... servo_test"
 	@echo "... civetweb/src/civetweb.o"
 	@echo "... civetweb/src/civetweb.i"
 	@echo "... civetweb/src/civetweb.s"
-	@echo "... src/ballistics.o"
-	@echo "... src/ballistics.i"
-	@echo "... src/ballistics.s"
+	@echo "... src/application.o"
+	@echo "... src/application.i"
+	@echo "... src/application.s"
+	@echo "... src/application_supervisor.o"
+	@echo "... src/application_supervisor.i"
+	@echo "... src/application_supervisor.s"
 	@echo "... src/camera_capture.o"
 	@echo "... src/camera_capture.i"
 	@echo "... src/camera_capture.s"
 	@echo "... src/config_loader.o"
 	@echo "... src/config_loader.i"
 	@echo "... src/config_loader.s"
-	@echo "... src/http_server.o"
-	@echo "... src/http_server.i"
-	@echo "... src/http_server.s"
+	@echo "... src/h264_encoder.o"
+	@echo "... src/h264_encoder.i"
+	@echo "... src/h264_encoder.s"
+	@echo "... src/image_processor.o"
+	@echo "... src/image_processor.i"
+	@echo "... src/image_processor.s"
 	@echo "... src/inference.o"
 	@echo "... src/inference.i"
 	@echo "... src/inference.s"
+	@echo "... src/keyboard_monitor.o"
+	@echo "... src/keyboard_monitor.i"
+	@echo "... src/keyboard_monitor.s"
+	@echo "... src/logic.o"
+	@echo "... src/logic.i"
+	@echo "... src/logic.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/orientation_sensor.o"
+	@echo "... src/orientation_sensor.i"
+	@echo "... src/orientation_sensor.s"
+	@echo "... src/pca9685_controller.o"
+	@echo "... src/pca9685_controller.i"
+	@echo "... src/pca9685_controller.s"
+	@echo "... src/servo_test.o"
+	@echo "... src/servo_test.i"
+	@echo "... src/servo_test.s"
+	@echo "... src/system_monitor.o"
+	@echo "... src/system_monitor.i"
+	@echo "... src/system_monitor.s"
 	@echo "... src/util_logging.o"
 	@echo "... src/util_logging.i"
 	@echo "... src/util_logging.s"
-	@echo "... src/video_overlay_processor.o"
-	@echo "... src/video_overlay_processor.i"
-	@echo "... src/video_overlay_processor.s"
+	@echo "... tests/config_loader_test.o"
+	@echo "... tests/config_loader_test.i"
+	@echo "... tests/config_loader_test.s"
+	@echo "... tests/dlopen_test.o"
+	@echo "... tests/dlopen_test.i"
+	@echo "... tests/dlopen_test.s"
 .PHONY : help
 
 

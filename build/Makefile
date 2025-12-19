@@ -143,6 +143,19 @@ config_loader_test/fast:
 .PHONY : config_loader_test/fast
 
 #=============================================================================
+# Target rules for targets named servo_test
+
+# Build rule for target.
+servo_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 servo_test
+.PHONY : servo_test
+
+# fast build rule for target.
+servo_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/build
+.PHONY : servo_test/fast
+
+#=============================================================================
 # Target rules for targets named dlopen_test
 
 # Build rule for target.
@@ -452,6 +465,7 @@ src/pca9685_controller.o: src/pca9685_controller.cpp.o
 # target to build an object file
 src/pca9685_controller.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.o
 .PHONY : src/pca9685_controller.cpp.o
 
 src/pca9685_controller.i: src/pca9685_controller.cpp.i
@@ -460,6 +474,7 @@ src/pca9685_controller.i: src/pca9685_controller.cpp.i
 # target to preprocess a source file
 src/pca9685_controller.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.i
 .PHONY : src/pca9685_controller.cpp.i
 
 src/pca9685_controller.s: src/pca9685_controller.cpp.s
@@ -468,7 +483,32 @@ src/pca9685_controller.s: src/pca9685_controller.cpp.s
 # target to generate assembly for a file
 src/pca9685_controller.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.s
 .PHONY : src/pca9685_controller.cpp.s
+
+src/servo_test.o: src/servo_test.cpp.o
+.PHONY : src/servo_test.o
+
+# target to build an object file
+src/servo_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/servo_test.cpp.o
+.PHONY : src/servo_test.cpp.o
+
+src/servo_test.i: src/servo_test.cpp.i
+.PHONY : src/servo_test.i
+
+# target to preprocess a source file
+src/servo_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/servo_test.cpp.i
+.PHONY : src/servo_test.cpp.i
+
+src/servo_test.s: src/servo_test.cpp.s
+.PHONY : src/servo_test.s
+
+# target to generate assembly for a file
+src/servo_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/servo_test.cpp.s
+.PHONY : src/servo_test.cpp.s
 
 src/system_monitor.o: src/system_monitor.cpp.o
 .PHONY : src/system_monitor.o
@@ -501,6 +541,7 @@ src/util_logging.o: src/util_logging.cpp.o
 src/util_logging.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.o
 .PHONY : src/util_logging.cpp.o
 
 src/util_logging.i: src/util_logging.cpp.i
@@ -510,6 +551,7 @@ src/util_logging.i: src/util_logging.cpp.i
 src/util_logging.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.i
 .PHONY : src/util_logging.cpp.i
 
 src/util_logging.s: src/util_logging.cpp.s
@@ -519,6 +561,7 @@ src/util_logging.s: src/util_logging.cpp.s
 src/util_logging.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.s
 .PHONY : src/util_logging.cpp.s
 
 tests/config_loader_test.o: tests/config_loader_test.cpp.o
@@ -580,6 +623,7 @@ help:
 	@echo "... config_loader_test"
 	@echo "... detector"
 	@echo "... dlopen_test"
+	@echo "... servo_test"
 	@echo "... civetweb/src/civetweb.o"
 	@echo "... civetweb/src/civetweb.i"
 	@echo "... civetweb/src/civetweb.s"
@@ -619,6 +663,9 @@ help:
 	@echo "... src/pca9685_controller.o"
 	@echo "... src/pca9685_controller.i"
 	@echo "... src/pca9685_controller.s"
+	@echo "... src/servo_test.o"
+	@echo "... src/servo_test.i"
+	@echo "... src/servo_test.s"
 	@echo "... src/system_monitor.o"
 	@echo "... src/system_monitor.i"
 	@echo "... src/system_monitor.s"

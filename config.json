@@ -38,7 +38,7 @@
     "camera_watchdog_timeout_seconds": 10,
     "camera_fps": 120.0,
     "inference_worker_threads": 4,
-    "detection_score_threshold": 0.5,
+    "detection_score_threshold": 0.05,
     "log_path": "/home/pi/CoralEdgeTpu/logs",
     "tracking": {
       "max_active_tracks": 100,
@@ -60,7 +60,7 @@
     },
     "telemetry": {
       "protocol": "ZeroMQ",
-      "pub_address": "tcp://*:1002",
+      "pub_address": "tcp://*:11002",
       "module_refs": ["src/logic.*"]
     },
     "ballistics": {
@@ -70,7 +70,17 @@
       "sight_height_m": 0.05,
       "zero_distance_m": 100.0,
       "air_pressure_pa": 101325.0,
-      "temperature_c": 15.0
+      "temperature_c": 15.0,
+      "drag_model": "G1",
+      "drag_coefficient_reference": 0.25
+    },
+    "safety": {
+      "min_confidence_threshold": 0.1,
+      "max_position_variance": 0.75,
+      "servo_activate_confidence": 0.9,
+      "confidence_decay_factor": 0.1,
+      "distance_confidence_factor": 0.1,
+      "max_angular_error_degrees": 1.0
     },
     "network_ports": {
       "1001": {
@@ -78,7 +88,7 @@
         "comment": "Streaming encoded 1536x864 live video feed van Pi naar telefoon",
         "module_refs": ["src/h264_encoder.*"]
       },
-      "1002": {
+      "11002": {
         "purpose": "bounding_boxes_pi_to_phone",
         "comment": "Bounding boxes stream",
         "module_refs": ["logic"]

@@ -8,9 +8,8 @@
 std::vector<std::string> load_labels(const std::string& path);
 extern std::atomic<bool> shutdown_requested; // Now managed by ApplicationSupervisor
 
-Application::Application(int argc, char** argv) : argc_(argc), argv_(argv), recovery_running_(true) {
-    // Start the recovery thread
-    recovery_thread_ = std::thread(&Application::recovery_thread_func, this);
+Application::Application(int argc, char** argv) : argc_(argc), argv_(argv), recovery_running_(true), recovery_enabled_(false) {
+    // Recovery thread will be started after modules are initialized
 }
 
 Application::~Application() {
@@ -38,7 +37,7 @@ void Application::setup_pools_and_queues() {
 
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
     APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
-    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(20, 100, "DetectionPool");
+    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(100, 100, "DetectionPool");
     h264_pool_ = std::make_shared<BufferPool<uint8_t>>(200, 1024 * 1024, "H264Pool");
 }
 
@@ -183,6 +182,11 @@ void Application::recovery_thread_func() {
     
     while (recovery_running_ && !shutdown_requested) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200)); // Check every 200ms
+        
+        // Only attempt recovery if it's enabled (modules have been started)
+        if (!recovery_enabled_) {
+            continue;
+        }
         
         // Check each subsystem and attempt recovery if needed
         {
@@ -569,6 +573,10 @@ int Application::run() {
         return 1;
     }
     APP_LOG_INFO("Modules started.");
+
+    // Start the recovery thread after modules are initialized and started
+    recovery_enabled_ = true;
+    recovery_thread_ = std::thread(&Application::recovery_thread_func, this);
 
     register_shutdown_handlers();
     main_loop();

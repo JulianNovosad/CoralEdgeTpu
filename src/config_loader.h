@@ -69,6 +69,10 @@ public:
     float get_air_pressure_pa() const;
     /** @return Temperatuur in Celsius. Standaard: 15.0. */
     float get_temperature_c() const;
+    /** @return Drag model type (G1 or G7). Standaard: "G1". */
+    std::string get_drag_model() const;
+    /** @return Reference drag coefficient for the selected model. Standaard: 0.25. */
+    float get_drag_coefficient_reference() const;
 
     // --- Tracking ---
     /** @return Maximale aantal actieve tracks. Standaard: 100. */
@@ -79,6 +83,20 @@ public:
     int get_track_missed_frames_threshold() const;
     /** @return Minimale detectiebetrouwbaarheid om een nieuwe track aan te maken. Standaard: 0.6. */
     float get_min_track_confidence() const;
+
+    // --- Safety Thresholds ---
+    /** @return Minimum confidence threshold for safety checks. Standaard: 0.1. */
+    float get_min_confidence_threshold() const;
+    /** @return Maximum allowable position variance. Standaard: 0.75. */
+    float get_max_position_variance() const;
+    /** @return Confidence threshold for servo activation. Standaard: 0.9. */
+    float get_servo_activate_confidence() const;
+    /** @return Decay factor for confidence calculation. Standaard: 0.1. */
+    float get_confidence_decay_factor() const;
+    /** @return Factor for distance-based confidence. Standaard: 0.1. */
+    float get_distance_confidence_factor() const;
+    /** @return Maximum allowable angular error in degrees. Standaard: 1.0. */
+    float get_max_angular_error_degrees() const;
 
     // --- Netwerkconfiguratie ---
     std::string get_listen_address() const;
