@@ -46,6 +46,14 @@ public:
     int run();
 
 private:
+    // Cleanup functions
+    void pre_launch_cleanup();
+    void post_shutdown_cleanup();
+    bool terminate_existing_instances();
+    void release_edge_tpu_resources();
+    void release_camera_resources();
+    void clear_telemetry_sockets();
+    
     void setup_pools_and_queues();
     bool initialize_modules(const std::string& model_path, const std::string& labels_path);
     bool start_modules();
