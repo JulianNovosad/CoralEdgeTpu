@@ -4,86 +4,108 @@ This file provides guidance to Qoder (qoder.com) when working with code in this 
 
 ## Project Overview
 
-This is the Avant-garde M1-Delta Mk II weapon safety system, a real-time computer platform that combines AI object recognition with ballistic modeling to enhance weapon safety and accuracy. The system acts as a "smart safety" mechanism that physically blocks the trigger and only releases it when aiming at a validated target with >90% hit probability.
+This is the **Avant-garde M1-Delta Mk II Wapenveiligheidssysteem**, an advanced firearm safety system that combines AI object recognition with ballistic modeling to increase user safety and accuracy. The system acts as a "smart safety" that physically blocks the trigger and only releases it when aiming at a validated target with >90% hit probability.
 
-## Key Features
+## Core Architecture
 
-- Real-time object detection using MobileNetSSD model (INT8 quantized)
-- Safety gating with servo motor that blocks trigger
-- 3D ballistic calculations for impact prediction
-- Augmented reality video streaming with bounding boxes
-- Ultra-low latency (<100ms end-to-end) with custom kernel optimizations
+The system is designed with an extremely tight **latency budget**:
+- Total end-to-end latency requirement: <100 ms
+- Mechanical servo actuation delay: ~70 ms
+- Software pipeline budget: <30 ms
 
-## Architecture Overview
+Key architectural components:
+1. **Doeldetectie**: Object detection using a custom-trained MobileNetSSD model (INT8 quantized)
+2. **Safety Gating**: Servo motor that blocks the trigger, only releasing when ballistic hit point is within bullseye (13x13cm)
+3. **Ballistic Calculations**: Calculates impact point based on distance, bullet trajectory, and sensor data
+4. **Feedback**: Streams video with augmented reality overlay to an Android app
 
-The system follows a modular pipeline architecture with these core components:
+## Technology Stack
 
-1. **CameraCapture** - Acquires video frames using libcamera with zero-copy DMA buffers
-2. **InferenceEngine** - Runs AI object detection on Google Coral Edge TPU
-3. **LogicModule** - Performs 3D ballistics, hit scanning, and servo actuation
-4. **ImageProcessor** - Handles image preprocessing and postprocessing
-5. **SystemMonitor** - Tracks system health metrics (CPU temp, memory usage)
-6. **H264Encoder** - Encodes video stream for network transmission
-7. **Application** - Central coordinator that manages all modules
+- **Language**: C++ (no Python/containers in production)
+- **Hardware**: Raspberry Pi 5, Google Coral M.2 Edge TPU (PCIe), MG995 Servo via PCA9685 PWM driver
+- **Libraries**: TensorFlow Lite, libcamera, OpenCV, ZeroMQ, Boost
+- **Optimizations**: Zero-copy pipelines with DMA buffers, custom kernel patches, CPU isolation
+
+## Key Modules
+
+- **Application**: Main orchestrator (src/application.h, src/application.cpp)
+- **CameraCapture**: Video capture pipeline using libcamera (src/camera_capture.h, src/camera_capture.cpp)
+- **InferenceEngine**: TensorFlow Lite inference with Edge TPU acceleration (src/inference.h, src/inference.cpp)
+- **LogicModule**: Core ballistic calculations and safety logic (src/logic.h, src/logic.cpp)
+- **ImageProcessor**: Image preprocessing (src/image_processor.h, src/image_processor.cpp)
+- **SystemMonitor**: System health monitoring (src/system_monitor.h, src/system_monitor.cpp)
 
 ## Build Commands
 
 ```bash
-# Configure the project with CMake
-cmake .
+# Full build (installs dependencies, builds FlatBuffers, sets up TensorFlow)
+./build.sh
 
-# Build the main application
-make detector
+# Alternative manual build
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror" ../
+make -j$(nproc)
 
-# Build tests
-make config_loader_test
+# Build specific targets
+make detector                    # Main application
+make config_loader_test         # Configuration loader tests
+make servo_test                 # Servo controller tests
 ```
 
-## Run Commands
+## Test Commands
 
 ```bash
-# Run the main application
-./detector
+# Run specific tests
+./config_loader_test            # Configuration loader unit tests
+make config_loader_test && ./config_loader_test  # Build and run config tests
 
-# Run tests
-./config_loader_test
+# List all available test targets
+make help | grep test
 ```
 
-## Key Files and Directories
+## Configuration
 
-- `src/` - Main source code directory
-- `src/application.cpp/h` - Main application orchestrator
-- `src/camera_capture.cpp/h` - Camera frame acquisition
-- `src/inference.cpp/h` - AI inference engine
-- `src/logic.cpp/h` - Core logic, ballistics, and actuation
-- `src/system_monitor.cpp/h` - System health monitoring
-- `CMakeLists.txt` - Build configuration
-- `config.json` - Application configuration
-- `tests/` - Unit tests
+Main configuration file: `config.json`
 
-## Development Guidelines
+Key sections:
+- `application`: Model paths, resolution settings, thresholds
+- `ballistics`: Weapon and ammunition properties
+- `tracking`: Object tracking parameters
+- `safety`: Safety thresholds for trigger release
+- `network_ports`: Network port mappings for communication
 
-- All code is written in C++17 with strict compiler flags (-Wall -Wextra -Werror)
-- Uses lock-free SPSC queues for inter-module communication
-- Implements buffer pooling to minimize memory allocations
-- Follows strict latency budgets (total <100ms)
-- Extensive structured logging with CSV format for performance analysis
-- All modules must shut down gracefully within 100ms of stop signal
+## Code Structure
 
-## Testing
+```
+src/
+├── application.h/cpp          # Main application orchestrator
+├── camera_capture.h/cpp       # Libcamera-based video capture
+├── inference.h/cpp            # TFLite inference engine
+├── logic.h/cpp                # Ballistic calculations and safety logic
+├── image_processor.h/cpp      # Image preprocessing
+├── config_loader.h/cpp        # Configuration management
+├── pca9685_controller.h/cpp   # Servo motor control
+├── system_monitor.h/cpp       # System health monitoring
+├── pipeline_structs.h         # Data structures for pipeline
+└── buffer_pool.h             # Memory management utilities
 
-Unit tests use Google Test framework:
-```bash
-# Build and run specific tests
-make config_loader_test && ./config_loader_test
+tests/
+├── config_loader_test.cpp    # Unit tests for config loader
+└── other test files
 ```
 
-## Dependencies
+## Performance Requirements
 
-- TensorFlow Lite with Edge TPU support
-- libcamera for camera capture
-- OpenCV for image processing
-- ZeroMQ for telemetry
-- Boost lockfree queues
-- libjpeg for image encoding
-- x264 for video encoding (optional)
+Stage Gate Plan:
+1. **Stage 0**: Technical feasibility & performance limits (≥120 FPS camera/TPU)
+2. **Stage 1**: System-wide C++ implementation & bottleneck analysis
+3. **Stage 2**: Full integration & zero-copy optimization (<100ms end-to-end latency)
+4. **Stage 3**: Validation & verification (4-hour stress test)
+
+## Key Files
+
+- `detector`: Main executable
+- `config.json`: Main configuration
+- `detect_int8_edgetpu.tflite`: AI model
+- `coco_labels.txt`: Object detection labels
+- `logs/`: Log directory for all subsystems

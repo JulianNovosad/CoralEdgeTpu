@@ -931,6 +931,35 @@ void CameraCapture::request_processor_thread_func() {
                 entry.camera_height = tpu_cfg.size.height;
                 entry.camera_exposure_ms = static_cast<float>(exposure_ms);
                 Logger::getInstance().log_csv(entry);
+                
+                // FPS measurement instrumentation
+                auto current_time = std::chrono::high_resolution_clock::now();
+                if (fps_measurement_frames_ == 0) {
+                    first_frame_time_ = current_time;
+                } else {
+                    auto interval_us = std::chrono::duration_cast<std::chrono::microseconds>(current_time - last_frame_time_).count();
+                    frame_intervals_us_.push_back(interval_us);
+                }
+                last_frame_time_ = current_time;
+                fps_measurement_frames_++;
+                
+                // Print FPS statistics every 100 frames
+                if (fps_measurement_frames_ % 100 == 0 && frame_intervals_us_.size() > 0) {
+                    long long total_interval_us = 0;
+                    long long min_interval_us = frame_intervals_us_[0];
+                    long long max_interval_us = frame_intervals_us_[0];
+                    
+                    for (long long interval : frame_intervals_us_) {
+                        total_interval_us += interval;
+                        if (interval < min_interval_us) min_interval_us = interval;
+                        if (interval > max_interval_us) max_interval_us = interval;
+                    }
+                    
+                    double avg_interval_us = static_cast<double>(total_interval_us) / frame_intervals_us_.size();
+                    double effective_fps = 1000000.0 / avg_interval_us;
+                    
+                    APP_LOG_INFO("Camera FPS Stats (last 100 frames): Avg Interval=" + std::to_string(avg_interval_us) + "us, Min=" + std::to_string(min_interval_us) + "us, Max=" + std::to_string(max_interval_us) + "us, Effective FPS=" + std::to_string(effective_fps));
+                }
             }
         } else {
             APP_LOG_WARNING("CameraCapture: TPU stream buffer missing from completed request.");

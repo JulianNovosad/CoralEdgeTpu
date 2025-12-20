@@ -136,6 +136,11 @@ public:
 
     std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_; ///< Tijdstip van het laatst verwerkte frame.
     int frame_count_ = 0; ///< Teller voor het aantal verwerkte frames.
+    
+    // FPS measurement variables
+    std::chrono::time_point<std::chrono::high_resolution_clock> first_frame_time_; ///< Tijdstip van het eerste frame voor FPS calculation
+    std::vector<long long> frame_intervals_us_; ///< Vector to store frame intervals for histogram
+    int fps_measurement_frames_ = 0; ///< Counter for FPS measurement frames
 
     std::unique_ptr<cv::VideoWriter> video_writer_;  ///< H.264 encoder (momenteel niet gebruikt).
     std::function<void(cv::Mat& frame)> overlay_callback_;  ///< Callback voor overlays.

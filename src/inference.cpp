@@ -326,7 +326,36 @@ void InferenceEngine::worker_thread_func() {
             }
             
             long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(invoke_end_time - invoke_start_time).count();
+            long long duration_us = std::chrono::duration_cast<std::chrono::microseconds>(invoke_end_time - invoke_start_time).count();
             APP_LOG_DEBUG("InferenceEngine: Time to invoke interpreter (inference_done): " + std::to_string(duration_ms) + " ms");
+            
+            // Store inference timing for statistics
+            static std::vector<long long> inference_times_us;
+            static int inference_count = 0;
+            inference_times_us.push_back(duration_us);
+            inference_count++;
+            
+            // Print inference timing statistics every 100 inferences
+            if (inference_count % 100 == 0 && inference_times_us.size() > 0) {
+                long long total_time_us = 0;
+                long long min_time_us = inference_times_us[0];
+                long long max_time_us = inference_times_us[0];
+                
+                for (long long time : inference_times_us) {
+                    total_time_us += time;
+                    if (time < min_time_us) min_time_us = time;
+                    if (time > max_time_us) max_time_us = time;
+                }
+                
+                // Calculate 95th percentile
+                std::sort(inference_times_us.begin(), inference_times_us.end());
+                long long p95_index = static_cast<long long>(inference_times_us.size() * 0.95);
+                long long p95_time_us = inference_times_us[p95_index];
+                
+                double avg_time_us = static_cast<double>(total_time_us) / inference_times_us.size();
+                
+                APP_LOG_INFO("Inference Timing Stats (last 100 inferences): Avg=" + std::to_string(avg_time_us) + "us, Min=" + std::to_string(min_time_us) + "us, P95=" + std::to_string(p95_time_us) + "us, Max=" + std::to_string(max_time_us) + "us");
+            }
             
             // Check if interpreter is null after invocation
             if (!interpreter) {
