@@ -168,110 +168,6 @@ dlopen_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/build
 .PHONY : dlopen_test/fast
 
-#=============================================================================
-# Target rules for targets named test_config
-
-# Build rule for target.
-test_config: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_config
-.PHONY : test_config
-
-# fast build rule for target.
-test_config/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/build
-.PHONY : test_config/fast
-
-#=============================================================================
-# Target rules for targets named minimal_model_test
-
-# Build rule for target.
-minimal_model_test: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 minimal_model_test
-.PHONY : minimal_model_test
-
-# fast build rule for target.
-minimal_model_test/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/minimal_model_test.dir/build.make CMakeFiles/minimal_model_test.dir/build
-.PHONY : minimal_model_test/fast
-
-#=============================================================================
-# Target rules for targets named inspect_model_tensors
-
-# Build rule for target.
-inspect_model_tensors: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 inspect_model_tensors
-.PHONY : inspect_model_tensors
-
-# fast build rule for target.
-inspect_model_tensors/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/build
-.PHONY : inspect_model_tensors/fast
-
-#=============================================================================
-# Target rules for targets named test_tensor_access
-
-# Build rule for target.
-test_tensor_access: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_tensor_access
-.PHONY : test_tensor_access
-
-# fast build rule for target.
-test_tensor_access/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_tensor_access.dir/build.make CMakeFiles/test_tensor_access.dir/build
-.PHONY : test_tensor_access/fast
-
-#=============================================================================
-# Target rules for targets named test_ballistics_fix
-
-# Build rule for target.
-test_ballistics_fix: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_ballistics_fix
-.PHONY : test_ballistics_fix
-
-# fast build rule for target.
-test_ballistics_fix/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/build
-.PHONY : test_ballistics_fix/fast
-
-#=============================================================================
-# Target rules for targets named test_ballistics_simple
-
-# Build rule for target.
-test_ballistics_simple: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_ballistics_simple
-.PHONY : test_ballistics_simple
-
-# fast build rule for target.
-test_ballistics_simple/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_simple.dir/build.make CMakeFiles/test_ballistics_simple.dir/build
-.PHONY : test_ballistics_simple/fast
-
-#=============================================================================
-# Target rules for targets named test_ballistics_actual
-
-# Build rule for target.
-test_ballistics_actual: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_ballistics_actual
-.PHONY : test_ballistics_actual
-
-# fast build rule for target.
-test_ballistics_actual/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/build
-.PHONY : test_ballistics_actual/fast
-
-#=============================================================================
-# Target rules for targets named test_ballistics_fixed
-
-# Build rule for target.
-test_ballistics_fixed: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_ballistics_fixed
-.PHONY : test_ballistics_fixed
-
-# fast build rule for target.
-test_ballistics_fixed/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fixed.dir/build.make CMakeFiles/test_ballistics_fixed.dir/build
-.PHONY : test_ballistics_fixed/fast
-
 civetweb/src/civetweb.o: civetweb/src/civetweb.c.o
 .PHONY : civetweb/src/civetweb.o
 
@@ -295,54 +191,6 @@ civetweb/src/civetweb.s: civetweb/src/civetweb.c.s
 civetweb/src/civetweb.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
 .PHONY : civetweb/src/civetweb.c.s
-
-inspect_model_tensors.o: inspect_model_tensors.cpp.o
-.PHONY : inspect_model_tensors.o
-
-# target to build an object file
-inspect_model_tensors.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.o
-.PHONY : inspect_model_tensors.cpp.o
-
-inspect_model_tensors.i: inspect_model_tensors.cpp.i
-.PHONY : inspect_model_tensors.i
-
-# target to preprocess a source file
-inspect_model_tensors.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.i
-.PHONY : inspect_model_tensors.cpp.i
-
-inspect_model_tensors.s: inspect_model_tensors.cpp.s
-.PHONY : inspect_model_tensors.s
-
-# target to generate assembly for a file
-inspect_model_tensors.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/inspect_model_tensors.dir/build.make CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.s
-.PHONY : inspect_model_tensors.cpp.s
-
-minimal_model_test.o: minimal_model_test.cpp.o
-.PHONY : minimal_model_test.o
-
-# target to build an object file
-minimal_model_test.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/minimal_model_test.dir/build.make CMakeFiles/minimal_model_test.dir/minimal_model_test.cpp.o
-.PHONY : minimal_model_test.cpp.o
-
-minimal_model_test.i: minimal_model_test.cpp.i
-.PHONY : minimal_model_test.i
-
-# target to preprocess a source file
-minimal_model_test.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/minimal_model_test.dir/build.make CMakeFiles/minimal_model_test.dir/minimal_model_test.cpp.i
-.PHONY : minimal_model_test.cpp.i
-
-minimal_model_test.s: minimal_model_test.cpp.s
-.PHONY : minimal_model_test.s
-
-# target to generate assembly for a file
-minimal_model_test.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/minimal_model_test.dir/build.make CMakeFiles/minimal_model_test.dir/minimal_model_test.cpp.s
-.PHONY : minimal_model_test.cpp.s
 
 src/application.o: src/application.cpp.o
 .PHONY : src/application.o
@@ -423,9 +271,6 @@ src/config_loader.o: src/config_loader.cpp.o
 src/config_loader.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/src/config_loader.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/config_loader.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/config_loader.cpp.o
 .PHONY : src/config_loader.cpp.o
 
 src/config_loader.i: src/config_loader.cpp.i
@@ -435,9 +280,6 @@ src/config_loader.i: src/config_loader.cpp.i
 src/config_loader.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/src/config_loader.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/config_loader.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/config_loader.cpp.i
 .PHONY : src/config_loader.cpp.i
 
 src/config_loader.s: src/config_loader.cpp.s
@@ -447,9 +289,6 @@ src/config_loader.s: src/config_loader.cpp.s
 src/config_loader.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/src/config_loader.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/config_loader.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/config_loader.cpp.s
 .PHONY : src/config_loader.cpp.s
 
 src/h264_encoder.o: src/h264_encoder.cpp.o
@@ -554,8 +393,6 @@ src/logic.o: src/logic.cpp.o
 # target to build an object file
 src/logic.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/logic.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/logic.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/logic.cpp.o
 .PHONY : src/logic.cpp.o
 
 src/logic.i: src/logic.cpp.i
@@ -564,8 +401,6 @@ src/logic.i: src/logic.cpp.i
 # target to preprocess a source file
 src/logic.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/logic.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/logic.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/logic.cpp.i
 .PHONY : src/logic.cpp.i
 
 src/logic.s: src/logic.cpp.s
@@ -574,8 +409,6 @@ src/logic.s: src/logic.cpp.s
 # target to generate assembly for a file
 src/logic.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/logic.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/logic.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/logic.cpp.s
 .PHONY : src/logic.cpp.s
 
 src/main.o: src/main.cpp.o
@@ -709,9 +542,6 @@ src/util_logging.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/src/util_logging.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/util_logging.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/util_logging.cpp.o
 .PHONY : src/util_logging.cpp.o
 
 src/util_logging.i: src/util_logging.cpp.i
@@ -722,9 +552,6 @@ src/util_logging.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/src/util_logging.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/util_logging.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/util_logging.cpp.i
 .PHONY : src/util_logging.cpp.i
 
 src/util_logging.s: src/util_logging.cpp.s
@@ -735,154 +562,7 @@ src/util_logging.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/src/util_logging.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/src/util_logging.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/src/util_logging.cpp.s
 .PHONY : src/util_logging.cpp.s
-
-test_ballistics_actual.o: test_ballistics_actual.cpp.o
-.PHONY : test_ballistics_actual.o
-
-# target to build an object file
-test_ballistics_actual.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/test_ballistics_actual.cpp.o
-.PHONY : test_ballistics_actual.cpp.o
-
-test_ballistics_actual.i: test_ballistics_actual.cpp.i
-.PHONY : test_ballistics_actual.i
-
-# target to preprocess a source file
-test_ballistics_actual.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/test_ballistics_actual.cpp.i
-.PHONY : test_ballistics_actual.cpp.i
-
-test_ballistics_actual.s: test_ballistics_actual.cpp.s
-.PHONY : test_ballistics_actual.s
-
-# target to generate assembly for a file
-test_ballistics_actual.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_actual.dir/build.make CMakeFiles/test_ballistics_actual.dir/test_ballistics_actual.cpp.s
-.PHONY : test_ballistics_actual.cpp.s
-
-test_ballistics_fix.o: test_ballistics_fix.cpp.o
-.PHONY : test_ballistics_fix.o
-
-# target to build an object file
-test_ballistics_fix.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/test_ballistics_fix.cpp.o
-.PHONY : test_ballistics_fix.cpp.o
-
-test_ballistics_fix.i: test_ballistics_fix.cpp.i
-.PHONY : test_ballistics_fix.i
-
-# target to preprocess a source file
-test_ballistics_fix.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/test_ballistics_fix.cpp.i
-.PHONY : test_ballistics_fix.cpp.i
-
-test_ballistics_fix.s: test_ballistics_fix.cpp.s
-.PHONY : test_ballistics_fix.s
-
-# target to generate assembly for a file
-test_ballistics_fix.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fix.dir/build.make CMakeFiles/test_ballistics_fix.dir/test_ballistics_fix.cpp.s
-.PHONY : test_ballistics_fix.cpp.s
-
-test_ballistics_fixed.o: test_ballistics_fixed.cpp.o
-.PHONY : test_ballistics_fixed.o
-
-# target to build an object file
-test_ballistics_fixed.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fixed.dir/build.make CMakeFiles/test_ballistics_fixed.dir/test_ballistics_fixed.cpp.o
-.PHONY : test_ballistics_fixed.cpp.o
-
-test_ballistics_fixed.i: test_ballistics_fixed.cpp.i
-.PHONY : test_ballistics_fixed.i
-
-# target to preprocess a source file
-test_ballistics_fixed.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fixed.dir/build.make CMakeFiles/test_ballistics_fixed.dir/test_ballistics_fixed.cpp.i
-.PHONY : test_ballistics_fixed.cpp.i
-
-test_ballistics_fixed.s: test_ballistics_fixed.cpp.s
-.PHONY : test_ballistics_fixed.s
-
-# target to generate assembly for a file
-test_ballistics_fixed.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_fixed.dir/build.make CMakeFiles/test_ballistics_fixed.dir/test_ballistics_fixed.cpp.s
-.PHONY : test_ballistics_fixed.cpp.s
-
-test_ballistics_simple.o: test_ballistics_simple.cpp.o
-.PHONY : test_ballistics_simple.o
-
-# target to build an object file
-test_ballistics_simple.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_simple.dir/build.make CMakeFiles/test_ballistics_simple.dir/test_ballistics_simple.cpp.o
-.PHONY : test_ballistics_simple.cpp.o
-
-test_ballistics_simple.i: test_ballistics_simple.cpp.i
-.PHONY : test_ballistics_simple.i
-
-# target to preprocess a source file
-test_ballistics_simple.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_simple.dir/build.make CMakeFiles/test_ballistics_simple.dir/test_ballistics_simple.cpp.i
-.PHONY : test_ballistics_simple.cpp.i
-
-test_ballistics_simple.s: test_ballistics_simple.cpp.s
-.PHONY : test_ballistics_simple.s
-
-# target to generate assembly for a file
-test_ballistics_simple.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_ballistics_simple.dir/build.make CMakeFiles/test_ballistics_simple.dir/test_ballistics_simple.cpp.s
-.PHONY : test_ballistics_simple.cpp.s
-
-test_config.o: test_config.cpp.o
-.PHONY : test_config.o
-
-# target to build an object file
-test_config.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/test_config.cpp.o
-.PHONY : test_config.cpp.o
-
-test_config.i: test_config.cpp.i
-.PHONY : test_config.i
-
-# target to preprocess a source file
-test_config.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/test_config.cpp.i
-.PHONY : test_config.cpp.i
-
-test_config.s: test_config.cpp.s
-.PHONY : test_config.s
-
-# target to generate assembly for a file
-test_config.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_config.dir/build.make CMakeFiles/test_config.dir/test_config.cpp.s
-.PHONY : test_config.cpp.s
-
-test_tensor_access.o: test_tensor_access.cpp.o
-.PHONY : test_tensor_access.o
-
-# target to build an object file
-test_tensor_access.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_tensor_access.dir/build.make CMakeFiles/test_tensor_access.dir/test_tensor_access.cpp.o
-.PHONY : test_tensor_access.cpp.o
-
-test_tensor_access.i: test_tensor_access.cpp.i
-.PHONY : test_tensor_access.i
-
-# target to preprocess a source file
-test_tensor_access.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_tensor_access.dir/build.make CMakeFiles/test_tensor_access.dir/test_tensor_access.cpp.i
-.PHONY : test_tensor_access.cpp.i
-
-test_tensor_access.s: test_tensor_access.cpp.s
-.PHONY : test_tensor_access.s
-
-# target to generate assembly for a file
-test_tensor_access.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_tensor_access.dir/build.make CMakeFiles/test_tensor_access.dir/test_tensor_access.cpp.s
-.PHONY : test_tensor_access.cpp.s
 
 tests/config_loader_test.o: tests/config_loader_test.cpp.o
 .PHONY : tests/config_loader_test.o
@@ -943,24 +623,10 @@ help:
 	@echo "... config_loader_test"
 	@echo "... detector"
 	@echo "... dlopen_test"
-	@echo "... inspect_model_tensors"
-	@echo "... minimal_model_test"
 	@echo "... servo_test"
-	@echo "... test_ballistics_actual"
-	@echo "... test_ballistics_fix"
-	@echo "... test_ballistics_fixed"
-	@echo "... test_ballistics_simple"
-	@echo "... test_config"
-	@echo "... test_tensor_access"
 	@echo "... civetweb/src/civetweb.o"
 	@echo "... civetweb/src/civetweb.i"
 	@echo "... civetweb/src/civetweb.s"
-	@echo "... inspect_model_tensors.o"
-	@echo "... inspect_model_tensors.i"
-	@echo "... inspect_model_tensors.s"
-	@echo "... minimal_model_test.o"
-	@echo "... minimal_model_test.i"
-	@echo "... minimal_model_test.s"
 	@echo "... src/application.o"
 	@echo "... src/application.i"
 	@echo "... src/application.s"
@@ -1006,24 +672,6 @@ help:
 	@echo "... src/util_logging.o"
 	@echo "... src/util_logging.i"
 	@echo "... src/util_logging.s"
-	@echo "... test_ballistics_actual.o"
-	@echo "... test_ballistics_actual.i"
-	@echo "... test_ballistics_actual.s"
-	@echo "... test_ballistics_fix.o"
-	@echo "... test_ballistics_fix.i"
-	@echo "... test_ballistics_fix.s"
-	@echo "... test_ballistics_fixed.o"
-	@echo "... test_ballistics_fixed.i"
-	@echo "... test_ballistics_fixed.s"
-	@echo "... test_ballistics_simple.o"
-	@echo "... test_ballistics_simple.i"
-	@echo "... test_ballistics_simple.s"
-	@echo "... test_config.o"
-	@echo "... test_config.i"
-	@echo "... test_config.s"
-	@echo "... test_tensor_access.o"
-	@echo "... test_tensor_access.i"
-	@echo "... test_tensor_access.s"
 	@echo "... tests/config_loader_test.o"
 	@echo "... tests/config_loader_test.i"
 	@echo "... tests/config_loader_test.s"

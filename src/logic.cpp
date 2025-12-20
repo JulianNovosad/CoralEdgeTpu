@@ -432,6 +432,38 @@ void LogicModule::worker_thread_func() {
 void LogicModule::process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data) {
     auto total_process_start = std::chrono::high_resolution_clock::now();
 
+    // Check if camera is covered (no detections or all detections have very low confidence)
+    bool camera_covered = false;
+    if (detections.empty()) {
+        camera_covered = true;
+    } else {
+        // Check if all detections have very low confidence (likely noise when camera is covered)
+        camera_covered = true;
+        for (const auto& det : detections) {
+            if (det.score > 0.1f) {  // If any detection has reasonable confidence, camera is not covered
+                camera_covered = false;
+                break;
+            }
+        }
+    }
+
+    // If camera is covered, lock servo in safe position and return early
+    if (camera_covered) {
+        // Lock servo in safe position (center)
+        if (led_controller_ && led_controller_->is_initialized()) {
+            // Check cooldown period (0.3 seconds)
+            auto current_time = std::chrono::steady_clock::now();
+            auto time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_direction_change_).count();
+            
+            if (time_since_last_actuation >= 300) { // 300ms cooldown
+                led_controller_->set_servo_position(0, 0.5f); // Center position is safe position
+                last_direction_change_ = std::chrono::steady_clock::now();
+                APP_LOG_INFO("CAMERA_COVERED: Locked servo in safe position (center)");
+            }
+        }
+        return; // Skip all other processing when camera is covered
+    }
+
     // Log detection information for invariant verification
     APP_LOG_INFO("DETECTION_INVARIANT: Detections received by logic module: " + std::to_string(detections.size()));
     for (size_t i = 0; i < detections.size(); ++i) {
@@ -1324,11 +1356,23 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
         return;
     }
     
-    // Set servo position based on target coordinates deterministically
-    // Map target_x from [-frame_width/2, frame_width/2] to [0.0, 1.0]
-    // Map target_y from [-frame_height/2, frame_height/2] to [0.0, 1.0]
+    // Check cooldown period (0.3 seconds)
+    auto current_time = std::chrono::steady_clock::now();
+    auto time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_direction_change_).count();
+    
+    if (time_since_last_actuation < 300) { // 300ms cooldown
+        APP_LOG_INFO("Skipping servo command: Cooldown period active (" + std::to_string(time_since_last_actuation) + "ms since last actuation)");
+        return;
+    }
+    
+    // Perform oscillation pattern: move to position and back
     if (led_controller_ && led_controller_->is_initialized()) {
-        // Normalize coordinates to [0, 1] range
+        // Execute one oscillation cycle
+        // Move to target position (centered at 0.5)
+        led_controller_->set_servo_position(0, 0.5f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Brief pause
+        
+        // Move to extended position based on target
         float normalized_x = 0.5f + (target_x / static_cast<float>(config_.get_tpu_target_width()));
         float normalized_y = 0.5f + (target_y / static_cast<float>(config_.get_tpu_target_height()));
         
@@ -1336,17 +1380,22 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
         normalized_x = std::max(0.0f, std::min(1.0f, normalized_x));
         normalized_y = std::max(0.0f, std::min(1.0f, normalized_y));
         
-        // Use average of x and y positions for servo (can be adjusted as needed)
-        servo_position_ = (normalized_x + normalized_y) * 0.5f;
+        // Use average of x and y positions for servo
+        float target_position = (normalized_x + normalized_y) * 0.5f;
+        led_controller_->set_servo_position(0, target_position);
+        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Brief pause
         
-        // Set servo position directly without timing-dependent oscillation
-        led_controller_->set_servo_position(0, servo_position_);
+        // Return to center position
+        led_controller_->set_servo_position(0, 0.5f);
+        
+        // Update last actuation time
+        last_direction_change_ = std::chrono::steady_clock::now();
     }
     
     // Log servo command with detailed information for causality validation
     char log_buffer[256];
-    snprintf(log_buffer, sizeof(log_buffer), "CAUSALITY_VALIDATION: Servo actuated: pos=(%.2f, %.2f, %.2f) conf=%.2f%% servo_pos=%.4f", 
-            target_x, target_y, target_z, confidence * 100.0f, servo_position_);
+    snprintf(log_buffer, sizeof(log_buffer), "CAUSALITY_VALIDATION: Servo oscillated: pos=(%.2f, %.2f, %.2f) conf=%.2f%%", 
+            target_x, target_y, target_z, confidence * 100.0f);
     APP_LOG_INFO(log_buffer);
     
     current_servo_command_count_++; // Increment servo command count

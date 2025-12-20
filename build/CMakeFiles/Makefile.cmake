@@ -146,12 +146,4 @@ set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/config_loader_test.dir/DependInfo.cmake"
   "CMakeFiles/servo_test.dir/DependInfo.cmake"
   "CMakeFiles/dlopen_test.dir/DependInfo.cmake"
-  "CMakeFiles/test_config.dir/DependInfo.cmake"
-  "CMakeFiles/minimal_model_test.dir/DependInfo.cmake"
-  "CMakeFiles/inspect_model_tensors.dir/DependInfo.cmake"
-  "CMakeFiles/test_tensor_access.dir/DependInfo.cmake"
-  "CMakeFiles/test_ballistics_fix.dir/DependInfo.cmake"
-  "CMakeFiles/test_ballistics_simple.dir/DependInfo.cmake"
-  "CMakeFiles/test_ballistics_actual.dir/DependInfo.cmake"
-  "CMakeFiles/test_ballistics_fixed.dir/DependInfo.cmake"
   )
