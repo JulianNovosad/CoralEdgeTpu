@@ -1,7 +1,7 @@
 ---
-# Avant-garde M1-Delta Mk II Wapenveiligheidssysteem
+# Avant-garde Mk V Wapenveiligheidssysteem
 
-Dit project bevat de broncode en documentatie voor het **Avant-garde M1-Delta Mk II**, een geavanceerd vuurleidings- en veiligheidssysteem ontwikkeld als profielwerkstuk (PWS).
+Dit project bevat de broncode en documentatie voor het **Avant-garde Mk V**, een geavanceerd vuurleidings- en veiligheidssysteem ontwikkeld als profielwerkstuk (PWS).
 
 ## Wat is het?
 
