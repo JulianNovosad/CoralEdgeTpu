@@ -1,0 +1,1 @@
+/usr/bin/c++  -Wall -Wextra -Werror -g CMakeFiles/minimal_detector.dir/minimal_detector.cpp.o CMakeFiles/minimal_detector.dir/src/application.cpp.o CMakeFiles/minimal_detector.dir/src/util_logging.cpp.o CMakeFiles/minimal_detector.dir/src/config_loader.cpp.o -o minimal_detector  -ltensorflowlite -ledgetpu 

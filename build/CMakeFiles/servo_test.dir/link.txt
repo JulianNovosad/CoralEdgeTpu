@@ -1,1 +1,0 @@
-/usr/bin/c++ -Werror -Wall -Wextra -Werror -g CMakeFiles/servo_test.dir/src/servo_test.cpp.o CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.o CMakeFiles/servo_test.dir/src/util_logging.cpp.o -o servo_test 

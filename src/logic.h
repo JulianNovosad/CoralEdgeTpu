@@ -12,6 +12,9 @@
 #include <memory>
 #include <cmath>
 #include <zmq.hpp> // ZeroMQ C++ bindings
+#include <map>
+#include <fstream>
+#include "json.hpp" // nlohmann/json header
 
 // --- Nieuwe 3D Ballistiek Structuren ---
 
@@ -94,9 +97,9 @@ struct TrackedObject {
     Vec3 predicted_impact_point;
     Uncertainty uncertainty;
 
-    TrackedObject(long _id, const DetectionResult& detection, float initial_distance)
+    TrackedObject(long _id, const DetectionResult& detection, float initial_distance, float initial_x = 0.0f, float initial_y = 0.0f)
         : id(_id), last_detection(detection), 
-          position({0.0f, 0.0f, initial_distance}), // Init positie
+          position({initial_x, initial_y, initial_distance}), // Init positie
           velocity({0.0f, 0.0f, 0.0f}),
           acceleration({0.0f, 0.0f, 0.0f}),
           last_update_time(detection.timestamp),
@@ -220,6 +223,41 @@ private:
     
     // Storage for latest IMU data
     OrientationData latest_imu_data_;
+    
+    // Per-class distance tracking for multi-class smoothing
+    static const size_t CLASS_DISTANCE_WINDOW_SIZE = 10;
+    struct ClassDistanceHistory {
+        std::vector<float> distances;
+        size_t index;
+        bool full;
+        ClassDistanceHistory() : distances(CLASS_DISTANCE_WINDOW_SIZE, 0.0f), index(0), full(false) {}
+    };
+    std::map<int, ClassDistanceHistory> class_distance_histories_;
+    std::map<int, std::string> class_names_;  // Map class IDs to human-readable names
+    
+    // Global distance tracking (existing)
+    static const size_t DISTANCE_WINDOW_SIZE = 10;
+    std::vector<float> distance_history_;
+    size_t distance_history_index_ = 0;
+    bool distance_history_full_ = false;
+    
+    // Class distance map for corrections
+    std::map<int, float> class_distance_map_;
+    
+    // Class scale factors for distance calibration
+    std::map<int, float> class_scale_factors_;
+    
+    // Methods for class-specific distance handling
+    bool load_class_distance_map(const std::string& filepath);
+    bool load_class_scale_factors(const std::string& filepath);
+    bool load_labelmap(const std::string& filepath);
+    float apply_class_correction(int class_id, float raw_distance);
+    float add_class_distance_estimate(int class_id, float distance);
+    float get_smoothed_class_distance(int class_id);
+    std::vector<std::pair<int, float>> get_top_classes_with_distances(size_t count = 3);
+    
+    // Method to add a distance estimate to the rolling window and get smoothed value
+    float add_distance_estimate(float distance);
 
 };
 

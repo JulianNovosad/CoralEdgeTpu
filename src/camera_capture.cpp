@@ -805,6 +805,10 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
     image_data.height = cfg.size.height;
     image_data.format = cfg.pixelFormat;
     image_data.buffer = std::move(pooled_buffer);
+    // Store file descriptor and offset for zero-copy access
+    image_data.fd = fd;
+    image_data.offset = plane.offset;
+    image_data.length = length;
     // frame_id is now set via constructor
 
     // Diagnostic logging before memcpy

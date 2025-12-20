@@ -993,4 +993,17 @@ CMakeFiles/detector.dir/src/application.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/termios-c_lflag.h \
  /usr/include/aarch64-linux-gnu/bits/termios-tcflow.h \
  /usr/include/aarch64-linux-gnu/bits/termios-misc.h \
- /usr/include/aarch64-linux-gnu/sys/ttydefaults.h
+ /usr/include/aarch64-linux-gnu/sys/ttydefaults.h /usr/include/dirent.h \
+ /usr/include/aarch64-linux-gnu/bits/dirent.h \
+ /usr/include/aarch64-linux-gnu/bits/dirent_ext.h \
+ /usr/include/aarch64-linux-gnu/sys/stat.h \
+ /usr/include/aarch64-linux-gnu/bits/stat.h \
+ /usr/include/aarch64-linux-gnu/bits/struct_stat.h \
+ /usr/include/aarch64-linux-gnu/bits/statx.h /usr/include/linux/stat.h \
+ /usr/include/aarch64-linux-gnu/bits/statx-generic.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_statx_timestamp.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_statx.h \
+ /usr/include/fcntl.h /usr/include/aarch64-linux-gnu/bits/fcntl.h \
+ /usr/include/aarch64-linux-gnu/bits/fcntl-linux.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_iovec.h \
+ /usr/include/linux/falloc.h

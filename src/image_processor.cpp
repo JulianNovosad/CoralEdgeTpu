@@ -109,7 +109,10 @@ void ImageProcessor::worker_thread_func() {
 
         cv::Mat processed_mat;
         if (input_image.width == (unsigned int)tpu_input_width_ && input_image.height == (unsigned int)tpu_input_height_) {
-            // No resizing or color conversion needed, just copy data
+            // No resizing or color conversion needed
+            // For zero-copy optimization, we can pass the buffer directly in some cases
+            // But for now, we still copy for thread safety
+            // In the future, we could implement a more sophisticated zero-copy path here
             input_frame_mat.copyTo(processed_mat);
         } else {
             // Resize if dimensions differ
@@ -149,6 +152,10 @@ void ImageProcessor::worker_thread_func() {
         output_image_data.height = tpu_input_height_;
         output_image_data.format = libcamera::formats::RGB888; // Output is always RGB888 for TPU
         output_image_data.buffer = std::move(processed_buffer_data);
+        // Pass through zero-copy information if available
+        output_image_data.fd = input_image.fd;
+        output_image_data.offset = input_image.offset;
+        output_image_data.length = input_image.length;
 
         if (!output_queue_.push(std::move(output_image_data))) {
             APP_LOG_WARNING("ImageProcessor output queue is full. Dropping processed frame.");

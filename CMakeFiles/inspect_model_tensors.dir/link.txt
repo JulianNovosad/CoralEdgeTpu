@@ -1,1 +1,1 @@
-/usr/bin/c++  -Wall -Wextra -Werror -g CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.o -o inspect_model_tensors  -ltensorflowlite 
+/usr/bin/c++  -Wall -Wextra -Werror -g CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.o -o inspect_model_tensors  -Wl,-rpath,/home/pi/CoralEdgeTpu/lib lib/libtensorflowlite.so 

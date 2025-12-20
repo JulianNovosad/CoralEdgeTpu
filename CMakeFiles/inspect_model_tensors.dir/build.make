@@ -92,6 +92,7 @@ inspect_model_tensors_EXTERNAL_OBJECTS =
 
 inspect_model_tensors: CMakeFiles/inspect_model_tensors.dir/inspect_model_tensors.cpp.o
 inspect_model_tensors: CMakeFiles/inspect_model_tensors.dir/build.make
+inspect_model_tensors: lib/libtensorflowlite.so
 inspect_model_tensors: CMakeFiles/inspect_model_tensors.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable inspect_model_tensors"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/inspect_model_tensors.dir/link.txt --verbose=$(VERBOSE)

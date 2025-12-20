@@ -19,6 +19,11 @@ struct PooledBuffer {
     std::vector<T> data;
     // Add any other metadata you need, e.g., size, timestamp.
     size_t size = 0;
+    
+    // Zero-copy related fields
+    int fd = -1;           // File descriptor for zero-copy access
+    size_t offset = 0;     // Offset within the file descriptor
+    size_t length = 0;     // Length of the data
 };
 
 /**
@@ -73,6 +78,17 @@ public:
             local_lock.unlock();
             this->cond_.notify_one();
         });
+    }
+
+    // Method to acquire a buffer with zero-copy information
+    std::shared_ptr<PooledBuffer<T>> acquire_with_fd(int fd, size_t offset, size_t length) {
+        auto buffer = acquire();
+        if (buffer) {
+            buffer->fd = fd;
+            buffer->offset = offset;
+            buffer->length = length;
+        }
+        return buffer;
     }
 
     // No explicit release method needed, as it's handled by the custom deleter

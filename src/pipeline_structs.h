@@ -29,6 +29,11 @@ struct ImageData {
     libcamera::PixelFormat format;                 ///< Pixel format of the image data.
     long long timestamp_epoch_ms = 0;              ///< Timestamp of image capture in epoch milliseconds UTC.
     int frame_id = -1;                             ///< Monotonically increasing frame ID.
+    
+    // Zero-copy fields
+    int fd = -1;                                   ///< File descriptor for zero-copy access to frame buffer.
+    size_t offset = 0;                             ///< Offset within the file descriptor for zero-copy access.
+    size_t length = 0;                             ///< Length of the frame data for zero-copy access.
 
     // Constructor to initialize timestamp and frame_id
     ImageData(long long ts_epoch_ms = 0, int f_id = -1)

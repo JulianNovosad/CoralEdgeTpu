@@ -781,5 +781,11 @@ CMakeFiles/detector.dir/src/inference.cpp.o: \
  /usr/include/boost/predef/version.h \
  /usr/include/boost/lockfree/lockfree_forward.hpp \
  /usr/include/c++/12/iostream \
- /usr/include/libcamera/libcamera/pixel_format.h /usr/include/edgetpu.h \
+ /usr/include/libcamera/libcamera/pixel_format.h \
+ /usr/include/aarch64-linux-gnu/sys/mman.h \
+ /usr/include/aarch64-linux-gnu/bits/mman.h \
+ /usr/include/aarch64-linux-gnu/bits/mman-map-flags-generic.h \
+ /usr/include/aarch64-linux-gnu/bits/mman-linux.h \
+ /usr/include/aarch64-linux-gnu/bits/mman-shared.h \
+ /usr/include/aarch64-linux-gnu/bits/mman_ext.h /usr/include/edgetpu.h \
  /home/pi/CoralEdgeTpu/include/tensorflow/lite/context.h

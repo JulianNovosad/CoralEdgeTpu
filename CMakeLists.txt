@@ -134,9 +134,34 @@ target_include_directories(servo_test PRIVATE
 add_executable(dlopen_test tests/dlopen_test.cpp)
 target_link_libraries(dlopen_test PRIVATE dl)
 
+add_executable(test_config test_config.cpp src/config_loader.cpp src/util_logging.cpp)
+target_link_libraries(test_config PRIVATE)
+target_include_directories(test_config PRIVATE
+    src
+    include
+    /usr/include/libcamera
+)
+
+add_executable(minimal_model_test minimal_model_test.cpp)
+target_link_libraries(minimal_model_test PRIVATE
+    ${TFLITE_LIB_DIR}/libtensorflowlite.so
+    edgetpu
+    Threads::Threads
+)
+target_include_directories(minimal_model_test PRIVATE
+    include
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+    /usr/include
+)
+# Disable strict warnings for this utility
+target_compile_options(minimal_model_test PRIVATE
+    -Wno-error
+)
+
 add_executable(inspect_model_tensors inspect_model_tensors.cpp)
 target_link_libraries(inspect_model_tensors PRIVATE
-    tensorflowlite
+    ${TFLITE_LIB_DIR}/libtensorflowlite.so
 )
 target_include_directories(inspect_model_tensors PRIVATE
     ${TFLITE_INCLUDE_DIR}
@@ -144,5 +169,74 @@ target_include_directories(inspect_model_tensors PRIVATE
 )
 # Disable strict warnings for this utility
 target_compile_options(inspect_model_tensors PRIVATE
+    -Wno-error
+)
+
+add_executable(test_tensor_access test_tensor_access.cpp)
+target_link_libraries(test_tensor_access PRIVATE
+    ${TFLITE_LIB_DIR}/libtensorflowlite.so
+    edgetpu
+    Threads::Threads
+    ${OpenCV_LIBS}
+)
+target_include_directories(test_tensor_access PRIVATE
+    include
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+    /usr/include
+    ${OpenCV_INCLUDE_DIRS}
+)
+# Disable strict warnings for this utility
+target_compile_options(test_tensor_access PRIVATE
+    -Wno-error
+)
+
+add_executable(test_ballistics_fix test_ballistics_fix.cpp src/logic.cpp src/config_loader.cpp src/util_logging.cpp)
+target_link_libraries(test_ballistics_fix PRIVATE
+    Threads::Threads
+)
+target_include_directories(test_ballistics_fix PRIVATE
+    src
+    include
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+    /usr/include/libcamera
+)
+# Disable strict warnings for this utility
+target_compile_options(test_ballistics_fix PRIVATE
+    -Wno-error
+)
+
+add_executable(test_ballistics_simple test_ballistics_simple.cpp)
+target_link_libraries(test_ballistics_simple PRIVATE
+    Threads::Threads
+)
+# Disable strict warnings for this utility
+target_compile_options(test_ballistics_simple PRIVATE
+    -Wno-error
+)
+
+add_executable(test_ballistics_actual test_ballistics_actual.cpp src/logic.cpp src/config_loader.cpp src/util_logging.cpp)
+target_link_libraries(test_ballistics_actual PRIVATE
+    Threads::Threads
+)
+target_include_directories(test_ballistics_actual PRIVATE
+    src
+    include
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+    /usr/include/libcamera
+)
+# Disable strict warnings for this utility
+target_compile_options(test_ballistics_actual PRIVATE
+    -Wno-error
+)
+
+add_executable(test_ballistics_fixed test_ballistics_fixed.cpp)
+target_link_libraries(test_ballistics_fixed PRIVATE
+    Threads::Threads
+)
+# Disable strict warnings for this utility
+target_compile_options(test_ballistics_fixed PRIVATE
     -Wno-error
 )

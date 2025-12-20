@@ -2,6 +2,13 @@
 /home/pi/CoralEdgeTpu/CMakeFiles/config_loader_test.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/servo_test.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/dlopen_test.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/test_config.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/minimal_model_test.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/inspect_model_tensors.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/test_tensor_access.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/test_ballistics_fix.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/test_ballistics_simple.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/test_ballistics_actual.dir
+/home/pi/CoralEdgeTpu/CMakeFiles/test_ballistics_fixed.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/edit_cache.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/rebuild_cache.dir
