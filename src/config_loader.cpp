@@ -73,10 +73,6 @@ std::string ConfigLoader::get_video_stream_address() const {
     return config_data_.value("/application/video_stream/address"_json_pointer, "0.0.0.0");
 }
 
-unsigned short ConfigLoader::get_video_stream_port() const {
-    return config_data_.value("/application/video_stream/port"_json_pointer, 5000);
-}
-
 std::string ConfigLoader::get_telemetry_protocol() const {
     return config_data_.value("/application/telemetry/protocol"_json_pointer, "HTTP_WEBSOCKET");
 }
@@ -176,6 +172,35 @@ unsigned short ConfigLoader::get_phone_orientation_pitch_port() const {
 
 unsigned short ConfigLoader::get_phone_orientation_roll_port() const {
     return config_data_.value("/application/network_ports/2003/port"_json_pointer, 2003);
+}
+
+unsigned short ConfigLoader::get_video_stream_port() const {
+    // Check if the port is defined in the network_ports section
+    if (config_data_.contains("/application/network_ports/1001"_json_pointer)) {
+        const auto& port_config = config_data_["/application/network_ports/1001"_json_pointer];
+        if (port_config.contains("port")) {
+            return port_config["port"].get<unsigned short>();
+        }
+    }
+    // Fallback to default value
+    return 1001;
+}
+
+// RTSP-specific configuration getters
+int ConfigLoader::get_rtsp_port() const {
+    return config_data_.value("/application/video_stream/rtsp_port"_json_pointer, 8554);
+}
+
+std::string ConfigLoader::get_rtsp_mount_point() const {
+    return config_data_.value("/application/video_stream/rtsp_mount_point"_json_pointer, "/live");
+}
+
+std::string ConfigLoader::get_rtsp_username() const {
+    return config_data_.value("/application/video_stream/rtsp_username"_json_pointer, "");
+}
+
+std::string ConfigLoader::get_rtsp_password() const {
+    return config_data_.value("/application/video_stream/rtsp_password"_json_pointer, "");
 }
 
 // --- TPU Stream Configuration Getters ---

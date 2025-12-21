@@ -130,6 +130,12 @@ private:
     std::vector<std::thread> worker_threads_; ///< Vector of active inference worker threads.
     std::atomic<bool> running_ = false; ///< Atomic flag to control the running state of the inference engine.
     
+public:
+    // Freshness indicators
+    std::atomic<long long> last_inference_timestamp_{0}; ///< Timestamp of the last inference
+    std::atomic<int> inference_rate_{0}; ///< Current inference rate
+    
+private:
     TfLiteDelegate* edgetpu_delegate_ = nullptr; ///< The single Edge TPU delegate.
 };
 

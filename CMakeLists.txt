@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror")
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
@@ -31,6 +31,17 @@ else()
     message(WARNING "x264 not found. H.264 encoding via libx264 may not work.")
 endif()
 
+# Attempt to find Live555
+pkg_check_modules(LIVE555 QUIET live555)
+if (LIVE555_FOUND)
+    message(STATUS "Found Live555: ${LIVE555_LIBRARIES}")
+    include_directories(${LIVE555_INCLUDE_DIRS})
+    # Add specific Live555 include directory
+    include_directories(/usr/include/liveMedia /usr/include/BasicUsageEnvironment /usr/include/UsageEnvironment /usr/include/groupsock)
+else()
+    message(WARNING "Live555 not found. RTSP streaming may not work.")
+endif()
+
 # --- Find Local/Custom Dependencies ---
 set(TFLITE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(TFLITE_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
@@ -54,15 +65,33 @@ add_executable(detector
     src/config_loader.cpp
     src/logic.cpp
     src/pca9685_controller.cpp
+    src/monitor.cpp
 
     src/h264_encoder.cpp
     src/orientation_sensor.cpp
     src/application_supervisor.cpp
     src/system_monitor.cpp
     src/keyboard_monitor.cpp
+    src/rtsp_server.cpp
     civetweb/src/civetweb.c
 )
-add_definitions(-DDEBUG_MODE)
+add_executable(camera_isolation_test
+    src/camera_isolation_test.cpp
+)
+
+add_executable(inference_test_no_logging
+    src/inference_test_no_logging.cpp
+    src/inference.cpp
+    src/config_loader.cpp
+    src/util_logging.cpp
+)
+
+add_executable(raw_tpu_test
+    src/raw_tpu_test.cpp
+    src/inference.cpp
+    src/config_loader.cpp
+    src/util_logging.cpp
+)
 set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS USE_WEBSOCKET)
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})
@@ -86,7 +115,79 @@ if (X264_FOUND)
     target_link_libraries(detector PRIVATE ${X264_LIBRARIES})
 endif()
 
-target_link_options(detector PRIVATE "-Wl,-rpath,'$ORIGIN/../lib'")
+if (LIVE555_FOUND)
+    target_link_libraries(detector PRIVATE ${LIVE555_LIBRARIES})
+endif()
+
+target_link_libraries(camera_isolation_test PRIVATE
+    camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
+    camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
+    Threads::Threads # For pthreads
+)
+
+target_link_libraries(inference_test_no_logging PRIVATE
+    ${OpenCV_LIBS}
+    ${TFLITE_LIB_DIR}/libtensorflowlite.so # For TensorFlow Lite functions
+    edgetpu # For Edge TPU delegate functions
+    camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
+    camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
+    Threads::Threads # For pthreads
+    ${ZEROMQ_LIBRARIES} # For ZeroMQ library
+)
+
+target_link_libraries(raw_tpu_test PRIVATE
+    ${OpenCV_LIBS}
+    ${TFLITE_LIB_DIR}/libtensorflowlite.so # For TensorFlow Lite functions
+    edgetpu # For Edge TPU delegate functions
+    camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
+    camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
+    Threads::Threads # For pthreads
+    ${ZEROMQ_LIBRARIES} # For ZeroMQ library
+)
+
+target_include_directories(camera_isolation_test PRIVATE
+    /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+)
+
+target_include_directories(inference_test_no_logging PRIVATE
+    ${OpenCV_INCLUDE_DIRS}
+    SYSTEM ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+    ${JPEG_INCLUDE_DIRS}
+    ${ZEROMQ_INCLUDE_DIRS}
+    /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    /usr/include/liveMedia
+    /usr/include/BasicUsageEnvironment
+    /usr/include/UsageEnvironment
+    /usr/include/groupsock
+    civetweb/include
+    src # Include the src directory for h264_encoder.h, etc.
+    SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow_2.5.0
+)
+
+target_compile_options(inference_test_no_logging PRIVATE
+    -Wno-error
+)
+
+target_include_directories(raw_tpu_test PRIVATE
+    ${OpenCV_INCLUDE_DIRS}
+    SYSTEM ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+    ${JPEG_INCLUDE_DIRS}
+    ${ZEROMQ_INCLUDE_DIRS}
+    /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    /usr/include/liveMedia
+    /usr/include/BasicUsageEnvironment
+    /usr/include/UsageEnvironment
+    /usr/include/groupsock
+    civetweb/include
+    src # Include the src directory for h264_encoder.h, etc.
+    SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow_2.5.0
+)
+
+target_compile_options(raw_tpu_test PRIVATE
+    -Wno-error
+)
 
 message(STATUS "Target 'detector' configured. Ready to build.")
 target_include_directories(detector PRIVATE
@@ -96,6 +197,10 @@ target_include_directories(detector PRIVATE
     ${JPEG_INCLUDE_DIRS}
     ${ZEROMQ_INCLUDE_DIRS}
     /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    /usr/include/liveMedia
+    /usr/include/BasicUsageEnvironment
+    /usr/include/UsageEnvironment
+    /usr/include/groupsock
     civetweb/include
     src # Include the src directory for h264_encoder.h, etc.
     SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow_2.5.0

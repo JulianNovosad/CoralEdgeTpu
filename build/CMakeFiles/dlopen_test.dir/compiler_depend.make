@@ -146,6 +146,7 @@ CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o: /home/pi/CoralEdgeTpu/tests/
   /usr/include/aarch64-linux-gnu/bits/select.h \
   /usr/include/aarch64-linux-gnu/bits/types/sigset_t.h \
   /usr/include/alloca.h \
+  /usr/include/aarch64-linux-gnu/bits/stdlib-bsearch.h \
   /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
   /usr/include/c++/12/bits/std_abs.h \
   /usr/include/c++/12/cstdio \
@@ -155,6 +156,7 @@ CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o: /home/pi/CoralEdgeTpu/tests/
   /usr/include/aarch64-linux-gnu/bits/types/struct_FILE.h \
   /usr/include/aarch64-linux-gnu/bits/types/cookie_io_functions_t.h \
   /usr/include/aarch64-linux-gnu/bits/stdio_lim.h \
+  /usr/include/aarch64-linux-gnu/bits/stdio.h \
   /usr/include/c++/12/cerrno \
   /usr/include/errno.h \
   /usr/include/aarch64-linux-gnu/bits/errno.h \
@@ -259,6 +261,8 @@ CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o: /home/pi/CoralEdgeTpu/tests/
 
 /usr/include/errno.h:
 
+/usr/include/aarch64-linux-gnu/bits/stdio.h:
+
 /usr/include/aarch64-linux-gnu/bits/stdio_lim.h:
 
 /usr/include/aarch64-linux-gnu/bits/wctype-wchar.h:
@@ -270,6 +274,8 @@ CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o: /home/pi/CoralEdgeTpu/tests/
 /usr/include/aarch64-linux-gnu/bits/types/__fpos_t.h:
 
 /usr/include/c++/12/cstdio:
+
+/usr/include/aarch64-linux-gnu/bits/stdlib-bsearch.h:
 
 /usr/include/aarch64-linux-gnu/sys/select.h:
 

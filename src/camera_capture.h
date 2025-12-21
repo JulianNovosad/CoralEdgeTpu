@@ -133,6 +133,12 @@ public:
     unsigned int actual_stride_ = 0; ///< De daadwerkelijke stride van de frame buffer.
 
     std::atomic<bool> running_ = false; ///< Vlag om de state van de worker thread te beheren.
+    
+    // Freshness indicators
+public:
+    std::atomic<long long> last_frame_timestamp_{0}; ///< Timestamp of the last processed frame
+    std::atomic<int> frame_rate_{0}; ///< Current frame rate
+private:
 
     std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_; ///< Tijdstip van het laatst verwerkte frame.
     int frame_count_ = 0; ///< Teller voor het aantal verwerkte frames.

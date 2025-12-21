@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = -DDEBUG_MODE -DOPENSSL_API_3_0
 
-CXX_INCLUDES = -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/include
+CXX_INCLUDES = -I/usr/include/liveMedia -I/usr/include/groupsock -I/usr/include/BasicUsageEnvironment -I/usr/include/UsageEnvironment -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/include
 
 CXX_FLAGS =  -Wall -Wextra -Werror -g -std=gnu++17
 

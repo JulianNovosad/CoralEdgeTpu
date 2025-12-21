@@ -51,6 +51,13 @@ public:
     std::string get_video_stream_protocol() const;
     std::string get_video_stream_address() const;
     unsigned short get_video_stream_port() const;
+    
+    // --- RTSP Configuration ---
+    int get_rtsp_port() const;
+    std::string get_rtsp_mount_point() const;
+    std::string get_rtsp_username() const;
+    std::string get_rtsp_password() const;
+    
     std::string get_telemetry_protocol() const;
     std::string get_telemetry_pub_address() const;
     

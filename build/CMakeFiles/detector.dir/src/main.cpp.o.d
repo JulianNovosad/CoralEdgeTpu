@@ -137,7 +137,9 @@ CMakeFiles/detector.dir/src/main.cpp.o: \
  /usr/include/aarch64-linux-gnu/sys/select.h \
  /usr/include/aarch64-linux-gnu/bits/select.h \
  /usr/include/aarch64-linux-gnu/bits/types/sigset_t.h \
- /usr/include/alloca.h /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
+ /usr/include/alloca.h \
+ /usr/include/aarch64-linux-gnu/bits/stdlib-bsearch.h \
+ /usr/include/aarch64-linux-gnu/bits/stdlib-float.h \
  /usr/include/c++/12/bits/std_abs.h /usr/include/c++/12/csignal \
  /usr/include/signal.h \
  /usr/include/aarch64-linux-gnu/bits/signum-generic.h \
@@ -200,10 +202,10 @@ CMakeFiles/detector.dir/src/main.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/types/struct_FILE.h \
  /usr/include/aarch64-linux-gnu/bits/types/cookie_io_functions_t.h \
  /usr/include/aarch64-linux-gnu/bits/stdio_lim.h \
- /usr/include/c++/12/cerrno /usr/include/errno.h \
- /usr/include/aarch64-linux-gnu/bits/errno.h /usr/include/linux/errno.h \
- /usr/lib/linux/uapi/arm64/asm/errno.h /usr/include/asm-generic/errno.h \
- /usr/include/asm-generic/errno-base.h \
+ /usr/include/aarch64-linux-gnu/bits/stdio.h /usr/include/c++/12/cerrno \
+ /usr/include/errno.h /usr/include/aarch64-linux-gnu/bits/errno.h \
+ /usr/include/linux/errno.h /usr/lib/linux/uapi/arm64/asm/errno.h \
+ /usr/include/asm-generic/errno.h /usr/include/asm-generic/errno-base.h \
  /usr/include/aarch64-linux-gnu/bits/types/error_t.h \
  /usr/include/c++/12/bits/charconv.h \
  /usr/include/c++/12/bits/basic_string.tcc /usr/include/c++/12/fstream \
@@ -993,4 +995,220 @@ CMakeFiles/detector.dir/src/main.cpp.o: \
  /usr/include/aarch64-linux-gnu/bits/termios-c_lflag.h \
  /usr/include/aarch64-linux-gnu/bits/termios-tcflow.h \
  /usr/include/aarch64-linux-gnu/bits/termios-misc.h \
- /usr/include/aarch64-linux-gnu/sys/ttydefaults.h
+ /usr/include/aarch64-linux-gnu/sys/ttydefaults.h \
+ /home/pi/CoralEdgeTpu/src/rtsp_server.h \
+ /usr/include/liveMedia/liveMedia.hh \
+ /usr/include/liveMedia/JPEG2000VideoRTPSource.hh \
+ /usr/include/liveMedia/MultiFramedRTPSource.hh \
+ /usr/include/liveMedia/RTPSource.hh \
+ /usr/include/liveMedia/FramedSource.hh \
+ /usr/include/groupsock/NetCommon.h \
+ /usr/include/aarch64-linux-gnu/sys/socket.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_iovec.h \
+ /usr/include/aarch64-linux-gnu/bits/socket.h \
+ /usr/include/aarch64-linux-gnu/bits/socket_type.h \
+ /usr/include/aarch64-linux-gnu/bits/sockaddr.h \
+ /usr/lib/linux/uapi/arm64/asm/socket.h /usr/include/asm-generic/socket.h \
+ /usr/lib/linux/uapi/arm64/asm/sockios.h \
+ /usr/include/asm-generic/sockios.h \
+ /usr/include/aarch64-linux-gnu/bits/types/struct_osockaddr.h \
+ /usr/include/netinet/in.h /usr/include/aarch64-linux-gnu/bits/in.h \
+ /usr/include/arpa/inet.h /usr/include/netdb.h /usr/include/rpc/netdb.h \
+ /usr/include/aarch64-linux-gnu/bits/netdb.h \
+ /usr/include/liveMedia/MediaSource.hh /usr/include/liveMedia/Media.hh \
+ /usr/include/liveMedia/liveMedia_version.hh \
+ /usr/include/UsageEnvironment/HashTable.hh \
+ /usr/include/UsageEnvironment/Boolean.hh \
+ /usr/include/UsageEnvironment/UsageEnvironment.hh \
+ /usr/include/UsageEnvironment/UsageEnvironment_version.hh \
+ /usr/include/UsageEnvironment/strDup.hh \
+ /usr/include/liveMedia/RTPInterface.hh \
+ /usr/include/liveMedia/TLSState.hh /usr/include/openssl/ssl.h \
+ /usr/include/openssl/macros.h \
+ /usr/include/aarch64-linux-gnu/openssl/opensslconf.h \
+ /usr/include/aarch64-linux-gnu/openssl/configuration.h \
+ /usr/include/openssl/opensslv.h /usr/include/openssl/e_os2.h \
+ /usr/include/openssl/comp.h /usr/include/openssl/crypto.h \
+ /usr/include/openssl/safestack.h /usr/include/openssl/stack.h \
+ /usr/include/openssl/types.h /usr/include/openssl/cryptoerr.h \
+ /usr/include/openssl/symhacks.h /usr/include/openssl/cryptoerr_legacy.h \
+ /usr/include/openssl/core.h /usr/include/openssl/comperr.h \
+ /usr/include/openssl/bio.h /usr/include/openssl/bioerr.h \
+ /usr/include/openssl/x509.h /usr/include/openssl/buffer.h \
+ /usr/include/openssl/buffererr.h /usr/include/openssl/evp.h \
+ /usr/include/openssl/core_dispatch.h /usr/include/openssl/evperr.h \
+ /usr/include/openssl/params.h /usr/include/openssl/bn.h \
+ /usr/include/openssl/bnerr.h /usr/include/openssl/objects.h \
+ /usr/include/openssl/obj_mac.h /usr/include/openssl/asn1.h \
+ /usr/include/openssl/asn1err.h /usr/include/openssl/objectserr.h \
+ /usr/include/openssl/ec.h /usr/include/openssl/ecerr.h \
+ /usr/include/openssl/rsa.h /usr/include/openssl/rsaerr.h \
+ /usr/include/openssl/dsa.h /usr/include/openssl/dh.h \
+ /usr/include/openssl/dherr.h /usr/include/openssl/dsaerr.h \
+ /usr/include/openssl/sha.h /usr/include/openssl/x509err.h \
+ /usr/include/openssl/x509_vfy.h /usr/include/openssl/lhash.h \
+ /usr/include/openssl/pkcs7.h /usr/include/openssl/pkcs7err.h \
+ /usr/include/openssl/http.h /usr/include/openssl/conf.h \
+ /usr/include/openssl/conferr.h /usr/include/openssl/conftypes.h \
+ /usr/include/openssl/pem.h /usr/include/openssl/pemerr.h \
+ /usr/include/openssl/hmac.h /usr/include/openssl/async.h \
+ /usr/include/openssl/asyncerr.h /usr/include/openssl/ct.h \
+ /usr/include/openssl/cterr.h /usr/include/openssl/sslerr.h \
+ /usr/include/openssl/sslerr_legacy.h /usr/include/openssl/prov_ssl.h \
+ /usr/include/openssl/ssl2.h /usr/include/openssl/ssl3.h \
+ /usr/include/openssl/tls1.h /usr/include/openssl/dtls1.h \
+ /usr/include/openssl/srtp.h /usr/include/groupsock/Groupsock.hh \
+ /usr/include/groupsock/groupsock_version.hh \
+ /usr/include/groupsock/NetInterface.hh \
+ /usr/include/groupsock/NetAddress.hh /usr/include/groupsock/GroupEId.hh \
+ /usr/include/liveMedia/SRTPCryptographicContext.hh \
+ /usr/include/liveMedia/MIKEY.hh \
+ /usr/include/liveMedia/JPEG2000VideoRTPSink.hh \
+ /usr/include/liveMedia/VideoRTPSink.hh \
+ /usr/include/liveMedia/MultiFramedRTPSink.hh \
+ /usr/include/liveMedia/RTPSink.hh /usr/include/liveMedia/MediaSink.hh \
+ /usr/include/liveMedia/MPEG1or2AudioRTPSink.hh \
+ /usr/include/liveMedia/AudioRTPSink.hh \
+ /usr/include/liveMedia/MP3ADURTPSink.hh \
+ /usr/include/liveMedia/MPEG1or2VideoRTPSink.hh \
+ /usr/include/liveMedia/MPEG4ESVideoRTPSink.hh \
+ /usr/include/liveMedia/AMRAudioFileSink.hh \
+ /usr/include/liveMedia/FileSink.hh \
+ /usr/include/liveMedia/H264VideoFileSink.hh \
+ /usr/include/liveMedia/H264or5VideoFileSink.hh \
+ /usr/include/liveMedia/H265VideoFileSink.hh \
+ /usr/include/liveMedia/OggFileSink.hh \
+ /usr/include/liveMedia/BasicUDPSink.hh \
+ /usr/include/liveMedia/GSMAudioRTPSink.hh \
+ /usr/include/liveMedia/H263plusVideoRTPSink.hh \
+ /usr/include/liveMedia/H264VideoRTPSink.hh \
+ /usr/include/liveMedia/H264or5VideoRTPSink.hh \
+ /usr/include/liveMedia/FramedFilter.hh \
+ /usr/include/liveMedia/H265VideoRTPSink.hh \
+ /usr/include/liveMedia/DVVideoRTPSource.hh \
+ /usr/include/liveMedia/DVVideoRTPSink.hh \
+ /usr/include/liveMedia/DVVideoStreamFramer.hh \
+ /usr/include/liveMedia/H264VideoStreamFramer.hh \
+ /usr/include/liveMedia/H264or5VideoStreamFramer.hh \
+ /usr/include/liveMedia/MPEGVideoStreamFramer.hh \
+ /usr/include/liveMedia/H265VideoStreamFramer.hh \
+ /usr/include/liveMedia/H264VideoStreamDiscreteFramer.hh \
+ /usr/include/liveMedia/H264or5VideoStreamDiscreteFramer.hh \
+ /usr/include/liveMedia/H265VideoStreamDiscreteFramer.hh \
+ /usr/include/liveMedia/JPEGVideoRTPSink.hh \
+ /usr/include/liveMedia/SimpleRTPSink.hh \
+ /usr/include/liveMedia/uLawAudioFilter.hh \
+ /usr/include/liveMedia/MPEG2IndexFromTransportStream.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamTrickModeFilter.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamIndexFile.hh \
+ /usr/include/liveMedia/ByteStreamMultiFileSource.hh \
+ /usr/include/liveMedia/ByteStreamFileSource.hh \
+ /usr/include/liveMedia/FramedFileSource.hh \
+ /usr/include/liveMedia/ByteStreamMemoryBufferSource.hh \
+ /usr/include/liveMedia/BasicUDPSource.hh \
+ /usr/include/liveMedia/SimpleRTPSource.hh \
+ /usr/include/liveMedia/MPEG1or2AudioRTPSource.hh \
+ /usr/include/liveMedia/MPEG4LATMAudioRTPSource.hh \
+ /usr/include/liveMedia/MPEG4LATMAudioRTPSink.hh \
+ /usr/include/liveMedia/MPEG4ESVideoRTPSource.hh \
+ /usr/include/liveMedia/MPEG4GenericRTPSource.hh \
+ /usr/include/liveMedia/MP3ADURTPSource.hh \
+ /usr/include/liveMedia/QCELPAudioRTPSource.hh \
+ /usr/include/liveMedia/AMRAudioRTPSource.hh \
+ /usr/include/liveMedia/AMRAudioSource.hh \
+ /usr/include/liveMedia/JPEGVideoRTPSource.hh \
+ /usr/include/liveMedia/JPEGVideoSource.hh \
+ /usr/include/liveMedia/MPEG1or2VideoRTPSource.hh \
+ /usr/include/liveMedia/VorbisAudioRTPSource.hh \
+ /usr/include/liveMedia/TheoraVideoRTPSource.hh \
+ /usr/include/liveMedia/VP8VideoRTPSource.hh \
+ /usr/include/liveMedia/VP9VideoRTPSource.hh \
+ /usr/include/liveMedia/RawVideoRTPSource.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamFromPESSource.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamMultiplexor.hh \
+ /usr/include/liveMedia/MPEG1or2Demux.hh \
+ /usr/include/liveMedia/MPEG1or2DemuxedElementaryStream.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamFromESSource.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamFramer.hh \
+ /usr/include/liveMedia/ADTSAudioFileSource.hh \
+ /usr/include/liveMedia/ADTSAudioStreamDiscreteFramer.hh \
+ /usr/include/liveMedia/H261VideoRTPSource.hh \
+ /usr/include/liveMedia/H263plusVideoRTPSource.hh \
+ /usr/include/liveMedia/H264VideoRTPSource.hh \
+ /usr/include/liveMedia/H265VideoRTPSource.hh \
+ /usr/include/liveMedia/MP3FileSource.hh /usr/include/liveMedia/MP3ADU.hh \
+ /usr/include/liveMedia/MP3ADUinterleaving.hh \
+ /usr/include/liveMedia/MP3Transcoder.hh \
+ /usr/include/liveMedia/MP3ADUTranscoder.hh \
+ /usr/include/liveMedia/MPEG1or2AudioStreamFramer.hh \
+ /usr/include/liveMedia/H263plusVideoStreamFramer.hh \
+ /usr/include/liveMedia/AC3AudioStreamFramer.hh \
+ /usr/include/liveMedia/AC3AudioRTPSource.hh \
+ /usr/include/liveMedia/AC3AudioRTPSink.hh \
+ /usr/include/liveMedia/VorbisAudioRTPSink.hh \
+ /usr/include/liveMedia/TheoraVideoRTPSink.hh \
+ /usr/include/liveMedia/VP8VideoRTPSink.hh \
+ /usr/include/liveMedia/VP9VideoRTPSink.hh \
+ /usr/include/liveMedia/MPEG4GenericRTPSink.hh \
+ /usr/include/liveMedia/RawVideoRTPSink.hh \
+ /usr/include/liveMedia/RawVideoFrameParameters.hh \
+ /usr/include/liveMedia/MPEG1or2VideoStreamDiscreteFramer.hh \
+ /usr/include/liveMedia/MPEG1or2VideoStreamFramer.hh \
+ /usr/include/liveMedia/MPEG4VideoStreamDiscreteFramer.hh \
+ /usr/include/liveMedia/MPEG4VideoStreamFramer.hh \
+ /usr/include/liveMedia/DeviceSource.hh \
+ /usr/include/liveMedia/AudioInputDevice.hh \
+ /usr/include/liveMedia/WAVAudioFileSource.hh \
+ /usr/include/liveMedia/StreamReplicator.hh \
+ /usr/include/liveMedia/RTSPRegisterSender.hh \
+ /usr/include/liveMedia/RTSPClient.hh \
+ /usr/include/liveMedia/MediaSession.hh /usr/include/liveMedia/RTCP.hh \
+ /usr/include/liveMedia/DigestAuthentication.hh \
+ /usr/include/liveMedia/RTSPServer.hh \
+ /usr/include/liveMedia/GenericMediaServer.hh \
+ /usr/include/liveMedia/ServerMediaSession.hh \
+ /usr/include/liveMedia/SIPClient.hh \
+ /usr/include/liveMedia/QuickTimeFileSink.hh \
+ /usr/include/liveMedia/QuickTimeGenericRTPSource.hh \
+ /usr/include/liveMedia/AVIFileSink.hh \
+ /usr/include/liveMedia/PassiveServerMediaSubsession.hh \
+ /usr/include/liveMedia/MPEG4VideoFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/FileServerMediaSubsession.hh \
+ /usr/include/liveMedia/OnDemandServerMediaSubsession.hh \
+ /usr/include/liveMedia/H264VideoFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/H265VideoFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/WAVAudioFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/AMRAudioFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/AMRAudioFileSource.hh \
+ /usr/include/liveMedia/AMRAudioRTPSink.hh \
+ /usr/include/liveMedia/T140TextRTPSink.hh \
+ /usr/include/liveMedia/TextRTPSink.hh \
+ /usr/include/liveMedia/MP3AudioFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/MPEG1or2VideoFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/MPEG1or2FileServerDemux.hh \
+ /usr/include/liveMedia/MPEG2TransportFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/H263plusVideoFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/ADTSAudioFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/DVVideoFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/AC3AudioFileServerMediaSubsession.hh \
+ /usr/include/liveMedia/MPEG2TransportUDPServerMediaSubsession.hh \
+ /usr/include/liveMedia/MatroskaFileServerDemux.hh \
+ /usr/include/liveMedia/MatroskaFile.hh \
+ /usr/include/liveMedia/OggFileServerDemux.hh \
+ /usr/include/liveMedia/OggFile.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamDemux.hh \
+ /usr/include/liveMedia/ProxyServerMediaSession.hh \
+ /usr/include/liveMedia/MediaTranscodingTable.hh \
+ /usr/include/liveMedia/HLSSegmenter.hh \
+ /usr/include/liveMedia/MPEG2TransportStreamAccumulator.hh \
+ /usr/include/BasicUsageEnvironment/BasicUsageEnvironment.hh \
+ /usr/include/BasicUsageEnvironment/BasicUsageEnvironment0.hh \
+ /usr/include/BasicUsageEnvironment/BasicUsageEnvironment_version.hh \
+ /usr/include/BasicUsageEnvironment/DelayQueue.hh \
+ /usr/include/groupsock/GroupsockHelper.hh \
+ /usr/include/liveMedia/H264VideoRTPSink.hh \
+ /usr/include/liveMedia/H264VideoStreamFramer.hh \
+ /usr/include/liveMedia/RTSPServer.hh \
+ /usr/include/liveMedia/ServerMediaSession.hh \
+ /usr/include/liveMedia/ByteStreamMemoryBufferSource.hh \
+ /home/pi/CoralEdgeTpu/src/monitor.h

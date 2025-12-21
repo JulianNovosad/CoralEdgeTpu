@@ -233,11 +233,11 @@ void InferenceEngine::worker_thread_func() {
     
     ImageData input_image;
     while (running_) {
-        auto total_loop_start = std::chrono::high_resolution_clock::now();
+        [[maybe_unused]] auto total_loop_start = std::chrono::high_resolution_clock::now();
         // 1. Pop from input queue
-        auto pop_start = std::chrono::high_resolution_clock::now();
+        [[maybe_unused]] auto pop_start = std::chrono::high_resolution_clock::now();
         if (input_queue_.pop(input_image)) {
-            auto pop_end = std::chrono::high_resolution_clock::now();
+            [[maybe_unused]] auto pop_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to pop from queue: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(pop_end - pop_start).count()) + " us");
 
             if (!input_image.buffer) {
@@ -249,11 +249,11 @@ void InferenceEngine::worker_thread_func() {
 
             // Preprocessing (e.g., resizing, format conversion) is assumed to be done before data is put into the queue.
             // We log the time taken for this implicitly by measuring from pop to set_input_start.
-            auto preprocessing_end = std::chrono::high_resolution_clock::now(); // Assuming pop_end is the end of preprocessing if it happened before queueing
+            [[maybe_unused]] auto preprocessing_end = std::chrono::high_resolution_clock::now(); // Assuming pop_end is the end of preprocessing if it happened before queueing
             APP_LOG_DEBUG("InferenceEngine: Time for preprocessing (implicit from pop to set_input_start): " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(preprocessing_end - pop_end).count()) + " us");
 
             // 2. Set input tensor (copy data to interpreter input)
-            auto set_input_start = std::chrono::high_resolution_clock::now();
+            [[maybe_unused]] auto set_input_start = std::chrono::high_resolution_clock::now();
             try {
                 set_input_tensor(interpreter.get(), input_image);
             } catch (const std::exception& e) {
@@ -262,7 +262,7 @@ void InferenceEngine::worker_thread_func() {
                 continue;
             }
             input_image.buffer.reset(); // Explicitly release the buffer here!
-            auto set_input_end = std::chrono::high_resolution_clock::now();
+            [[maybe_unused]] auto set_input_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to copy data to input tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(set_input_end - set_input_start).count()) + " us");
 
 
@@ -329,11 +329,27 @@ void InferenceEngine::worker_thread_func() {
             long long duration_us = std::chrono::duration_cast<std::chrono::microseconds>(invoke_end_time - invoke_start_time).count();
             APP_LOG_DEBUG("InferenceEngine: Time to invoke interpreter (inference_done): " + std::to_string(duration_ms) + " ms");
             
+            // Update freshness indicators
+            last_inference_timestamp_ = call_ts;
+            
             // Store inference timing for statistics
             static std::vector<long long> inference_times_us;
             static int inference_count = 0;
             inference_times_us.push_back(duration_us);
             inference_count++;
+            
+            // Update inference rate
+            if (inference_count % 100 == 0 && inference_times_us.size() > 0) {
+                long long total_time_us = 0;
+                for (long long time : inference_times_us) {
+                    total_time_us += time;
+                }
+                double avg_time_us = static_cast<double>(total_time_us) / inference_times_us.size();
+                double avg_time_ms = avg_time_us / 1000.0;
+                if (avg_time_ms > 0) {
+                    inference_rate_ = static_cast<int>(1000.0 / avg_time_ms);
+                }
+            }
             
             // Print inference timing statistics every 100 inferences
             if (inference_count % 100 == 0 && inference_times_us.size() > 0) {
@@ -350,9 +366,9 @@ void InferenceEngine::worker_thread_func() {
                 // Calculate 95th percentile
                 std::sort(inference_times_us.begin(), inference_times_us.end());
                 long long p95_index = static_cast<long long>(inference_times_us.size() * 0.95);
-                long long p95_time_us = inference_times_us[p95_index];
+                [[maybe_unused]] long long p95_time_us = inference_times_us[p95_index];
                 
-                double avg_time_us = static_cast<double>(total_time_us) / inference_times_us.size();
+                [[maybe_unused]] double avg_time_us = static_cast<double>(total_time_us) / inference_times_us.size();
                 
                 APP_LOG_INFO("Inference Timing Stats (last 100 inferences): Avg=" + std::to_string(avg_time_us) + "us, Min=" + std::to_string(min_time_us) + "us, P95=" + std::to_string(p95_time_us) + "us, Max=" + std::to_string(max_time_us) + "us");
             }
@@ -363,42 +379,40 @@ void InferenceEngine::worker_thread_func() {
                 continue;
             }
             
-            // Record start time for performance measurement
-            auto start_time = std::chrono::high_resolution_clock::now();
-            
-            CsvLogEntry entry;
-            entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-            copy_to_array(entry.module, "InferenceEngine");
-            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-            copy_to_array(entry.event, "inference_done");
-            entry.call_ts_epoch_ms = call_ts;
-            entry.tpu_inference_ms = static_cast<float>(duration_ms);
-            entry.tpu_input_w = input_width_;
-            entry.tpu_input_h = input_height_;
-            entry.tpu_temp_c = get_tpu_temperature();
-            Logger::getInstance().log_csv(entry);
-            
-            // Record end time and calculate duration
-            auto end_time = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-            
-            // Log performance metrics
-            entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-            copy_to_array(entry.module, "InferenceEngine");
-            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-            copy_to_array(entry.event, "performance_logged");
-            entry.call_ts_epoch_ms = call_ts;
-            entry.tpu_inference_ms = static_cast<float>(duration) / 1000.0f; // Convert to milliseconds
-            Logger::getInstance().log_csv(entry);
+            // Batch logging: only log every 5th inference to reduce overhead
+            static int inference_log_counter = 0;
+            inference_log_counter++;
+            if (inference_log_counter % 5 == 0) {
+                CsvLogEntry entry;
+                entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                copy_to_array(entry.module, "InferenceEngine");
+                entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                copy_to_array(entry.event, "inference_done");
+                entry.call_ts_epoch_ms = call_ts;
+                entry.tpu_inference_ms = static_cast<float>(duration_ms);
+                entry.tpu_input_w = input_width_;
+                entry.tpu_input_h = input_height_;
+                entry.tpu_temp_c = get_tpu_temperature();
+                Logger::getInstance().log_csv(entry);
+                
+                // Log performance metrics
+                entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                copy_to_array(entry.module, "InferenceEngine");
+                entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                copy_to_array(entry.event, "performance_logged");
+                entry.call_ts_epoch_ms = call_ts;
+                entry.tpu_inference_ms = static_cast<float>(duration_ms); // Convert to milliseconds
+                Logger::getInstance().log_csv(entry);
+            }
 
             // 4. Get output tensor
-            auto get_output_start = std::chrono::high_resolution_clock::now();
+            [[maybe_unused]] auto get_output_start = std::chrono::high_resolution_clock::now();
             auto results_buffer = get_output_tensor(interpreter.get());
-            auto get_output_end = std::chrono::high_resolution_clock::now();
+            [[maybe_unused]] auto get_output_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to get output tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(get_output_end - get_output_start).count()) + " us");
 
             // 5. Push results to output queues
-            auto push_output_start = std::chrono::high_resolution_clock::now();
+            [[maybe_unused]] auto push_output_start = std::chrono::high_resolution_clock::now();
             if (results_buffer && results_buffer->size > 0) {
                 APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to overlay queue.");
                 bool overlay_pushed = detection_results_for_overlay_queue_.push(results_buffer);
@@ -412,12 +426,12 @@ void InferenceEngine::worker_thread_func() {
             } else {
                 APP_LOG_WARNING("InferenceEngine: No detections to push or results_buffer is null.");
             }
-            auto push_output_end = std::chrono::high_resolution_clock::now();
+            [[maybe_unused]] auto push_output_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to push results to queues: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(push_output_end - push_output_start).count()) + " us");
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        auto total_loop_end = std::chrono::high_resolution_clock::now();
+        [[maybe_unused]] auto total_loop_end = std::chrono::high_resolution_clock::now();
         APP_LOG_DEBUG("InferenceEngine: Total worker thread loop iteration time: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_loop_end - total_loop_start).count()) + " us");
     }
 }
@@ -651,7 +665,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     
     // Extract quantization parameters for classes
     float classes_scale = 1.0f;
-    int classes_zero_point = 0;
+    [[maybe_unused]] int classes_zero_point = 0;
     if (classes_quant_params && classes_quant_params->scale && classes_quant_params->scale->size > 0) {
         classes_scale = classes_quant_params->scale->data[0];
     }
@@ -719,8 +733,8 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     for (int i = 0; i < num_detections; ++i) {
         // For class IDs, use raw UINT8 values directly as they appear to be class IDs already
         // For scores, properly dequantize UINT8 values to meaningful ranges
-        int class_id = static_cast<int>(detection_classes_uint8[i]);  // Use raw value directly
-        float score_float = static_cast<float>(detection_scores_uint8[i] - scores_zero_point) * scores_scale;
+        [[maybe_unused]] int class_id = static_cast<int>(detection_classes_uint8[i]);  // Use raw value directly
+        [[maybe_unused]] float score_float = static_cast<float>(detection_scores_uint8[i] - scores_zero_point) * scores_scale;
         APP_LOG_DEBUG("Raw detection " + std::to_string(i) + ": class=" + std::to_string(class_id) + 
                       ", score=" + std::to_string(score_float) + ", raw_class=" + std::to_string(detection_classes_uint8[i]) + 
                       ", raw_score=" + std::to_string(detection_scores_uint8[i]));

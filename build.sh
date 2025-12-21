@@ -217,7 +217,9 @@ rm -rf build
 mkdir -p build
 cd build
 echo "Configuring with CMake..."
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror" ../ || {
+cmake .. -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_CXX_FLAGS="-I/usr/include/liveMedia -I/usr/include/groupsock -I/usr/include/BasicUsageEnvironment -I/usr/include/UsageEnvironment -Werror" \
+    -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib/aarch64-linux-gnu -lliveMedia -lgroupsock -lBasicUsageEnvironment -lUsageEnvironment" || {
     echo "ERROR: CMake configuration failed"
     exit 1
 }

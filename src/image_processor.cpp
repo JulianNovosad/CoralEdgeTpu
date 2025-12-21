@@ -111,9 +111,9 @@ void ImageProcessor::worker_thread_func() {
         if (input_image.width == (unsigned int)tpu_input_width_ && input_image.height == (unsigned int)tpu_input_height_) {
             // No resizing or color conversion needed
             // For zero-copy optimization, we can pass the buffer directly in some cases
-            // But for now, we still copy for thread safety
-            // In the future, we could implement a more sophisticated zero-copy path here
-            input_frame_mat.copyTo(processed_mat);
+            // Since dimensions match, we can avoid the copy and just pass through the buffer
+            // But we still need to create a new ImageData object with the same buffer
+            processed_mat = input_frame_mat; // Just reference the same data
         } else {
             // Resize if dimensions differ
             APP_LOG_WARNING("ImageProcessor: Resizing RGB888 frame from " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) +
@@ -122,28 +122,35 @@ void ImageProcessor::worker_thread_func() {
         }
 
         // 3. Acquire a buffer from the pool for the processed image.
-        auto processed_buffer_data = buffer_pool_->acquire();
-        if (!processed_buffer_data) {
-            APP_LOG_WARNING("ImageProcessor: Failed to acquire buffer for processed image. Dropping frame.");
-            input_image.buffer.reset(); // Return input buffer to pool
-            continue;
-        }
+        std::shared_ptr<PooledBuffer<uint8_t>> processed_buffer_data;
+        if (input_image.width == (unsigned int)tpu_input_width_ && input_image.height == (unsigned int)tpu_input_height_) {
+            // Dimensions match, we can reuse the input buffer for zero-copy operation
+            processed_buffer_data = input_image.buffer;
+        } else {
+            // Dimensions don't match, we need a new buffer
+            processed_buffer_data = buffer_pool_->acquire();
+            if (!processed_buffer_data) {
+                APP_LOG_WARNING("ImageProcessor: Failed to acquire buffer for processed image. Dropping frame.");
+                input_image.buffer.reset(); // Return input buffer to pool
+                continue;
+            }
 
-        // Ensure processed_buffer_data->data has enough capacity
-        size_t required_size = processed_mat.total() * processed_mat.elemSize();
-        if (required_size > processed_buffer_data->data.capacity()) {
-            APP_LOG_ERROR("ImageProcessor: Processed image size (" + std::to_string(required_size) +
-                          ") exceeds buffer pool capacity (" + std::to_string(processed_buffer_data->data.capacity()) + "). Dropping frame.");
-            input_image.buffer.reset(); // Return input buffer to pool
-            processed_buffer_data.reset(); // Return acquired buffer to pool
-            continue;
+            // Ensure processed_buffer_data->data has enough capacity
+            size_t required_size = processed_mat.total() * processed_mat.elemSize();
+            if (required_size > processed_buffer_data->data.capacity()) {
+                APP_LOG_ERROR("ImageProcessor: Processed image size (" + std::to_string(required_size) +
+                              ") exceeds buffer pool capacity (" + std::to_string(processed_buffer_data->data.capacity()) + "). Dropping frame.");
+                input_image.buffer.reset(); // Return input buffer to pool
+                processed_buffer_data.reset(); // Return acquired buffer to pool
+                continue;
+            }
+            
+            // Copy processed image data to the pooled buffer
+            std::memcpy(processed_buffer_data->data.data(), processed_mat.data, required_size);
+            processed_buffer_data->size = required_size;
+            // Explicitly resize the underlying std::vector to reflect the actual data size
+            processed_buffer_data->data.resize(required_size);
         }
-        
-        // Copy processed image data to the pooled buffer
-        std::memcpy(processed_buffer_data->data.data(), processed_mat.data, required_size);
-        processed_buffer_data->size = required_size;
-        // Explicitly resize the underlying std::vector to reflect the actual data size
-        processed_buffer_data->data.resize(required_size);
 
 
         // 4. Create new ImageData object and push to output queue
@@ -151,7 +158,7 @@ void ImageProcessor::worker_thread_func() {
         output_image_data.width = tpu_input_width_;
         output_image_data.height = tpu_input_height_;
         output_image_data.format = libcamera::formats::RGB888; // Output is always RGB888 for TPU
-        output_image_data.buffer = std::move(processed_buffer_data);
+        output_image_data.buffer = processed_buffer_data;
         // Pass through zero-copy information if available
         output_image_data.fd = input_image.fd;
         output_image_data.offset = input_image.offset;
@@ -163,7 +170,7 @@ void ImageProcessor::worker_thread_func() {
         }
 
         auto process_end_time = std::chrono::high_resolution_clock::now();
-        long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(process_end_time - process_start_time).count();
+        [[maybe_unused]] long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(process_end_time - process_start_time).count();
         APP_LOG_DEBUG("ImageProcessor processed frame in " + std::to_string(duration_ms) + " ms. Input size " +
                       std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Output size " +
                       std::to_string(tpu_input_width_) + "x" + std::to_string(tpu_input_height_) + ", Format RGB888");

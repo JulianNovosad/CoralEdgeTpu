@@ -144,6 +144,14 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         APP_LOG_INFO("Creating KeyboardMonitor...");
         keyboard_monitor_ = std::make_unique<KeyboardMonitor>();
         APP_LOG_INFO("KeyboardMonitor created.");
+        
+        APP_LOG_INFO("Creating RTSPServerWrapper...");
+        rtsp_server_ = std::make_unique<RTSPServerWrapper>(config_loader_.get_rtsp_port(), config_loader_.get_rtsp_mount_point().substr(1)); // Remove leading slash
+        APP_LOG_INFO("RTSPServerWrapper created.");
+
+        APP_LOG_INFO("Creating Monitor...");
+        monitor_ = std::make_unique<Monitor>(*this);
+        APP_LOG_INFO("Monitor created.");
 
     } catch (const std::exception& e) {
         APP_LOG_ERROR("Failed to initialize modules: " + std::string(e.what()));
@@ -164,6 +172,8 @@ bool Application::start_modules() {
     start_ok &= system_monitor_->start();
     start_ok &= h264_encoder_->start(); // Start the H264 encoder
     start_ok &= keyboard_monitor_->start();
+    start_ok &= rtsp_server_->start(); // Start the RTSP server
+    monitor_->start();
 
     // Start the overlay consumer thread
     overlay_consumer_running_ = true;
@@ -177,6 +187,7 @@ bool Application::start_modules() {
         if (orientation_sensor_->is_running()) orientation_sensor_->stop();
         if (primary_camera_->is_running()) primary_camera_->stop();
         if (h264_encoder_->is_running()) h264_encoder_->stop(); // Stop the H264 encoder
+        if (rtsp_server_->isRunning()) rtsp_server_->stop(); // Stop the RTSP server
         if (image_processor_->is_running()) image_processor_->stop(); // Stop ImageProcessor
         if (inference_engine_->is_running()) inference_engine_->stop();
         return false;
@@ -194,12 +205,14 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("ImageProcessor", [&]() { image_processor_->stop(); }); // Register ImageProcessor for shutdown
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
     supervisor_.register_module_stop("KeyboardMonitor", [&]() { keyboard_monitor_->stop(); });
+    supervisor_.register_module_stop("RTSPServer", [&]() { rtsp_server_->stop(); }); // Register RTSP server for shutdown
     supervisor_.register_module_stop("OverlayConsumer", [&]() {
         overlay_consumer_running_ = false;
         if (overlay_consumer_thread_.joinable()) {
             overlay_consumer_thread_.join();
         }
     });
+    supervisor_.register_module_stop("Monitor", [&]() { monitor_->stop(); });
 }
 
 void Application::recovery_thread_func() {

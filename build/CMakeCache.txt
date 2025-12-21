@@ -22,7 +22,7 @@ CMAKE_AR:FILEPATH=/usr/bin/ar
 
 //Choose the type of build, options are: None Debug Release RelWithDebInfo
 // MinSizeRel ...
-CMAKE_BUILD_TYPE:STRING=Debug
+CMAKE_BUILD_TYPE:STRING=Release
 
 //Enable/Disable color output during build.
 CMAKE_COLOR_MAKEFILE:BOOL=ON
@@ -39,7 +39,7 @@ CMAKE_CXX_COMPILER_AR:FILEPATH=/usr/bin/gcc-ar-12
 CMAKE_CXX_COMPILER_RANLIB:FILEPATH=/usr/bin/gcc-ranlib-12
 
 //Flags used by the CXX compiler during all build types.
-CMAKE_CXX_FLAGS:STRING=-Werror
+CMAKE_CXX_FLAGS:STRING=-I/usr/include/liveMedia -I/usr/include/groupsock -I/usr/include/BasicUsageEnvironment -I/usr/include/UsageEnvironment -Werror
 
 //Flags used by the CXX compiler during DEBUG builds.
 CMAKE_CXX_FLAGS_DEBUG:STRING=-g
@@ -83,7 +83,7 @@ CMAKE_C_FLAGS_RELWITHDEBINFO:STRING=-O2 -g -DNDEBUG
 CMAKE_DLLTOOL:FILEPATH=CMAKE_DLLTOOL-NOTFOUND
 
 //Flags used by the linker during all build types.
-CMAKE_EXE_LINKER_FLAGS:STRING=
+CMAKE_EXE_LINKER_FLAGS:STRING=-L/usr/lib/aarch64-linux-gnu -lliveMedia -lgroupsock -lBasicUsageEnvironment -lUsageEnvironment
 
 //Flags used by the linker during DEBUG builds.
 CMAKE_EXE_LINKER_FLAGS_DEBUG:STRING=
@@ -241,6 +241,18 @@ pkgcfg_lib_LIBCAMERA_camera:FILEPATH=/usr/lib/aarch64-linux-gnu/libcamera.so
 
 //Path to a library.
 pkgcfg_lib_LIBCAMERA_camera-base:FILEPATH=/usr/lib/aarch64-linux-gnu/libcamera-base.so
+
+//Path to a library.
+pkgcfg_lib_LIVE555_BasicUsageEnvironment:FILEPATH=/usr/lib/aarch64-linux-gnu/libBasicUsageEnvironment.so
+
+//Path to a library.
+pkgcfg_lib_LIVE555_UsageEnvironment:FILEPATH=/usr/lib/aarch64-linux-gnu/libUsageEnvironment.so
+
+//Path to a library.
+pkgcfg_lib_LIVE555_groupsock:FILEPATH=/usr/lib/aarch64-linux-gnu/libgroupsock.so
+
+//Path to a library.
+pkgcfg_lib_LIVE555_liveMedia:FILEPATH=/usr/lib/aarch64-linux-gnu/libliveMedia.so
 
 //Path to a library.
 pkgcfg_lib_X264_x264:FILEPATH=/usr/lib/aarch64-linux-gnu/libx264.so
@@ -476,6 +488,41 @@ LIBCAMERA_libcamera_INCLUDEDIR:INTERNAL=
 LIBCAMERA_libcamera_LIBDIR:INTERNAL=
 LIBCAMERA_libcamera_PREFIX:INTERNAL=
 LIBCAMERA_libcamera_VERSION:INTERNAL=
+LIVE555_CFLAGS:INTERNAL=-I/usr/include/liveMedia;-I/usr/include/groupsock;-I/usr/include/BasicUsageEnvironment;-I/usr/include/UsageEnvironment
+LIVE555_CFLAGS_I:INTERNAL=
+LIVE555_CFLAGS_OTHER:INTERNAL=
+LIVE555_FOUND:INTERNAL=1
+LIVE555_INCLUDEDIR:INTERNAL=/usr/include
+LIVE555_INCLUDE_DIRS:INTERNAL=/usr/include/liveMedia;/usr/include/groupsock;/usr/include/BasicUsageEnvironment;/usr/include/UsageEnvironment
+LIVE555_LDFLAGS:INTERNAL=-L/usr/lib/aarch64-linux-gnu;-lliveMedia;-lgroupsock;-lBasicUsageEnvironment;-lUsageEnvironment
+LIVE555_LDFLAGS_OTHER:INTERNAL=
+LIVE555_LIBDIR:INTERNAL=/usr/lib/aarch64-linux-gnu
+LIVE555_LIBRARIES:INTERNAL=liveMedia;groupsock;BasicUsageEnvironment;UsageEnvironment
+LIVE555_LIBRARY_DIRS:INTERNAL=/usr/lib/aarch64-linux-gnu
+LIVE555_LIBS:INTERNAL=
+LIVE555_LIBS_L:INTERNAL=
+LIVE555_LIBS_OTHER:INTERNAL=
+LIVE555_LIBS_PATHS:INTERNAL=
+LIVE555_MODULE_NAME:INTERNAL=live555
+LIVE555_PREFIX:INTERNAL=/usr
+LIVE555_STATIC_CFLAGS:INTERNAL=-I/usr/include/liveMedia;-I/usr/include/groupsock;-I/usr/include/BasicUsageEnvironment;-I/usr/include/UsageEnvironment
+LIVE555_STATIC_CFLAGS_I:INTERNAL=
+LIVE555_STATIC_CFLAGS_OTHER:INTERNAL=
+LIVE555_STATIC_INCLUDE_DIRS:INTERNAL=/usr/include/liveMedia;/usr/include/groupsock;/usr/include/BasicUsageEnvironment;/usr/include/UsageEnvironment
+LIVE555_STATIC_LDFLAGS:INTERNAL=-L/usr/lib/aarch64-linux-gnu;-lliveMedia;-lgroupsock;-lBasicUsageEnvironment;-lUsageEnvironment
+LIVE555_STATIC_LDFLAGS_OTHER:INTERNAL=
+LIVE555_STATIC_LIBDIR:INTERNAL=
+LIVE555_STATIC_LIBRARIES:INTERNAL=liveMedia;groupsock;BasicUsageEnvironment;UsageEnvironment
+LIVE555_STATIC_LIBRARY_DIRS:INTERNAL=/usr/lib/aarch64-linux-gnu
+LIVE555_STATIC_LIBS:INTERNAL=
+LIVE555_STATIC_LIBS_L:INTERNAL=
+LIVE555_STATIC_LIBS_OTHER:INTERNAL=
+LIVE555_STATIC_LIBS_PATHS:INTERNAL=
+LIVE555_VERSION:INTERNAL=2025.05.24
+LIVE555_live555_INCLUDEDIR:INTERNAL=
+LIVE555_live555_LIBDIR:INTERNAL=
+LIVE555_live555_PREFIX:INTERNAL=
+LIVE555_live555_VERSION:INTERNAL=
 //ADVANCED property for variable: PKG_CONFIG_ARGN
 PKG_CONFIG_ARGN-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: PKG_CONFIG_EXECUTABLE
@@ -554,10 +601,12 @@ ZEROMQ_libzmq_VERSION:INTERNAL=
 _CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED:INTERNAL=TRUE
 __pkg_config_arguments_JPEG:INTERNAL=REQUIRED;libjpeg
 __pkg_config_arguments_LIBCAMERA:INTERNAL=REQUIRED;libcamera
+__pkg_config_arguments_LIVE555:INTERNAL=QUIET;live555
 __pkg_config_arguments_X264:INTERNAL=QUIET;x264
 __pkg_config_arguments_ZEROMQ:INTERNAL=REQUIRED;libzmq
 __pkg_config_checked_JPEG:INTERNAL=1
 __pkg_config_checked_LIBCAMERA:INTERNAL=1
+__pkg_config_checked_LIVE555:INTERNAL=1
 __pkg_config_checked_X264:INTERNAL=1
 __pkg_config_checked_ZEROMQ:INTERNAL=1
 //ADVANCED property for variable: pkgcfg_lib_JPEG_jpeg
@@ -566,6 +615,14 @@ pkgcfg_lib_JPEG_jpeg-ADVANCED:INTERNAL=1
 pkgcfg_lib_LIBCAMERA_camera-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: pkgcfg_lib_LIBCAMERA_camera-base
 pkgcfg_lib_LIBCAMERA_camera-base-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_LIVE555_BasicUsageEnvironment
+pkgcfg_lib_LIVE555_BasicUsageEnvironment-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_LIVE555_UsageEnvironment
+pkgcfg_lib_LIVE555_UsageEnvironment-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_LIVE555_groupsock
+pkgcfg_lib_LIVE555_groupsock-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_LIVE555_liveMedia
+pkgcfg_lib_LIVE555_liveMedia-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: pkgcfg_lib_X264_x264
 pkgcfg_lib_X264_x264-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: pkgcfg_lib_ZEROMQ_zmq

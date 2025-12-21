@@ -172,10 +172,12 @@ public:
 
 private:
     void worker_thread_func();
+    void servo_worker_thread_func(); // New servo worker thread function
     void process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data);
     void update_object_tracks(const std::vector<DetectionResult>& detections);
     SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, const Uncertainty& uncertainty, std::string& safety_status_message);
     void issue_servo_commands(float target_x, float target_y, float target_z, float confidence);
+    void execute_servo_command(float target_x, float target_y, float target_z, float confidence); // New function to actually execute servo commands
     float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
     void perform_sensor_fusion(const OrientationData& imu_data);
     void calculate_ballistics_for_tracks(const OrientationData& imu_data);
@@ -190,6 +192,12 @@ private:
 
     DetectionResultsQueue& detection_input_queue_;
     std::atomic<bool> running_ = false;
+    
+    // Freshness indicators
+public:
+    std::atomic<long long> last_logic_timestamp_{0}; ///< Timestamp of the last logic processing
+    std::atomic<int> logic_rate_{0}; ///< Current logic processing rate
+private:
     std::thread worker_thread_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     const ConfigLoader& config_;
@@ -220,6 +228,19 @@ private:
     float servo_position_ = 0.0f;
     bool servo_direction_ = true;
     std::chrono::steady_clock::time_point last_direction_change_;
+    
+    // Servo command queue for decoupled actuation
+    struct ServoCommand {
+        float target_x;
+        float target_y;
+        float target_z;
+        float confidence;
+        std::chrono::steady_clock::time_point timestamp;
+    };
+    std::queue<ServoCommand> servo_command_queue_;
+    std::mutex servo_queue_mutex_;
+    std::thread servo_worker_thread_;
+    std::atomic<bool> servo_worker_running_ = false;
     
     // Storage for latest IMU data
     OrientationData latest_imu_data_;

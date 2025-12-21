@@ -130,6 +130,45 @@ detector/fast:
 .PHONY : detector/fast
 
 #=============================================================================
+# Target rules for targets named camera_isolation_test
+
+# Build rule for target.
+camera_isolation_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 camera_isolation_test
+.PHONY : camera_isolation_test
+
+# fast build rule for target.
+camera_isolation_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/camera_isolation_test.dir/build.make CMakeFiles/camera_isolation_test.dir/build
+.PHONY : camera_isolation_test/fast
+
+#=============================================================================
+# Target rules for targets named inference_test_no_logging
+
+# Build rule for target.
+inference_test_no_logging: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 inference_test_no_logging
+.PHONY : inference_test_no_logging
+
+# fast build rule for target.
+inference_test_no_logging/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/build
+.PHONY : inference_test_no_logging/fast
+
+#=============================================================================
+# Target rules for targets named raw_tpu_test
+
+# Build rule for target.
+raw_tpu_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 raw_tpu_test
+.PHONY : raw_tpu_test
+
+# fast build rule for target.
+raw_tpu_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/build
+.PHONY : raw_tpu_test/fast
+
+#=============================================================================
 # Target rules for targets named config_loader_test
 
 # Build rule for target.
@@ -264,12 +303,38 @@ src/camera_capture.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/camera_capture.cpp.s
 .PHONY : src/camera_capture.cpp.s
 
+src/camera_isolation_test.o: src/camera_isolation_test.cpp.o
+.PHONY : src/camera_isolation_test.o
+
+# target to build an object file
+src/camera_isolation_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/camera_isolation_test.dir/build.make CMakeFiles/camera_isolation_test.dir/src/camera_isolation_test.cpp.o
+.PHONY : src/camera_isolation_test.cpp.o
+
+src/camera_isolation_test.i: src/camera_isolation_test.cpp.i
+.PHONY : src/camera_isolation_test.i
+
+# target to preprocess a source file
+src/camera_isolation_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/camera_isolation_test.dir/build.make CMakeFiles/camera_isolation_test.dir/src/camera_isolation_test.cpp.i
+.PHONY : src/camera_isolation_test.cpp.i
+
+src/camera_isolation_test.s: src/camera_isolation_test.cpp.s
+.PHONY : src/camera_isolation_test.s
+
+# target to generate assembly for a file
+src/camera_isolation_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/camera_isolation_test.dir/build.make CMakeFiles/camera_isolation_test.dir/src/camera_isolation_test.cpp.s
+.PHONY : src/camera_isolation_test.cpp.s
+
 src/config_loader.o: src/config_loader.cpp.o
 .PHONY : src/config_loader.o
 
 # target to build an object file
 src/config_loader.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/config_loader.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/config_loader.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.o
 .PHONY : src/config_loader.cpp.o
 
@@ -279,6 +344,8 @@ src/config_loader.i: src/config_loader.cpp.i
 # target to preprocess a source file
 src/config_loader.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/config_loader.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/config_loader.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.i
 .PHONY : src/config_loader.cpp.i
 
@@ -288,6 +355,8 @@ src/config_loader.s: src/config_loader.cpp.s
 # target to generate assembly for a file
 src/config_loader.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/config_loader.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/config_loader.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/config_loader.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/config_loader.cpp.s
 .PHONY : src/config_loader.cpp.s
 
@@ -345,6 +414,8 @@ src/inference.o: src/inference.cpp.o
 # target to build an object file
 src/inference.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/inference.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/inference.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/inference.cpp.o
 .PHONY : src/inference.cpp.o
 
 src/inference.i: src/inference.cpp.i
@@ -353,6 +424,8 @@ src/inference.i: src/inference.cpp.i
 # target to preprocess a source file
 src/inference.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/inference.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/inference.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/inference.cpp.i
 .PHONY : src/inference.cpp.i
 
 src/inference.s: src/inference.cpp.s
@@ -361,7 +434,33 @@ src/inference.s: src/inference.cpp.s
 # target to generate assembly for a file
 src/inference.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/inference.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/inference.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/inference.cpp.s
 .PHONY : src/inference.cpp.s
+
+src/inference_test_no_logging.o: src/inference_test_no_logging.cpp.o
+.PHONY : src/inference_test_no_logging.o
+
+# target to build an object file
+src/inference_test_no_logging.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/inference_test_no_logging.cpp.o
+.PHONY : src/inference_test_no_logging.cpp.o
+
+src/inference_test_no_logging.i: src/inference_test_no_logging.cpp.i
+.PHONY : src/inference_test_no_logging.i
+
+# target to preprocess a source file
+src/inference_test_no_logging.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/inference_test_no_logging.cpp.i
+.PHONY : src/inference_test_no_logging.cpp.i
+
+src/inference_test_no_logging.s: src/inference_test_no_logging.cpp.s
+.PHONY : src/inference_test_no_logging.s
+
+# target to generate assembly for a file
+src/inference_test_no_logging.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/inference_test_no_logging.cpp.s
+.PHONY : src/inference_test_no_logging.cpp.s
 
 src/keyboard_monitor.o: src/keyboard_monitor.cpp.o
 .PHONY : src/keyboard_monitor.o
@@ -435,6 +534,30 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/monitor.o: src/monitor.cpp.o
+.PHONY : src/monitor.o
+
+# target to build an object file
+src/monitor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/monitor.cpp.o
+.PHONY : src/monitor.cpp.o
+
+src/monitor.i: src/monitor.cpp.i
+.PHONY : src/monitor.i
+
+# target to preprocess a source file
+src/monitor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/monitor.cpp.i
+.PHONY : src/monitor.cpp.i
+
+src/monitor.s: src/monitor.cpp.s
+.PHONY : src/monitor.s
+
+# target to generate assembly for a file
+src/monitor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/monitor.cpp.s
+.PHONY : src/monitor.cpp.s
+
 src/orientation_sensor.o: src/orientation_sensor.cpp.o
 .PHONY : src/orientation_sensor.o
 
@@ -485,6 +608,54 @@ src/pca9685_controller.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/pca9685_controller.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/pca9685_controller.cpp.s
 .PHONY : src/pca9685_controller.cpp.s
+
+src/raw_tpu_test.o: src/raw_tpu_test.cpp.o
+.PHONY : src/raw_tpu_test.o
+
+# target to build an object file
+src/raw_tpu_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/raw_tpu_test.cpp.o
+.PHONY : src/raw_tpu_test.cpp.o
+
+src/raw_tpu_test.i: src/raw_tpu_test.cpp.i
+.PHONY : src/raw_tpu_test.i
+
+# target to preprocess a source file
+src/raw_tpu_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/raw_tpu_test.cpp.i
+.PHONY : src/raw_tpu_test.cpp.i
+
+src/raw_tpu_test.s: src/raw_tpu_test.cpp.s
+.PHONY : src/raw_tpu_test.s
+
+# target to generate assembly for a file
+src/raw_tpu_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/raw_tpu_test.cpp.s
+.PHONY : src/raw_tpu_test.cpp.s
+
+src/rtsp_server.o: src/rtsp_server.cpp.o
+.PHONY : src/rtsp_server.o
+
+# target to build an object file
+src/rtsp_server.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/rtsp_server.cpp.o
+.PHONY : src/rtsp_server.cpp.o
+
+src/rtsp_server.i: src/rtsp_server.cpp.i
+.PHONY : src/rtsp_server.i
+
+# target to preprocess a source file
+src/rtsp_server.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/rtsp_server.cpp.i
+.PHONY : src/rtsp_server.cpp.i
+
+src/rtsp_server.s: src/rtsp_server.cpp.s
+.PHONY : src/rtsp_server.s
+
+# target to generate assembly for a file
+src/rtsp_server.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/rtsp_server.cpp.s
+.PHONY : src/rtsp_server.cpp.s
 
 src/servo_test.o: src/servo_test.cpp.o
 .PHONY : src/servo_test.o
@@ -540,6 +711,8 @@ src/util_logging.o: src/util_logging.cpp.o
 # target to build an object file
 src/util_logging.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/util_logging.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/util_logging.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.o
 .PHONY : src/util_logging.cpp.o
@@ -550,6 +723,8 @@ src/util_logging.i: src/util_logging.cpp.i
 # target to preprocess a source file
 src/util_logging.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/util_logging.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/util_logging.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.i
 .PHONY : src/util_logging.cpp.i
@@ -560,6 +735,8 @@ src/util_logging.s: src/util_logging.cpp.s
 # target to generate assembly for a file
 src/util_logging.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/util_logging.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/util_logging.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/raw_tpu_test.dir/build.make CMakeFiles/raw_tpu_test.dir/src/util_logging.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/config_loader_test.dir/build.make CMakeFiles/config_loader_test.dir/src/util_logging.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/servo_test.dir/build.make CMakeFiles/servo_test.dir/src/util_logging.cpp.s
 .PHONY : src/util_logging.cpp.s
@@ -620,9 +797,12 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
+	@echo "... camera_isolation_test"
 	@echo "... config_loader_test"
 	@echo "... detector"
 	@echo "... dlopen_test"
+	@echo "... inference_test_no_logging"
+	@echo "... raw_tpu_test"
 	@echo "... servo_test"
 	@echo "... civetweb/src/civetweb.o"
 	@echo "... civetweb/src/civetweb.i"
@@ -636,6 +816,9 @@ help:
 	@echo "... src/camera_capture.o"
 	@echo "... src/camera_capture.i"
 	@echo "... src/camera_capture.s"
+	@echo "... src/camera_isolation_test.o"
+	@echo "... src/camera_isolation_test.i"
+	@echo "... src/camera_isolation_test.s"
 	@echo "... src/config_loader.o"
 	@echo "... src/config_loader.i"
 	@echo "... src/config_loader.s"
@@ -648,6 +831,9 @@ help:
 	@echo "... src/inference.o"
 	@echo "... src/inference.i"
 	@echo "... src/inference.s"
+	@echo "... src/inference_test_no_logging.o"
+	@echo "... src/inference_test_no_logging.i"
+	@echo "... src/inference_test_no_logging.s"
 	@echo "... src/keyboard_monitor.o"
 	@echo "... src/keyboard_monitor.i"
 	@echo "... src/keyboard_monitor.s"
@@ -657,12 +843,21 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/monitor.o"
+	@echo "... src/monitor.i"
+	@echo "... src/monitor.s"
 	@echo "... src/orientation_sensor.o"
 	@echo "... src/orientation_sensor.i"
 	@echo "... src/orientation_sensor.s"
 	@echo "... src/pca9685_controller.o"
 	@echo "... src/pca9685_controller.i"
 	@echo "... src/pca9685_controller.s"
+	@echo "... src/raw_tpu_test.o"
+	@echo "... src/raw_tpu_test.i"
+	@echo "... src/raw_tpu_test.s"
+	@echo "... src/rtsp_server.o"
+	@echo "... src/rtsp_server.i"
+	@echo "... src/rtsp_server.s"
 	@echo "... src/servo_test.o"
 	@echo "... src/servo_test.i"
 	@echo "... src/servo_test.s"
