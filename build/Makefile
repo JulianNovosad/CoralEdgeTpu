@@ -169,6 +169,71 @@ raw_tpu_test/fast:
 .PHONY : raw_tpu_test/fast
 
 #=============================================================================
+# Target rules for targets named tpu_diagnostic
+
+# Build rule for target.
+tpu_diagnostic: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tpu_diagnostic
+.PHONY : tpu_diagnostic
+
+# fast build rule for target.
+tpu_diagnostic/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_diagnostic.dir/build.make CMakeFiles/tpu_diagnostic.dir/build
+.PHONY : tpu_diagnostic/fast
+
+#=============================================================================
+# Target rules for targets named list_tpu_devices
+
+# Build rule for target.
+list_tpu_devices: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 list_tpu_devices
+.PHONY : list_tpu_devices
+
+# fast build rule for target.
+list_tpu_devices/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/list_tpu_devices.dir/build.make CMakeFiles/list_tpu_devices.dir/build
+.PHONY : list_tpu_devices/fast
+
+#=============================================================================
+# Target rules for targets named check_edgetpu_version
+
+# Build rule for target.
+check_edgetpu_version: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 check_edgetpu_version
+.PHONY : check_edgetpu_version
+
+# fast build rule for target.
+check_edgetpu_version/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/check_edgetpu_version.dir/build.make CMakeFiles/check_edgetpu_version.dir/build
+.PHONY : check_edgetpu_version/fast
+
+#=============================================================================
+# Target rules for targets named dashboard
+
+# Build rule for target.
+dashboard: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 dashboard
+.PHONY : dashboard
+
+# fast build rule for target.
+dashboard/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dashboard.dir/build.make CMakeFiles/dashboard.dir/build
+.PHONY : dashboard/fast
+
+#=============================================================================
+# Target rules for targets named integrated_system
+
+# Build rule for target.
+integrated_system: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 integrated_system
+.PHONY : integrated_system
+
+# fast build rule for target.
+integrated_system/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/integrated_system.dir/build.make CMakeFiles/integrated_system.dir/build
+.PHONY : integrated_system/fast
+
+#=============================================================================
 # Target rules for targets named config_loader_test
 
 # Build rule for target.
@@ -207,6 +272,43 @@ dlopen_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/build
 .PHONY : dlopen_test/fast
 
+#=============================================================================
+# Target rules for targets named tpu_performance_test
+
+# Build rule for target.
+tpu_performance_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tpu_performance_test
+.PHONY : tpu_performance_test
+
+# fast build rule for target.
+tpu_performance_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_performance_test.dir/build.make CMakeFiles/tpu_performance_test.dir/build
+.PHONY : tpu_performance_test/fast
+
+check_edgetpu_version.o: check_edgetpu_version.cpp.o
+.PHONY : check_edgetpu_version.o
+
+# target to build an object file
+check_edgetpu_version.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/check_edgetpu_version.dir/build.make CMakeFiles/check_edgetpu_version.dir/check_edgetpu_version.cpp.o
+.PHONY : check_edgetpu_version.cpp.o
+
+check_edgetpu_version.i: check_edgetpu_version.cpp.i
+.PHONY : check_edgetpu_version.i
+
+# target to preprocess a source file
+check_edgetpu_version.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/check_edgetpu_version.dir/build.make CMakeFiles/check_edgetpu_version.dir/check_edgetpu_version.cpp.i
+.PHONY : check_edgetpu_version.cpp.i
+
+check_edgetpu_version.s: check_edgetpu_version.cpp.s
+.PHONY : check_edgetpu_version.s
+
+# target to generate assembly for a file
+check_edgetpu_version.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/check_edgetpu_version.dir/build.make CMakeFiles/check_edgetpu_version.dir/check_edgetpu_version.cpp.s
+.PHONY : check_edgetpu_version.cpp.s
+
 civetweb/src/civetweb.o: civetweb/src/civetweb.c.o
 .PHONY : civetweb/src/civetweb.o
 
@@ -230,6 +332,54 @@ civetweb/src/civetweb.s: civetweb/src/civetweb.c.s
 civetweb/src/civetweb.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
 .PHONY : civetweb/src/civetweb.c.s
+
+dashboard_fixed.o: dashboard_fixed.cpp.o
+.PHONY : dashboard_fixed.o
+
+# target to build an object file
+dashboard_fixed.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dashboard.dir/build.make CMakeFiles/dashboard.dir/dashboard_fixed.cpp.o
+.PHONY : dashboard_fixed.cpp.o
+
+dashboard_fixed.i: dashboard_fixed.cpp.i
+.PHONY : dashboard_fixed.i
+
+# target to preprocess a source file
+dashboard_fixed.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dashboard.dir/build.make CMakeFiles/dashboard.dir/dashboard_fixed.cpp.i
+.PHONY : dashboard_fixed.cpp.i
+
+dashboard_fixed.s: dashboard_fixed.cpp.s
+.PHONY : dashboard_fixed.s
+
+# target to generate assembly for a file
+dashboard_fixed.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dashboard.dir/build.make CMakeFiles/dashboard.dir/dashboard_fixed.cpp.s
+.PHONY : dashboard_fixed.cpp.s
+
+list_tpu_devices.o: list_tpu_devices.cpp.o
+.PHONY : list_tpu_devices.o
+
+# target to build an object file
+list_tpu_devices.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/list_tpu_devices.dir/build.make CMakeFiles/list_tpu_devices.dir/list_tpu_devices.cpp.o
+.PHONY : list_tpu_devices.cpp.o
+
+list_tpu_devices.i: list_tpu_devices.cpp.i
+.PHONY : list_tpu_devices.i
+
+# target to preprocess a source file
+list_tpu_devices.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/list_tpu_devices.dir/build.make CMakeFiles/list_tpu_devices.dir/list_tpu_devices.cpp.i
+.PHONY : list_tpu_devices.cpp.i
+
+list_tpu_devices.s: list_tpu_devices.cpp.s
+.PHONY : list_tpu_devices.s
+
+# target to generate assembly for a file
+list_tpu_devices.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/list_tpu_devices.dir/build.make CMakeFiles/list_tpu_devices.dir/list_tpu_devices.cpp.s
+.PHONY : list_tpu_devices.cpp.s
 
 src/application.o: src/application.cpp.o
 .PHONY : src/application.o
@@ -461,6 +611,30 @@ src/inference_test_no_logging.s: src/inference_test_no_logging.cpp.s
 src/inference_test_no_logging.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/inference_test_no_logging.dir/build.make CMakeFiles/inference_test_no_logging.dir/src/inference_test_no_logging.cpp.s
 .PHONY : src/inference_test_no_logging.cpp.s
+
+src/integrated_main.o: src/integrated_main.cpp.o
+.PHONY : src/integrated_main.o
+
+# target to build an object file
+src/integrated_main.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/integrated_system.dir/build.make CMakeFiles/integrated_system.dir/src/integrated_main.cpp.o
+.PHONY : src/integrated_main.cpp.o
+
+src/integrated_main.i: src/integrated_main.cpp.i
+.PHONY : src/integrated_main.i
+
+# target to preprocess a source file
+src/integrated_main.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/integrated_system.dir/build.make CMakeFiles/integrated_system.dir/src/integrated_main.cpp.i
+.PHONY : src/integrated_main.cpp.i
+
+src/integrated_main.s: src/integrated_main.cpp.s
+.PHONY : src/integrated_main.s
+
+# target to generate assembly for a file
+src/integrated_main.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/integrated_system.dir/build.make CMakeFiles/integrated_system.dir/src/integrated_main.cpp.s
+.PHONY : src/integrated_main.cpp.s
 
 src/keyboard_monitor.o: src/keyboard_monitor.cpp.o
 .PHONY : src/keyboard_monitor.o
@@ -789,6 +963,54 @@ tests/dlopen_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/dlopen_test.dir/build.make CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.s
 .PHONY : tests/dlopen_test.cpp.s
 
+tpu_diagnostic.o: tpu_diagnostic.cpp.o
+.PHONY : tpu_diagnostic.o
+
+# target to build an object file
+tpu_diagnostic.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_diagnostic.dir/build.make CMakeFiles/tpu_diagnostic.dir/tpu_diagnostic.cpp.o
+.PHONY : tpu_diagnostic.cpp.o
+
+tpu_diagnostic.i: tpu_diagnostic.cpp.i
+.PHONY : tpu_diagnostic.i
+
+# target to preprocess a source file
+tpu_diagnostic.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_diagnostic.dir/build.make CMakeFiles/tpu_diagnostic.dir/tpu_diagnostic.cpp.i
+.PHONY : tpu_diagnostic.cpp.i
+
+tpu_diagnostic.s: tpu_diagnostic.cpp.s
+.PHONY : tpu_diagnostic.s
+
+# target to generate assembly for a file
+tpu_diagnostic.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_diagnostic.dir/build.make CMakeFiles/tpu_diagnostic.dir/tpu_diagnostic.cpp.s
+.PHONY : tpu_diagnostic.cpp.s
+
+tpu_performance_test.o: tpu_performance_test.cpp.o
+.PHONY : tpu_performance_test.o
+
+# target to build an object file
+tpu_performance_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_performance_test.dir/build.make CMakeFiles/tpu_performance_test.dir/tpu_performance_test.cpp.o
+.PHONY : tpu_performance_test.cpp.o
+
+tpu_performance_test.i: tpu_performance_test.cpp.i
+.PHONY : tpu_performance_test.i
+
+# target to preprocess a source file
+tpu_performance_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_performance_test.dir/build.make CMakeFiles/tpu_performance_test.dir/tpu_performance_test.cpp.i
+.PHONY : tpu_performance_test.cpp.i
+
+tpu_performance_test.s: tpu_performance_test.cpp.s
+.PHONY : tpu_performance_test.s
+
+# target to generate assembly for a file
+tpu_performance_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_performance_test.dir/build.make CMakeFiles/tpu_performance_test.dir/tpu_performance_test.cpp.s
+.PHONY : tpu_performance_test.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -798,15 +1020,30 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... camera_isolation_test"
+	@echo "... check_edgetpu_version"
 	@echo "... config_loader_test"
+	@echo "... dashboard"
 	@echo "... detector"
 	@echo "... dlopen_test"
 	@echo "... inference_test_no_logging"
+	@echo "... integrated_system"
+	@echo "... list_tpu_devices"
 	@echo "... raw_tpu_test"
 	@echo "... servo_test"
+	@echo "... tpu_diagnostic"
+	@echo "... tpu_performance_test"
+	@echo "... check_edgetpu_version.o"
+	@echo "... check_edgetpu_version.i"
+	@echo "... check_edgetpu_version.s"
 	@echo "... civetweb/src/civetweb.o"
 	@echo "... civetweb/src/civetweb.i"
 	@echo "... civetweb/src/civetweb.s"
+	@echo "... dashboard_fixed.o"
+	@echo "... dashboard_fixed.i"
+	@echo "... dashboard_fixed.s"
+	@echo "... list_tpu_devices.o"
+	@echo "... list_tpu_devices.i"
+	@echo "... list_tpu_devices.s"
 	@echo "... src/application.o"
 	@echo "... src/application.i"
 	@echo "... src/application.s"
@@ -834,6 +1071,9 @@ help:
 	@echo "... src/inference_test_no_logging.o"
 	@echo "... src/inference_test_no_logging.i"
 	@echo "... src/inference_test_no_logging.s"
+	@echo "... src/integrated_main.o"
+	@echo "... src/integrated_main.i"
+	@echo "... src/integrated_main.s"
 	@echo "... src/keyboard_monitor.o"
 	@echo "... src/keyboard_monitor.i"
 	@echo "... src/keyboard_monitor.s"
@@ -873,6 +1113,12 @@ help:
 	@echo "... tests/dlopen_test.o"
 	@echo "... tests/dlopen_test.i"
 	@echo "... tests/dlopen_test.s"
+	@echo "... tpu_diagnostic.o"
+	@echo "... tpu_diagnostic.i"
+	@echo "... tpu_diagnostic.s"
+	@echo "... tpu_performance_test.o"
+	@echo "... tpu_performance_test.i"
+	@echo "... tpu_performance_test.s"
 .PHONY : help
 
 

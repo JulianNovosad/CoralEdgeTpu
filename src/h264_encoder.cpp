@@ -195,6 +195,9 @@ void H264Encoder::worker_thread_func() {
         [[maybe_unused]] auto pop_end = std::chrono::high_resolution_clock::now();
         APP_LOG_DEBUG("H264Encoder: Time to pop from queue: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(pop_end - pop_start).count()) + " us");
         
+        // Record queue pop time
+        image_data.encode_start_time = std::chrono::high_resolution_clock::now();
+        
         long long call_ts = image_data.timestamp_epoch_ms;
 
         if (!image_data.buffer) {
@@ -271,13 +274,18 @@ void H264Encoder::worker_thread_func() {
                     }
                      memcpy(h264_buffer->data.data(), nal[i].p_payload, nal[i].i_payload);
                      h264_buffer->size = nal[i].i_payload;
-                     output_queue_.push(std::move(h264_buffer));
+                     if (!push_latest_only(output_queue_, std::move(h264_buffer))) {
+                         APP_LOG_WARNING("H264Encoder: Failed to push H264 buffer with latest-only semantics.");
+                     }
                 } else {
                     APP_LOG_WARNING("H264Encoder: Failed to acquire buffer for NAL unit. Dropping.");
                 }
             }
             [[maybe_unused]] auto nal_handling_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("H264Encoder: Time for NAL handling and queue push: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(nal_handling_end - nal_handling_start).count()) + " us");
+            
+            // Record encoding end time
+            image_data.encode_end_time = std::chrono::high_resolution_clock::now();
         }
         [[maybe_unused]] auto total_loop_end = std::chrono::high_resolution_clock::now();
         APP_LOG_DEBUG("H264Encoder: Total worker thread loop iteration time: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_loop_end - total_loop_start).count()) + " us");

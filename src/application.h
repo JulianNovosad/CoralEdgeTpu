@@ -26,6 +26,9 @@
 #include <mutex>
 #include <map>
 
+// Include EdgeTPU headers for TPU occupancy management
+#include "edgetpu_c.h"
+
 /**
  * @brief Een applicatieklasse die de volledige CoralEdgeTpu-pijplijn beheert.
  *
@@ -76,9 +79,23 @@ private:
     void release_camera_resources();
     void clear_telemetry_sockets();
     
-    // Cleanup functions
+    // Enhanced cleanup functions
     void pre_launch_cleanup();
     void post_shutdown_cleanup();
+    void aggressive_resource_cleanup();
+    void memory_leak_detection();
+    void temporary_file_cleanup();
+    void cleanup_ipc_resources();
+    void cleanup_shared_memory();
+    void cleanup_zombie_processes();
+    void generate_cleanup_report();
+    
+    // TPU occupancy management functions
+    bool check_tpu_availability();
+    bool wait_for_tpu_release(int max_wait_seconds = 10);
+    void force_release_tpu_resources();
+    bool verify_tpu_status();
+    
     bool terminate_existing_instances();
     
     void setup_pools_and_queues();

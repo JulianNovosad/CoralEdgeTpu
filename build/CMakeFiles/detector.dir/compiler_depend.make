@@ -1574,12 +1574,9 @@ CMakeFiles/detector.dir/src/application.cpp.o: /home/pi/CoralEdgeTpu/src/applica
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment0.hh \
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment_version.hh \
   /usr/include/BasicUsageEnvironment/DelayQueue.hh \
-  /usr/include/groupsock/GroupsockHelper.hh \
-  /usr/include/liveMedia/H264VideoRTPSink.hh \
-  /usr/include/liveMedia/H264VideoStreamFramer.hh \
-  /usr/include/liveMedia/RTSPServer.hh \
-  /usr/include/liveMedia/ServerMediaSession.hh \
-  /usr/include/liveMedia/ByteStreamMemoryBufferSource.hh \
+  /usr/include/UsageEnvironment/UsageEnvironment.hh \
+  /usr/include/groupsock/Groupsock.hh \
+  /usr/include/groupsock/NetCommon.h \
   /home/pi/CoralEdgeTpu/src/monitor.h \
   /usr/include/dirent.h \
   /usr/include/aarch64-linux-gnu/bits/dirent.h \
@@ -10328,12 +10325,9 @@ CMakeFiles/detector.dir/src/main.cpp.o: /home/pi/CoralEdgeTpu/src/main.cpp \
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment0.hh \
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment_version.hh \
   /usr/include/BasicUsageEnvironment/DelayQueue.hh \
-  /usr/include/groupsock/GroupsockHelper.hh \
-  /usr/include/liveMedia/H264VideoRTPSink.hh \
-  /usr/include/liveMedia/H264VideoStreamFramer.hh \
-  /usr/include/liveMedia/RTSPServer.hh \
-  /usr/include/liveMedia/ServerMediaSession.hh \
-  /usr/include/liveMedia/ByteStreamMemoryBufferSource.hh \
+  /usr/include/UsageEnvironment/UsageEnvironment.hh \
+  /usr/include/groupsock/Groupsock.hh \
+  /usr/include/groupsock/NetCommon.h \
   /home/pi/CoralEdgeTpu/src/monitor.h
 
 CMakeFiles/detector.dir/src/monitor.cpp.o: /home/pi/CoralEdgeTpu/src/monitor.cpp \
@@ -11710,12 +11704,9 @@ CMakeFiles/detector.dir/src/monitor.cpp.o: /home/pi/CoralEdgeTpu/src/monitor.cpp
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment0.hh \
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment_version.hh \
   /usr/include/BasicUsageEnvironment/DelayQueue.hh \
-  /usr/include/groupsock/GroupsockHelper.hh \
-  /usr/include/liveMedia/H264VideoRTPSink.hh \
-  /usr/include/liveMedia/H264VideoStreamFramer.hh \
-  /usr/include/liveMedia/RTSPServer.hh \
-  /usr/include/liveMedia/ServerMediaSession.hh \
-  /usr/include/liveMedia/ByteStreamMemoryBufferSource.hh
+  /usr/include/UsageEnvironment/UsageEnvironment.hh \
+  /usr/include/groupsock/Groupsock.hh \
+  /usr/include/groupsock/NetCommon.h
 
 CMakeFiles/detector.dir/src/orientation_sensor.cpp.o: /home/pi/CoralEdgeTpu/src/orientation_sensor.cpp \
   /usr/include/stdc-predef.h \
@@ -13791,12 +13782,9 @@ CMakeFiles/detector.dir/src/rtsp_server.cpp.o: /home/pi/CoralEdgeTpu/src/rtsp_se
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment0.hh \
   /usr/include/BasicUsageEnvironment/BasicUsageEnvironment_version.hh \
   /usr/include/BasicUsageEnvironment/DelayQueue.hh \
-  /usr/include/groupsock/GroupsockHelper.hh \
-  /usr/include/liveMedia/H264VideoRTPSink.hh \
-  /usr/include/liveMedia/H264VideoStreamFramer.hh \
-  /usr/include/liveMedia/RTSPServer.hh \
-  /usr/include/liveMedia/ServerMediaSession.hh \
-  /usr/include/liveMedia/ByteStreamMemoryBufferSource.hh \
+  /usr/include/UsageEnvironment/UsageEnvironment.hh \
+  /usr/include/groupsock/Groupsock.hh \
+  /usr/include/groupsock/NetCommon.h \
   /usr/include/c++/12/memory \
   /usr/include/c++/12/bits/stl_algobase.h \
   /usr/include/c++/12/bits/functexcept.h \
@@ -13873,18 +13861,6 @@ CMakeFiles/detector.dir/src/rtsp_server.cpp.o: /home/pi/CoralEdgeTpu/src/rtsp_se
   /usr/include/c++/12/ctime \
   /usr/include/c++/12/bits/parse_numbers.h \
   /usr/include/c++/12/cerrno \
-  /usr/include/c++/12/queue \
-  /usr/include/c++/12/deque \
-  /usr/include/c++/12/bits/stl_deque.h \
-  /usr/include/c++/12/initializer_list \
-  /usr/include/c++/12/bits/range_access.h \
-  /usr/include/c++/12/bits/deque.tcc \
-  /usr/include/c++/12/vector \
-  /usr/include/c++/12/bits/stl_vector.h \
-  /usr/include/c++/12/bits/stl_bvector.h \
-  /usr/include/c++/12/bits/vector.tcc \
-  /usr/include/c++/12/bits/stl_heap.h \
-  /usr/include/c++/12/bits/stl_queue.h \
   /usr/include/c++/12/mutex \
   /usr/include/c++/12/system_error \
   /usr/include/aarch64-linux-gnu/c++/12/bits/error_constants.h \
@@ -13899,6 +13875,8 @@ CMakeFiles/detector.dir/src/rtsp_server.cpp.o: /home/pi/CoralEdgeTpu/src/rtsp_se
   /usr/include/c++/12/cctype \
   /usr/include/c++/12/bits/ostream_insert.h \
   /usr/include/c++/12/bits/cxxabi_forced.h \
+  /usr/include/c++/12/bits/range_access.h \
+  /usr/include/c++/12/initializer_list \
   /usr/include/c++/12/bits/basic_string.h \
   /usr/include/c++/12/string_view \
   /usr/include/c++/12/bits/string_view.tcc \
@@ -13908,9 +13886,19 @@ CMakeFiles/detector.dir/src/rtsp_server.cpp.o: /home/pi/CoralEdgeTpu/src/rtsp_se
   /usr/include/c++/12/bits/basic_string.tcc \
   /usr/include/c++/12/bits/std_mutex.h \
   /usr/include/c++/12/bits/unique_lock.h \
-  /usr/include/c++/12/condition_variable \
+  /usr/include/c++/12/vector \
+  /usr/include/c++/12/bits/stl_vector.h \
+  /usr/include/c++/12/bits/stl_bvector.h \
+  /usr/include/c++/12/bits/vector.tcc \
   /home/pi/CoralEdgeTpu/src/pipeline_structs.h \
   /usr/include/c++/12/chrono \
+  /usr/include/c++/12/queue \
+  /usr/include/c++/12/deque \
+  /usr/include/c++/12/bits/stl_deque.h \
+  /usr/include/c++/12/bits/deque.tcc \
+  /usr/include/c++/12/bits/stl_heap.h \
+  /usr/include/c++/12/bits/stl_queue.h \
+  /usr/include/c++/12/condition_variable \
   /usr/include/c++/12/functional \
   /usr/include/c++/12/bits/std_function.h \
   /usr/include/c++/12/unordered_map \
@@ -16240,8 +16228,6 @@ CMakeFiles/detector.dir/src/util_logging.cpp.o: /home/pi/CoralEdgeTpu/src/util_l
 /home/pi/CoralEdgeTpu/src/application_supervisor.cpp:
 
 /home/pi/CoralEdgeTpu/src/monitor.h:
-
-/usr/include/groupsock/GroupsockHelper.hh:
 
 /usr/include/BasicUsageEnvironment/BasicUsageEnvironment_version.hh:
 

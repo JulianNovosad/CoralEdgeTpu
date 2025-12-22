@@ -1,0 +1,11 @@
+No stack.
+Warning: 'set logging off', an alias for the command 'set logging enabled', is deprecated.
+Use 'set logging enabled off'.
+
+#0  0x0000007ff6966ce0 in __GI___clock_nanosleep (clock_id=<optimized out>, clock_id@entry=0, flags=flags@entry=0, req=0x7fffff7900, rem=0x7fffff7900) at ../sysdeps/unix/sysv/linux/clock_nanosleep.c:48
+#1  0x0000007ff696bcac in __GI___nanosleep (req=<optimized out>, rem=<optimized out>) at ../sysdeps/unix/sysv/linux/nanosleep.c:25
+#2  0x0000005555579648 in std::this_thread::sleep_for<long, std::ratio<1l, 1000l> > (__rtime=...) at /usr/include/c++/12/bits/this_thread_sleep.h:80
+Backtrace stopped: previous frame identical to this frame (corrupt stack?)
+Warning: 'set logging off', an alias for the command 'set logging enabled', is deprecated.
+Use 'set logging enabled off'.
+

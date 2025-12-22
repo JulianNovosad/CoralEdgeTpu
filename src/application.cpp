@@ -678,10 +678,11 @@ void Application::overlay_queue_consumer_thread_func() {
 }
 
 void Application::main_loop() {
-    APP_LOG_INFO("Running application. Press 'o' to quit.");
+    APP_LOG_INFO("Running application. Press Ctrl+C to quit.");
     while (!shutdown_requested) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    APP_LOG_INFO("Shutdown requested. Exiting main loop.");
 }
 
 void Application::pre_launch_cleanup() {

@@ -182,7 +182,12 @@ bool InferenceEngine::start() {
 void InferenceEngine::stop() {
     if (running_.exchange(false)) {
         APP_LOG_INFO("Stopping InferenceEngine...");
-
+        // Push dummy data to wake up any threads blocked on pop operations
+        ImageData dummy_data(0, -1); // Initialize with default values
+        dummy_data.buffer = nullptr; // Mark as dummy
+        dummy_data.width = 0;
+        dummy_data.height = 0;
+        input_queue_.push(dummy_data);
         
         for (std::thread& thread : worker_threads_) {
             if (thread.joinable()) {
@@ -242,6 +247,10 @@ void InferenceEngine::worker_thread_func() {
 
             if (!input_image.buffer) {
                 APP_LOG_ERROR("InferenceEngine received an image with no buffer. Skipping.");
+                // If we're shutting down, exit the thread
+                if (!running_) {
+                    return;
+                }
                 continue;
             }
             
@@ -629,7 +638,8 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
         num_detections_dequantized = static_cast<float>(num_detections_uint8[0]);
     }
     
-    const int num_detections = static_cast<int>(num_detections_dequantized);
+    // Ensure num_detections is within reasonable bounds
+    const int num_detections = std::max(0, std::min(static_cast<int>(num_detections_dequantized), 100));
 
     // Get quantization parameters for all tensors
     const TfLiteAffineQuantization* boxes_quant_params = nullptr;
@@ -752,13 +762,20 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
                 break;
             }
             DetectionResult& res = results_buffer->data[result_count];
-            // For class IDs, use raw UINT8 values directly as they appear to be class IDs already
-            res.class_id = static_cast<int>(detection_classes_uint8[i]);  // Use raw value directly
+            // Properly dequantize UINT8 class ID to integer
+            // Class IDs from TFLite_Detection_PostProcess are typically indices starting from 0
+            int raw_class_id = static_cast<int>(detection_classes_uint8[i]);
+            float class_id_float = static_cast<float>(raw_class_id - classes_zero_point) * classes_scale;
+            res.class_id = static_cast<int>(class_id_float);
+            
+            // Convert from 0-based index to 1-based ID as expected by labelmap
+            res.class_id += 1;
             res.score = score_float;
             
-            // Validate class ID is within labelmap bounds (1-90)
-            if (res.class_id < 1 || res.class_id > 90) {
-                APP_LOG_WARNING("Invalid class ID detected: " + std::to_string(res.class_id) + ". Skipping detection.");
+            // Validate class ID is within labelmap bounds (1-13 based on current labelmap)
+            if (res.class_id < 1 || res.class_id > 13) {
+                APP_LOG_WARNING("Invalid class ID detected: " + std::to_string(res.class_id) + 
+                               " (raw: " + std::to_string(raw_class_id) + "). Skipping detection.");
                 continue;
             }
             
@@ -776,6 +793,22 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
             res.xmin = xmin_norm * input_width_;
             res.ymax = ymax_norm * input_height_;
             res.xmax = xmax_norm * input_width_;
+            
+            // Validate box dimensions
+            float box_width = res.xmax - res.xmin;
+            float box_height = res.ymax - res.ymin;
+            if (box_width <= 0 || box_height <= 0) {
+                APP_LOG_WARNING("Invalid box dimensions detected. Skipping detection.");
+                continue;
+            }
+            
+            // Reject full-frame boxes but allow nested rings
+            float image_area = static_cast<float>(input_width_ * input_height_);
+            float box_area = box_width * box_height;
+            if (box_area > image_area * 0.95f) {  // Increased threshold to reduce false positives
+                APP_LOG_WARNING("Oversized box detected (covers >95% of image). Skipping detection.");
+                continue;
+            }
             result_count++;
         }
     }

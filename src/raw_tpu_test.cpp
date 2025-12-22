@@ -10,7 +10,7 @@
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/optional_debug_tools.h"
-#include "edgetpu.h"
+#include "edgetpu_c.h"
 
 // Simple test to measure raw TPU inference time
 int main() {
@@ -34,17 +34,63 @@ int main() {
         return 1;
     }
     
-    // Create Edge TPU delegate
-    auto* delegate = edgetpu::CreateEdgeTpuDelegate();
-    if (!delegate) {
-        std::cerr << "Failed to create Edge TPU delegate" << std::endl;
+    // Create Edge TPU delegate using C API
+    // First find available device
+    size_t num_devices = 0;
+    std::unique_ptr<edgetpu_device, decltype(&edgetpu_free_devices)> devices(
+        edgetpu_list_devices(&num_devices), &edgetpu_free_devices);
+    
+    if (num_devices == 0) {
+        std::cerr << "No Edge TPU devices found" << std::endl;
         return 1;
+    }
+    
+    const auto& device = devices.get()[0];
+    std::cout << "Using Edge TPU device: " << device.path << " (type: " << device.type << ")" << std::endl;
+    
+    // Try to create delegate with options first
+    std::cout << "Creating Edge TPU delegate with options..." << std::endl;
+    std::vector<edgetpu_option> options;
+    options.push_back({"verbose", "1"});
+    
+    TfLiteDelegate* delegate = edgetpu_create_delegate(
+        device.type, 
+        device.path,
+        options.data(), 
+        options.size());
+    
+    if (!delegate) {
+        std::cerr << "Failed to create Edge TPU delegate with options." << std::endl;
+        // Try without options
+        std::cout << "Trying to create Edge TPU delegate without options..." << std::endl;
+        delegate = edgetpu_create_delegate(
+            device.type, 
+            device.path,
+            nullptr, 
+            0);
+            
+        if (!delegate) {
+            std::cerr << "Failed to create Edge TPU delegate even without options." << std::endl;
+            // Try with USB device type explicitly
+            std::cout << "Trying to create Edge TPU delegate with USB device type..." << std::endl;
+            delegate = edgetpu_create_delegate(
+                EDGETPU_APEX_USB, 
+                device.path,
+                nullptr, 
+                0);
+                
+            if (!delegate) {
+                std::cerr << "Failed to create Edge TPU delegate with USB device type." << std::endl;
+                std::cerr << "Cannot create Edge TPU delegate." << std::endl;
+                return 1;
+            }
+        }
     }
     
     // Apply delegate to interpreter
     if (interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
         std::cerr << "Failed to apply Edge TPU delegate" << std::endl;
-        edgetpu::FreeEdgeTpuDelegate(delegate);
+        edgetpu_free_delegate(delegate);
         return 1;
     }
     
@@ -53,7 +99,7 @@ int main() {
     // Allocate tensors
     if (interpreter->AllocateTensors() != kTfLiteOk) {
         std::cerr << "Failed to allocate tensors" << std::endl;
-        edgetpu::FreeEdgeTpuDelegate(delegate);
+        edgetpu_free_delegate(delegate);
         return 1;
     }
     
@@ -97,7 +143,7 @@ int main() {
     std::cout << "Theoretical FPS: " << fps << std::endl;
     
     // Clean up
-    edgetpu::FreeEdgeTpuDelegate(delegate);
+    edgetpu_free_delegate(delegate);
     
     return 0;
 }

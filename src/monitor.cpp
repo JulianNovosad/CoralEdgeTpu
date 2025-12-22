@@ -164,6 +164,18 @@ void Monitor::monitor_thread_func() {
         }
         std::cout << std::endl;
         
+        // Pipeline Timing Information
+        std::cout << "[Pipeline Timing]" << std::endl;
+        // TODO: Add timing measurements for each stage of the pipeline
+        std::cout << "  Capture: TODO us" << std::endl;
+        std::cout << "  Queue pop: TODO us" << std::endl;
+        std::cout << "  Pre-processing: TODO us" << std::endl;
+        std::cout << "  Inference: TODO us" << std::endl;
+        std::cout << "  Encoding: TODO us" << std::endl;
+        std::cout << "  NAL handling: TODO us" << std::endl;
+        std::cout << "  Total loop: TODO us" << std::endl;
+        std::cout << std::endl;
+        
         // Wait before next update
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }

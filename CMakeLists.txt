@@ -92,6 +92,18 @@ add_executable(raw_tpu_test
     src/config_loader.cpp
     src/util_logging.cpp
 )
+
+add_executable(tpu_diagnostic
+    tpu_diagnostic.cpp
+)
+
+add_executable(list_tpu_devices
+    list_tpu_devices.cpp
+)
+
+add_executable(check_edgetpu_version
+    check_edgetpu_version.cpp
+)
 set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS USE_WEBSOCKET)
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})
@@ -125,6 +137,24 @@ target_link_libraries(camera_isolation_test PRIVATE
     Threads::Threads # For pthreads
 )
 
+# Add dashboard executable
+add_executable(dashboard
+    dashboard_fixed.cpp
+)
+
+target_link_libraries(dashboard PRIVATE
+    Threads::Threads
+)
+
+# Add integrated entry point
+add_executable(integrated_system
+    src/integrated_main.cpp
+)
+
+target_link_libraries(integrated_system PRIVATE
+    Threads::Threads
+)
+
 target_link_libraries(inference_test_no_logging PRIVATE
     ${OpenCV_LIBS}
     ${TFLITE_LIB_DIR}/libtensorflowlite.so # For TensorFlow Lite functions
@@ -143,6 +173,30 @@ target_link_libraries(raw_tpu_test PRIVATE
     camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
     Threads::Threads # For pthreads
     ${ZEROMQ_LIBRARIES} # For ZeroMQ library
+)
+
+target_link_libraries(tpu_diagnostic PRIVATE
+    edgetpu # For Edge TPU delegate functions
+)
+
+target_link_libraries(list_tpu_devices PRIVATE
+    edgetpu # For Edge TPU delegate functions
+)
+
+target_include_directories(list_tpu_devices PRIVATE
+    SYSTEM ${TFLITE_INCLUDE_DIR}
+)
+
+target_link_libraries(check_edgetpu_version PRIVATE
+    edgetpu # For Edge TPU delegate functions
+)
+
+target_include_directories(check_edgetpu_version PRIVATE
+    SYSTEM ${TFLITE_INCLUDE_DIR}
+)
+
+target_include_directories(tpu_diagnostic PRIVATE
+    SYSTEM ${TFLITE_INCLUDE_DIR}
 )
 
 target_include_directories(camera_isolation_test PRIVATE
@@ -238,6 +292,24 @@ target_include_directories(servo_test PRIVATE
 
 add_executable(dlopen_test tests/dlopen_test.cpp)
 target_link_libraries(dlopen_test PRIVATE dl)
+
+# Add TPU performance test executable
+add_executable(tpu_performance_test
+    tpu_performance_test.cpp
+)
+target_link_libraries(tpu_performance_test PRIVATE
+    ${TFLITE_LIB_DIR}/libtensorflowlite.so
+    edgetpu
+    Threads::Threads
+)
+target_include_directories(tpu_performance_test PRIVATE
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+)
+# Disable strict warnings for this utility
+target_compile_options(tpu_performance_test PRIVATE
+    -Wno-error
+)
 
 # Test executables (commented out as source files are missing)
 # add_executable(test_config test_config.cpp src/config_loader.cpp src/util_logging.cpp)

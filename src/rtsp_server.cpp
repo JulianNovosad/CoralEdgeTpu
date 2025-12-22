@@ -81,7 +81,6 @@ void RTSPServerWrapper::stop() {
     }
     
     running_ = false;
-    queueCondition_.notify_all();
     
     if (serverThread_.joinable()) {
         serverThread_.join();
@@ -142,26 +141,31 @@ void RTSPServerWrapper::serverThread() {
 void RTSPServerWrapper::streamThread() {
     APP_LOG_INFO("RTSP stream thread started");
     
-    // This thread would handle the actual streaming of data
-    // For now, we'll just wait for data to be pushed to the queue
+    std::shared_ptr<H264Buffer> last_frame;
+    
     while (running_) {
-        std::unique_lock<std::mutex> lock(queueMutex_);
-        queueCondition_.wait(lock, [this] { return !bufferQueue_.empty() || !running_; });
+        std::shared_ptr<H264Buffer> frame;
         
-        if (!running_) {
-            break;
+        {
+            std::lock_guard<std::mutex> lock(latest_mutex_);
+            frame = latest_buffer_;
         }
         
-        // Process buffers in the queue
-        while (!bufferQueue_.empty()) {
-            auto buffer = bufferQueue_.front();
-            bufferQueue_.pop();
+        // Only process if we have a new frame
+        if (frame && frame != last_frame) {
+            last_frame = frame;
             
             // Here we would send the H.264 data to the clients
             // This is a simplified implementation - in a real implementation,
             // we would need to properly format the data for RTP streaming
-            APP_LOG_DEBUG("Processing H.264 buffer with size: " + std::to_string(buffer->size));
+            APP_LOG_DEBUG("Processing H.264 buffer with size: " + std::to_string(frame->size));
+            
+            // In a real implementation, this would be non-blocking send to RTSP clients
+            // For now, we just release the frame immediately
         }
+        
+        // Minimal sleep to prevent busy-waiting, but not holding any buffers
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     
     APP_LOG_INFO("RTSP stream thread stopped");
@@ -172,9 +176,20 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
         return;
     }
     
+#ifdef DEBUG_MODE
+    // Record RTSP push start time
+    auto rtsp_push_start_time = std::chrono::high_resolution_clock::now();
+#endif
+    
     {
-        std::lock_guard<std::mutex> lock(queueMutex_);
-        bufferQueue_.push(buffer);
+        std::lock_guard<std::mutex> lock(latest_mutex_);
+        latest_buffer_ = std::move(buffer);
     }
-    queueCondition_.notify_one();
+    
+#ifdef DEBUG_MODE
+    // Record RTSP push end time
+    auto rtsp_push_end_time = std::chrono::high_resolution_clock::now();
+    auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(rtsp_push_end_time - rtsp_push_start_time).count();
+    APP_LOG_DEBUG("RTSP push time: " + std::to_string(duration_us) + " us");
+#endif
 }

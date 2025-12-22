@@ -1,0 +1,1 @@
+/usr/bin/c++ -Werror -Wall -Wextra -Werror -O3 -DNDEBUG CMakeFiles/integrated_system.dir/src/integrated_main.cpp.o -o integrated_system 

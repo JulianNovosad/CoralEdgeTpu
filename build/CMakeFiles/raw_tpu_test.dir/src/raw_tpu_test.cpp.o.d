@@ -800,6 +800,4 @@ CMakeFiles/raw_tpu_test.dir/src/raw_tpu_test.cpp.o: \
  /usr/include/c++/12/numeric /usr/include/c++/12/bits/stl_numeric.h \
  /usr/include/c++/12/pstl/glue_numeric_defs.h /usr/include/c++/12/any \
  /usr/include/libcamera/libcamera/formats.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/optional_debug_tools.h \
- /usr/include/edgetpu.h \
- /home/pi/CoralEdgeTpu/include/tensorflow/lite/context.h
+ /home/pi/CoralEdgeTpu/include/tensorflow/lite/optional_debug_tools.h

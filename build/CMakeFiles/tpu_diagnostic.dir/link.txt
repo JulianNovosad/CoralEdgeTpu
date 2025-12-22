@@ -1,0 +1,1 @@
+/usr/bin/c++ -Werror -Wall -Wextra -Werror -O3 -DNDEBUG CMakeFiles/tpu_diagnostic.dir/tpu_diagnostic.cpp.o -o tpu_diagnostic  -ledgetpu 

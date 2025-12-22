@@ -78,8 +78,8 @@ int main() {
                 }
             }
             
-            // Small delay to simulate frame arrival
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // No delay to maximize frame arrival rate
+            // std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     });
     

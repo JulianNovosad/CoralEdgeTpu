@@ -1,1 +1,1 @@
-/usr/bin/c++ -I/usr/include/liveMedia -I/usr/include/groupsock -I/usr/include/BasicUsageEnvironment -I/usr/include/UsageEnvironment -Werror -Wall -Wextra -Werror -O3 -DNDEBUG -L/usr/lib/aarch64-linux-gnu -lliveMedia -lgroupsock -lBasicUsageEnvironment -lUsageEnvironment CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o -o dlopen_test  -ldl 
+/usr/bin/c++ -Werror -Wall -Wextra -Werror -O3 -DNDEBUG CMakeFiles/dlopen_test.dir/tests/dlopen_test.cpp.o -o dlopen_test  -ldl 

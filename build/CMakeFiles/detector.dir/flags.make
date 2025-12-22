@@ -11,9 +11,9 @@ C_FLAGS =  -Wall -Wextra -Werror -O3 -DNDEBUG
 
 CXX_DEFINES = -DOPENSSL_API_3_0
 
-CXX_INCLUDES = -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
+CXX_INCLUDES = -I/usr/include/liveMedia -I/usr/include/groupsock -I/usr/include/BasicUsageEnvironment -I/usr/include/UsageEnvironment -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
 
-CXX_FLAGS = -I/usr/include/liveMedia -I/usr/include/groupsock -I/usr/include/BasicUsageEnvironment -I/usr/include/UsageEnvironment -Werror -Wall -Wextra -Werror -O3 -DNDEBUG -Wno-error=unused-parameter -std=gnu++17
+CXX_FLAGS = -Werror -Wall -Wextra -Werror -O3 -DNDEBUG -Wno-error=unused-parameter -std=gnu++17
 
 # Custom defines: CMakeFiles/detector.dir/civetweb/src/civetweb.c.o_DEFINES = USE_WEBSOCKET
 

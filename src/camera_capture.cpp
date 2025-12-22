@@ -43,11 +43,13 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  long long frame_id,
                                  [[maybe_unused]] long long exposure_ms)
 {
+    auto process_start = std::chrono::high_resolution_clock::now();
     APP_LOG_INFO("Processing frame for " + std::string(stream_name) + " with format: " + pixelFormatToString(actual_format));
     if (fb->planes().empty()) {
         APP_LOG_ERROR(std::string(stream_name) + " FrameBuffer has no planes.");
         return false;
     }
+
     APP_LOG_INFO("Frame buffer has " + std::to_string(fb->planes().size()) + " planes.");
 
     const libcamera::FrameBuffer::Plane& plane = fb->planes()[0];
@@ -115,13 +117,15 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     // Attach the pooled buffer to the ImageData.
     image_data.buffer = std::move(pooled_buffer);
 
-    // 6. Push to queue.
-    if (!queue.push(std::move(image_data))) {
-        APP_LOG_ERROR(std::string(stream_name) + " Failed to push image data to queue.");
+    // 6. Push to queue with latest-only semantics.
+    if (!push_latest_only(queue, std::move(image_data))) {
+        APP_LOG_ERROR(std::string(stream_name) + " Failed to push image data to queue with latest-only semantics.");
         return false;
     }
 
-    APP_LOG_INFO(std::string(stream_name) + " Frame processed and enqueued successfully.");
+    auto process_end = std::chrono::high_resolution_clock::now();
+    auto process_time_us = std::chrono::duration_cast<std::chrono::microseconds>(process_end - process_start).count();
+    APP_LOG_INFO(std::string(stream_name) + " Frame processed and enqueued successfully. Process time: " + std::to_string(process_time_us) + " us");
     return true;
 }
 
@@ -235,12 +239,18 @@ bool CameraCapture::start() {
     // Prepare controls to set during camera start
     libcamera::ControlList controls_to_set;
     
-    // Set frame rate to 120 FPS using FrameDurationLimits for both streams
-    if (tpu_fps_ > 0) {
-        int64_t frame_duration_us = 1000000 / tpu_fps_; // Calculate microseconds per frame
-        controls_to_set.set(libcamera::controls::FrameDurationLimits, {frame_duration_us, frame_duration_us});
-        APP_LOG_INFO("Setting FrameDurationLimits to: " + std::to_string(frame_duration_us) + " us (" + std::to_string(tpu_fps_) + " FPS)");
-    }
+    // Set frame rate for main camera stream based on configuration (minimum 120 FPS)
+    // This allows the camera to capture at maximum rate while TPU processes at its own pace
+    int main_stream_fps = std::max(120u, tpu_fps_); // Ensure at least 120 FPS for main stream
+    int64_t main_stream_frame_duration_us = 1000000 / main_stream_fps; // Calculate frame duration
+    int64_t tpu_stream_frame_duration_us = 1000000 / tpu_fps_; // Keep TPU stream at configured rate
+    
+    // Set FrameDurationLimits for both streams independently
+    // First value is min frame duration, second is max frame duration
+    // For main stream: allow flexibility in frame rate
+    // For TPU stream: set to exact target frame rate
+    controls_to_set.set(libcamera::controls::FrameDurationLimits, {main_stream_frame_duration_us/2, main_stream_frame_duration_us*2});
+    APP_LOG_INFO("Setting FrameDurationLimits - Main stream: " + std::to_string(main_stream_frame_duration_us/2) + "-" + std::to_string(main_stream_frame_duration_us*2) + " us, TPU stream: " + std::to_string(tpu_stream_frame_duration_us) + " us (" + std::to_string(tpu_fps_) + " FPS)");
     
     // Also set the target frame rate for the camera
     if (tpu_fps_ > 0) {
@@ -404,7 +414,7 @@ bool CameraCapture::setup_camera() {
     mainCfg.pixelFormat = libcamera::formats::SRGGB10_CSI2P;  // 10-bit Bayer format as requested
     mainCfg.size.width = 1536;  // Fixed to Mode 0 resolution for 120 FPS
     mainCfg.size.height = 864;  // Fixed to Mode 0 resolution for 120 FPS
-    mainCfg.bufferCount = 8; // Increase buffer count for high frame rate
+    mainCfg.bufferCount = 16; // Increase buffer count for high frame rate
     
     // Validate main stream configuration
     if (mainCfg.size.width != 1536 || mainCfg.size.height != 864) {
@@ -416,7 +426,7 @@ bool CameraCapture::setup_camera() {
     tpuCfg.pixelFormat = libcamera::formats::RGB888;
     tpuCfg.size.width = 320;   // Fixed to TPU input size
     tpuCfg.size.height = 320;  // Fixed to TPU input size
-    tpuCfg.bufferCount = 8; // Increase buffer count for high frame rate
+    tpuCfg.bufferCount = 16; // Increase buffer count for high frame rate
     
     // Validate TPU stream configuration
     if (tpuCfg.size.width != 320 || tpuCfg.size.height != 320) {
@@ -595,7 +605,8 @@ void CameraCapture::request_processor_thread_func() {
     APP_LOG_INFO("CameraCapture: Request processor thread started.");
     while (processing_running_.load()) {
         std::unique_lock<std::mutex> lock(request_queue_mutex_);
-        request_queue_cond_var_.wait(lock, [this] { 
+        // Wait for up to 100ms to check if we should shut down
+        request_queue_cond_var_.wait_for(lock, std::chrono::milliseconds(100), [this] { 
             return !request_queue_.empty() || !processing_running_.load(); 
         });
 
@@ -604,7 +615,7 @@ void CameraCapture::request_processor_thread_func() {
         }
 
         if (request_queue_.empty()) {
-            continue; // Spurious wakeup, wait again
+            continue; // Spurious wakeup or timeout, wait again
         }
 
         libcamera::Request* request = request_queue_.front();
@@ -726,14 +737,18 @@ void CameraCapture::request_processor_thread_func() {
                     
                     // FPS measurement instrumentation
                     auto current_time = std::chrono::high_resolution_clock::now();
-                    if (fps_measurement_frames_ == 0) {
+                    
+                    // Increment the frame counter
+                    fps_measurement_frames_++;
+                    
+                    // Skip initial frames for FPS calculation
+                    if (fps_measurement_frames_ <= skip_initial_measurements_) {
                         first_frame_time_ = current_time;
                     } else {
                         auto interval_us = std::chrono::duration_cast<std::chrono::microseconds>(current_time - last_frame_time_).count();
                         frame_intervals_us_.push_back(interval_us);
                     }
                     last_frame_time_ = current_time;
-                    fps_measurement_frames_++;
                     
                     // Update freshness indicators
                     last_frame_timestamp_ = call_ts;
@@ -781,9 +796,23 @@ void CameraCapture::request_processor_thread_func() {
         }
         
         std::chrono::high_resolution_clock::time_point end_process_time = std::chrono::high_resolution_clock::now();
-        [[maybe_unused]] long long total_process_us = std::chrono::duration_cast<std::chrono::microseconds>(end_process_time - start_process_time).count();
+        long long total_process_us = std::chrono::duration_cast<std::chrono::microseconds>(end_process_time - start_process_time).count();
         if (processed_any_frame) {
             APP_LOG_INFO("CameraCapture: Total time to process request (frame_id=" + std::to_string(frame_id) + "): " + std::to_string(total_process_us) + " us");
+            
+            // Log process time for dashboard FPS calculation
+            static int process_time_log_counter = 0;
+            process_time_log_counter++;
+            if (process_time_log_counter % 10 == 0) {
+                CsvLogEntry entry(produced_ts, "CameraCapture", static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id())), "CAMERA_PROCESS_TIME", call_ts);
+                entry.camera_frame_id = frame_id;
+                // Add process time as a field
+                entry.details[0] = '\0'; // Clear details first
+                std::string process_time_str = "process_time_us=" + std::to_string(total_process_us);
+                strncpy(entry.details.data(), process_time_str.c_str(), entry.details.size() - 1);
+                entry.details[entry.details.size() - 1] = '\0';
+                Logger::getInstance().log_csv(entry);
+            }
         }
     
         // --- REQUEUE ---
@@ -807,16 +836,19 @@ bool CameraCapture::init_video_encoder() {
     return true;
 }
 
-// This function will be placed in src/camera_capture.cpp
 bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* fb,
                                                  const libcamera::StreamConfiguration& cfg,
                                                  long long call_ts_epoch_ms,
                                                  long long frame_id,
                                                  [[maybe_unused]] long long exposure_ms) {
+    auto process_start = std::chrono::high_resolution_clock::now();
     if (fb->planes().empty()) {
         APP_LOG_ERROR("TPU raw FrameBuffer has no planes.");
         return false;
     }
+
+    // Record capture time
+    auto capture_time = std::chrono::high_resolution_clock::now();
 
     const libcamera::FrameBuffer::Plane& plane = fb->planes()[0];
     int fd = plane.fd.get();
@@ -862,13 +894,18 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
 
     // Attach the pooled buffer to the ImageData.
     image_data.buffer = std::move(pooled_buffer);
+    
+    // Record timing measurements
+    image_data.capture_time = capture_time;
 
-    // 6. Push to TPU queue.
-    if (!image_processor_input_queue_.push(std::move(image_data))) {
-        APP_LOG_ERROR("TPU raw Failed to push image data to queue.");
+    // 6. Push to TPU queue with latest-only semantics.
+    if (!push_latest_only(image_processor_input_queue_, std::move(image_data))) {
+        APP_LOG_ERROR("TPU raw Failed to push image data to queue with latest-only semantics.");
         return false;
     }
 
-    APP_LOG_INFO("TPU raw Frame processed and enqueued successfully.");
+    auto process_end = std::chrono::high_resolution_clock::now();
+    auto process_time_us = std::chrono::duration_cast<std::chrono::microseconds>(process_end - process_start).count();
+    APP_LOG_INFO("TPU raw Frame processed and enqueued successfully. Process time: " + std::to_string(process_time_us) + " us");
     return true;
 }

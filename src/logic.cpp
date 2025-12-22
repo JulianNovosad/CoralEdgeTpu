@@ -418,6 +418,10 @@ void LogicModule::worker_thread_func() {
                             detections_buffer->data[0].timestamp.time_since_epoch()).count();
             } else {
                 APP_LOG_WARNING("LogicModule: Pop successful, but detections_buffer is null or empty. Using current time for call_ts.");
+                // If we're shutting down, exit the thread
+                if (!running_) {
+                    return;
+                }
                 call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
                                   std::chrono::system_clock::now().time_since_epoch()).count();
             }
@@ -574,22 +578,33 @@ void LogicModule::execute_servo_command(float target_x, float target_y, float ta
 
 void LogicModule::process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data) {
     [[maybe_unused]] auto total_process_start = std::chrono::high_resolution_clock::now();
-
-    // Check if camera is covered (no detections or all detections have very low confidence)
-    bool camera_covered = false;
-    if (detections.empty()) {
-        camera_covered = true;
-    } else {
-        // Check if all detections have very low confidence (likely noise when camera is covered)
-        camera_covered = true;
-        for (const auto& det : detections) {
-            if (det.score > 10.0f) {  // If any detection has reasonable confidence, camera is not covered
-                camera_covered = false;
-                break;
-            }
+    
+    // Frame-to-frame consistency filtering
+    // Only process detections if we have consistent detections across multiple frames
+    static int consecutive_low_confidence_frames = 0;
+    const int max_consecutive_low_confidence_frames = 3; // Allow up to 3 consecutive low confidence frames
+    
+    // Check if all detections have very low confidence
+    bool all_detections_low_confidence = true;
+    for (const auto& det : detections) {
+        if (det.score > 10.0f) {  // If any detection has reasonable confidence
+            all_detections_low_confidence = false;
+            break;
         }
     }
-
+    
+    if (all_detections_low_confidence) {
+        consecutive_low_confidence_frames++;
+    } else {
+        consecutive_low_confidence_frames = 0;
+    }
+    
+    // Check if camera is covered (no detections or all detections have very low confidence consistently)
+    bool camera_covered = false;
+    if (detections.empty() || consecutive_low_confidence_frames > max_consecutive_low_confidence_frames) {
+        camera_covered = true;
+    }
+    
     // If camera is covered, lock servo in safe position and return early
     if (camera_covered) {
         // Lock servo in safe position (center)

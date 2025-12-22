@@ -1205,10 +1205,6 @@ CMakeFiles/detector.dir/src/main.cpp.o: \
  /usr/include/BasicUsageEnvironment/BasicUsageEnvironment0.hh \
  /usr/include/BasicUsageEnvironment/BasicUsageEnvironment_version.hh \
  /usr/include/BasicUsageEnvironment/DelayQueue.hh \
- /usr/include/groupsock/GroupsockHelper.hh \
- /usr/include/liveMedia/H264VideoRTPSink.hh \
- /usr/include/liveMedia/H264VideoStreamFramer.hh \
- /usr/include/liveMedia/RTSPServer.hh \
- /usr/include/liveMedia/ServerMediaSession.hh \
- /usr/include/liveMedia/ByteStreamMemoryBufferSource.hh \
+ /usr/include/UsageEnvironment/UsageEnvironment.hh \
+ /usr/include/groupsock/Groupsock.hh /usr/include/groupsock/NetCommon.h \
  /home/pi/CoralEdgeTpu/src/monitor.h

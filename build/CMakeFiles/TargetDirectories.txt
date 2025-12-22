@@ -2,8 +2,14 @@
 /home/pi/CoralEdgeTpu/build/CMakeFiles/camera_isolation_test.dir
 /home/pi/CoralEdgeTpu/build/CMakeFiles/inference_test_no_logging.dir
 /home/pi/CoralEdgeTpu/build/CMakeFiles/raw_tpu_test.dir
+/home/pi/CoralEdgeTpu/build/CMakeFiles/tpu_diagnostic.dir
+/home/pi/CoralEdgeTpu/build/CMakeFiles/list_tpu_devices.dir
+/home/pi/CoralEdgeTpu/build/CMakeFiles/check_edgetpu_version.dir
+/home/pi/CoralEdgeTpu/build/CMakeFiles/dashboard.dir
+/home/pi/CoralEdgeTpu/build/CMakeFiles/integrated_system.dir
 /home/pi/CoralEdgeTpu/build/CMakeFiles/config_loader_test.dir
 /home/pi/CoralEdgeTpu/build/CMakeFiles/servo_test.dir
 /home/pi/CoralEdgeTpu/build/CMakeFiles/dlopen_test.dir
+/home/pi/CoralEdgeTpu/build/CMakeFiles/tpu_performance_test.dir
 /home/pi/CoralEdgeTpu/build/CMakeFiles/edit_cache.dir
 /home/pi/CoralEdgeTpu/build/CMakeFiles/rebuild_cache.dir

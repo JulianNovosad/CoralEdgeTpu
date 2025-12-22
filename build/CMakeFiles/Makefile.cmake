@@ -66,7 +66,13 @@ set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/camera_isolation_test.dir/DependInfo.cmake"
   "CMakeFiles/inference_test_no_logging.dir/DependInfo.cmake"
   "CMakeFiles/raw_tpu_test.dir/DependInfo.cmake"
+  "CMakeFiles/tpu_diagnostic.dir/DependInfo.cmake"
+  "CMakeFiles/list_tpu_devices.dir/DependInfo.cmake"
+  "CMakeFiles/check_edgetpu_version.dir/DependInfo.cmake"
+  "CMakeFiles/dashboard.dir/DependInfo.cmake"
+  "CMakeFiles/integrated_system.dir/DependInfo.cmake"
   "CMakeFiles/config_loader_test.dir/DependInfo.cmake"
   "CMakeFiles/servo_test.dir/DependInfo.cmake"
   "CMakeFiles/dlopen_test.dir/DependInfo.cmake"
+  "CMakeFiles/tpu_performance_test.dir/DependInfo.cmake"
   )

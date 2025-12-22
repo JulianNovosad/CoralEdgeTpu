@@ -88,6 +88,9 @@ void ImageProcessor::worker_thread_func() {
         // Wait for an image to pop from the queue, with a small timeout to allow stopping
         if (input_queue_.pop(input_image)) {
             auto process_start_time = std::chrono::high_resolution_clock::now();
+            
+            // Record queue pop time
+            input_image.queue_pop_time = process_start_time;
 
             // Ensure the input image buffer is valid
             if (!input_image.buffer || input_image.buffer->data.empty() || input_image.width == 0 || input_image.height == 0) {
@@ -101,6 +104,7 @@ void ImageProcessor::worker_thread_func() {
         cv::Mat input_frame_mat;
         if (input_image.format == libcamera::formats::RGB888) {
             input_frame_mat = cv::Mat(input_image.height, input_image.width, CV_8UC3, input_image.buffer->data.data());
+            APP_LOG_DEBUG("ImageProcessor: Created Mat with size " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + " for RGB888 input");
         } else {
             APP_LOG_ERROR("ImageProcessor: Unexpected input format (FOURCC: " + std::to_string(input_image.format.fourcc()) + "). Expected RGB888. Skipping frame.");
             input_image.buffer.reset(); // Return buffer to pool
@@ -108,12 +112,15 @@ void ImageProcessor::worker_thread_func() {
         }
 
         cv::Mat processed_mat;
+        APP_LOG_DEBUG("ImageProcessor: Comparing input size " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + 
+                      " with target size " + std::to_string(tpu_input_width_) + "x" + std::to_string(tpu_input_height_));
         if (input_image.width == (unsigned int)tpu_input_width_ && input_image.height == (unsigned int)tpu_input_height_) {
             // No resizing or color conversion needed
             // For zero-copy optimization, we can pass the buffer directly in some cases
             // Since dimensions match, we can avoid the copy and just pass through the buffer
             // But we still need to create a new ImageData object with the same buffer
             processed_mat = input_frame_mat; // Just reference the same data
+            APP_LOG_DEBUG("ImageProcessor: No resizing needed, passing through buffer directly");
         } else {
             // Resize if dimensions differ
             APP_LOG_WARNING("ImageProcessor: Resizing RGB888 frame from " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) +
@@ -163,9 +170,13 @@ void ImageProcessor::worker_thread_func() {
         output_image_data.fd = input_image.fd;
         output_image_data.offset = input_image.offset;
         output_image_data.length = input_image.length;
+        
+        // Record timing measurements
+        output_image_data.preprocess_start_time = input_image.preprocess_start_time;
+        output_image_data.preprocess_end_time = std::chrono::high_resolution_clock::now();
 
-        if (!output_queue_.push(std::move(output_image_data))) {
-            APP_LOG_WARNING("ImageProcessor output queue is full. Dropping processed frame.");
+        if (!push_latest_only(output_queue_, std::move(output_image_data))) {
+            APP_LOG_WARNING("ImageProcessor failed to push processed frame with latest-only semantics.");
             // output_image_data.buffer will be destructed here, returning its buffer to the pool.
         }
 

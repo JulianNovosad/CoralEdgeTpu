@@ -2,23 +2,16 @@
 #define RTSP_SERVER_H
 
 // Include Live555 headers
-#include <liveMedia.hh>
-#include <BasicUsageEnvironment.hh>
-#include <UsageEnvironment.hh>
-#include <Groupsock.hh>
-#include <GroupsockHelper.hh>
-#include <H264VideoRTPSink.hh>
-#include <H264VideoStreamFramer.hh>
-#include <RTSPServer.hh>
-#include <ServerMediaSession.hh>
-#include <ByteStreamMemoryBufferSource.hh>
+#include <liveMedia/liveMedia.hh>
+#include <BasicUsageEnvironment/BasicUsageEnvironment.hh>
+#include <UsageEnvironment/UsageEnvironment.hh>
+#include <groupsock/Groupsock.hh>
+#include <groupsock/NetCommon.h>
 
 #include <memory>
 #include <thread>
 #include <atomic>
-#include <queue>
 #include <mutex>
-#include <condition_variable>
 #include <vector>
 #include "pipeline_structs.h"
 
@@ -59,10 +52,9 @@ private:
     std::thread serverThread_;
     std::thread streamThread_;
     
-    // Buffer queue for H.264 data
-    std::queue<std::shared_ptr<H264Buffer>> bufferQueue_;
-    std::mutex queueMutex_;
-    std::condition_variable queueCondition_;
+    // Latest frame for RTSP streaming
+    std::mutex latest_mutex_;
+    std::shared_ptr<H264Buffer> latest_buffer_;
     
     // Accumulated H.264 data for streaming
     std::vector<uint8_t> accumulatedData_;

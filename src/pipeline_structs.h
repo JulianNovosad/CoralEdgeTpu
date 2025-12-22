@@ -14,6 +14,25 @@
 #include <boost/lockfree/spsc_queue.hpp> // For lock-free SPSC queues
 #include <libcamera/pixel_format.h> // Include for libcamera::PixelFormat
 
+// Utility function for latest-only queue semantics
+template<typename QueueType, typename DataType>
+bool push_latest_only(QueueType& queue, DataType&& data) {
+    // If queue is full, pop and discard the oldest item
+    if (queue.write_available() == 0) {
+        DataType discarded;
+        if (!queue.pop(discarded)) {
+            // Queue is empty but write_available() reported 0, unexpected state
+            APP_LOG_WARNING("Queue is full but pop failed - unexpected state");
+            return false;
+        }
+        // Log that we're discarding an item
+        APP_LOG_INFO("Discarding oldest item from queue (queue was full)");
+    }
+    
+    // Now push the new data
+    return queue.push(std::forward<DataType>(data));
+}
+
 // --- Generic Data Structures ---
 
 /**
@@ -34,6 +53,18 @@ struct ImageData {
     int fd = -1;                                   ///< File descriptor for zero-copy access to frame buffer.
     size_t offset = 0;                             ///< Offset within the file descriptor for zero-copy access.
     size_t length = 0;                             ///< Length of the frame data for zero-copy access.
+
+    // Timing measurements
+    std::chrono::high_resolution_clock::time_point capture_time;     ///< Time when frame was captured
+    std::chrono::high_resolution_clock::time_point queue_pop_time;   ///< Time when frame was popped from queue
+    std::chrono::high_resolution_clock::time_point preprocess_start_time; ///< Time when preprocessing started
+    std::chrono::high_resolution_clock::time_point preprocess_end_time;   ///< Time when preprocessing ended
+    std::chrono::high_resolution_clock::time_point inference_start_time;  ///< Time when inference started
+    std::chrono::high_resolution_clock::time_point inference_end_time;    ///< Time when inference ended
+    std::chrono::high_resolution_clock::time_point encode_start_time;     ///< Time when encoding started
+    std::chrono::high_resolution_clock::time_point encode_end_time;       ///< Time when encoding ended
+    std::chrono::high_resolution_clock::time_point rtsp_push_start_time;  ///< Time when RTSP push started
+    std::chrono::high_resolution_clock::time_point rtsp_push_end_time;    ///< Time when RTSP push ended
 
     // Constructor to initialize timestamp and frame_id
     ImageData(long long ts_epoch_ms = 0, int f_id = -1)
@@ -64,7 +95,8 @@ struct OrientationData {
  */
 struct DetectionResult {
     int class_id;   ///< The ID of the detected class.
-    float score;    ///< The confidence score of the detection (0.0 - 1.0).
+    float score;    ///< The confidence score of the detection (0.0 - 100.0, percentage).
+    float raw_score; ///< Raw dequantized model output for debugging.
     float xmin, ymin, xmax, ymax; ///< Bounding box coordinates (normalized 0.0 - 1.0 or pixel values).
     std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of when the detection was made.
 };
