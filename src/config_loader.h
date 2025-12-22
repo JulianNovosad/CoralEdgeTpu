@@ -104,6 +104,13 @@ public:
     float get_distance_confidence_factor() const;
     /** @return Maximum allowable angular error in degrees. Standaard: 1.0. */
     float get_max_angular_error_degrees() const;
+    /** @return Inner fraction of bounding box to be used for hitscan. Standaard: 0.5. */
+    float get_inner_fraction() const;
+    
+    // --- Visualization ---
+    bool get_enable_visualization() const;
+    int get_visualization_width() const;
+    int get_visualization_height() const;
 
     // --- Netwerkconfiguratie ---
     std::string get_listen_address() const;

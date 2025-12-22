@@ -188,7 +188,9 @@ private:
     Uncertainty propagate_uncertainty(const TrackedObject& target, float flight_time);
     float estimate_target_distance(const DetectionResult& detection);
     float calculate_impact_point_distance(const Vec3& impact_point, const Vec3& crosshair_point);
-    float calculate_angular_error_degrees(const Vec3& impact_point, const Vec3& crosshair_point, float target_distance);
+    
+    // Removed incorrect function:
+    // float calculate_angular_error_degrees(const Vec3& impact_point, const Vec3& crosshair_point, float target_distance);
 
     DetectionResultsQueue& detection_input_queue_;
     std::atomic<bool> running_ = false;
@@ -279,6 +281,14 @@ private:
     
     // Method to add a distance estimate to the rolling window and get smoothed value
     float add_distance_estimate(float distance);
+
+    // Camera intrinsics for angular error calculation
+    float focal_length_px_;  // Focal length in pixels
+    float image_center_x_;   // Image center X coordinate in pixels
+    float image_center_y_;   // Image center Y coordinate in pixels
+    
+    // New method for camera-space angular error calculation
+    float camera_cone_error_degrees_from_pixels(float radial_px) const;
 
 };
 

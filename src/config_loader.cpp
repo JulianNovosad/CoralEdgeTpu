@@ -160,6 +160,23 @@ float ConfigLoader::get_max_angular_error_degrees() const {
     return config_data_.value("/application/safety/max_angular_error_degrees"_json_pointer, 1.0f);
 }
 
+float ConfigLoader::get_inner_fraction() const {
+    return config_data_.value("/application/safety/inner_fraction"_json_pointer, 0.5f);
+}
+
+// --- Visualization Getters ---
+bool ConfigLoader::get_enable_visualization() const {
+    return config_data_.value("/application/enable_visualization"_json_pointer, true);
+}
+
+int ConfigLoader::get_visualization_width() const {
+    return config_data_.value("/application/visualization_width"_json_pointer, 640);
+}
+
+int ConfigLoader::get_visualization_height() const {
+    return config_data_.value("/application/visualization_height"_json_pointer, 480);
+}
+
 
 // --- Network Port Getters (Corrected) ---
 unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {

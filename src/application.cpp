@@ -546,11 +546,130 @@ bool Application::restart_orientation_subsystem() {
 
 void Application::overlay_queue_consumer_thread_func() {
     APP_LOG_INFO("Overlay consumer thread started.");
+    
+    // Check if visualization is enabled
+    if (!config_loader_.get_enable_visualization()) {
+        APP_LOG_INFO("Visualization disabled. Overlay consumer thread will not process detections.");
+        // Even if visualization is disabled, we still need to consume from the queue
+        // to prevent it from filling up and blocking the inference engine
+        std::shared_ptr<DetectionResultBuffer> detections_buffer;
+        while (overlay_consumer_running_) {
+            if (!detection_results_for_overlay_queue_.pop(detections_buffer)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+        APP_LOG_INFO("Overlay consumer thread stopped.");
+        return;
+    }
+    
+    // Get visualization dimensions
+    int vis_width = config_loader_.get_visualization_width();
+    int vis_height = config_loader_.get_visualization_height();
+    
     std::shared_ptr<DetectionResultBuffer> detections_buffer;
     while (overlay_consumer_running_) {
         // Attempt to pop a buffer. If successful, it will be released when
         // detections_buffer goes out of scope or is reassigned.
-        if (!detection_results_for_overlay_queue_.pop(detections_buffer)) {
+        if (detection_results_for_overlay_queue_.pop(detections_buffer)) {
+            // Create a blank image for visualization with a dark background
+            cv::Mat visualization = cv::Mat(vis_height, vis_width, CV_8UC3, cv::Scalar(30, 30, 30));
+            
+            // Draw a grid to help visualize coordinates
+            cv::Scalar grid_color(60, 60, 60);
+            for (int x = 0; x <= vis_width; x += vis_width / 10) {
+                cv::line(visualization, cv::Point(x, 0), cv::Point(x, vis_height), grid_color, 1);
+            }
+            for (int y = 0; y <= vis_height; y += vis_height / 10) {
+                cv::line(visualization, cv::Point(0, y), cv::Point(vis_width, y), grid_color, 1);
+            }
+            
+            // Draw center crosshair in bright green
+            cv::Scalar crosshair_color(0, 255, 0);
+            cv::line(visualization, cv::Point(vis_width/2 - 20, vis_height/2), cv::Point(vis_width/2 + 20, vis_height/2), crosshair_color, 2);
+            cv::line(visualization, cv::Point(vis_width/2, vis_height/2 - 20), cv::Point(vis_width/2, vis_height/2 + 20), crosshair_color, 2);
+            
+            // Process each detection
+            for (size_t i = 0; i < detections_buffer->size; ++i) {
+                const DetectionResult& detection = detections_buffer->data[i];
+                
+                // Convert normalized coordinates to pixel coordinates
+                int x_min = static_cast<int>(detection.xmin * vis_width);
+                int y_min = static_cast<int>(detection.ymin * vis_height);
+                int x_max = static_cast<int>(detection.xmax * vis_width);
+                int y_max = static_cast<int>(detection.ymax * vis_height);
+                
+                // Draw bounding box in bright red
+                cv::Scalar box_color(0, 0, 255); // Red (BGR format)
+                cv::rectangle(visualization, cv::Point(x_min, y_min), cv::Point(x_max, y_max), box_color, 2);
+                
+                // Draw class ID and score
+                std::string label = "ID:" + std::to_string(detection.class_id) + " S:" + std::to_string(static_cast<int>(detection.score * 100)) + "%";
+                cv::putText(visualization, label, cv::Point(x_min, y_min - 10), cv::FONT_HERSHEY_SIMPLEX, 0.4, box_color, 1);
+                
+                // Calculate inner fraction bounding box
+                float fraction = config_loader_.get_inner_fraction();
+                int bbox_width = x_max - x_min;
+                int bbox_height = y_max - y_min;
+                
+                int inner_x_min = x_min + static_cast<int>((1.0f - fraction) * 0.5f * bbox_width);
+                int inner_x_max = x_max - static_cast<int>((1.0f - fraction) * 0.5f * bbox_width);
+                int inner_y_min = y_min + static_cast<int>((1.0f - fraction) * 0.5f * bbox_height);
+                int inner_y_max = y_max - static_cast<int>((1.0f - fraction) * 0.5f * bbox_height);
+                
+                // Draw inner fraction bounding box
+                cv::Scalar inner_color(255, 0, 0); // Blue
+                cv::rectangle(visualization, cv::Point(inner_x_min, inner_y_min), cv::Point(inner_x_max, inner_y_max), inner_color, 1);
+                
+                // Draw inner fraction center
+                int inner_center_x = (inner_x_min + inner_x_max) / 2;
+                int inner_center_y = (inner_y_min + inner_y_max) / 2;
+                cv::circle(visualization, cv::Point(inner_center_x, inner_center_y), 3, inner_color, -1);
+                
+                // Draw line from center crosshair to inner fraction center
+                cv::line(visualization, cv::Point(vis_width/2, vis_height/2), cv::Point(inner_center_x, inner_center_y), cv::Scalar(255, 255, 255), 1);
+            }
+            
+            // Add visualization info text
+            std::string info_text = "Visualization: " + std::to_string(vis_width) + "x" + std::to_string(vis_height) + 
+                                   " | Detections: " + std::to_string(detections_buffer->size) +
+                                   " | Inner Fraction: " + std::to_string(config_loader_.get_inner_fraction());
+            cv::putText(visualization, info_text, cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+            
+            // Convert to RGB format for streaming
+            cv::Mat rgb_visualization;
+            cv::cvtColor(visualization, rgb_visualization, cv::COLOR_BGR2RGB);
+            
+            // Create a buffer for the visualization image
+            std::shared_ptr<PooledBuffer<uint8_t>> image_buffer = image_pool_->acquire();
+            if (image_buffer) {
+                size_t image_size = rgb_visualization.total() * rgb_visualization.elemSize();
+                if (image_size <= image_buffer->data.capacity()) {
+                    // Copy the image data to the buffer
+                    std::memcpy(image_buffer->data.data(), rgb_visualization.data, image_size);
+                    image_buffer->size = image_size;
+                    image_buffer->data.resize(image_size);
+                    
+                    // Create ImageData object
+                    ImageData image_data;
+                    image_data.buffer = image_buffer;
+                    image_data.width = vis_width;
+                    image_data.height = vis_height;
+                    image_data.format = libcamera::formats::RGB888;
+                    image_data.timestamp_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    image_data.frame_id = static_cast<int>(image_data.timestamp_epoch_ms); // Simple frame ID
+                    
+                    // Push to overlaid video queue
+                    if (!overlaid_video_queue_.push(std::move(image_data))) {
+                        APP_LOG_WARNING("Overlaid video queue is full. Dropping visualization frame.");
+                    }
+                } else {
+                    APP_LOG_ERROR("Visualization image size exceeds buffer capacity.");
+                }
+            } else {
+                APP_LOG_WARNING("Failed to acquire buffer for visualization image.");
+            }
+        } else {
             // If pop fails (queue empty or shut down), wait a bit to avoid busy-waiting.
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }

@@ -286,6 +286,17 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
       last_direction_change_(std::chrono::steady_clock::now()),
       distance_history_(DISTANCE_WINDOW_SIZE, 0.0f) {
     
+    // Initialize camera intrinsics for angular error calculation
+    float image_width_px = static_cast<float>(config_.get_tpu_target_width());
+    float image_height_px = static_cast<float>(config_.get_tpu_target_height());
+    focal_length_px_ = (CAMERA_FOCAL_LENGTH_MM * image_width_px) / SENSOR_WIDTH_MM;
+    image_center_x_ = image_width_px * 0.5f;
+    image_center_y_ = image_height_px * 0.5f;
+    
+    // Log verification value for 3° safety cone
+    float px_at_3deg = focal_length_px_ * std::tan(3.0f * PI / 180.0f);
+    APP_LOG_INFO("Safety cone verification: 3° corresponds to " + std::to_string(px_at_3deg) + " pixels");
+    
     BallisticProfile profile = {
         .muzzle_velocity_mps = config.get_muzzle_velocity_mps(),
         .bullet_mass_kg = config.get_bullet_mass_kg(),
@@ -479,15 +490,36 @@ void LogicModule::servo_worker_thread_func() {
         }
         
         if (has_command) {
+            // Log timing information for servo command verification
+            auto queue_to_execution_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - command.timestamp).count();
+            
             // Check cooldown period (0.3 seconds)
             auto time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - command.timestamp).count();
+                std::chrono::steady_clock::now() - last_direction_change_).count();
+            
+            // Log detailed timing information
+            char timing_log_buffer[256];
+            snprintf(timing_log_buffer, sizeof(timing_log_buffer), 
+                     "SERVO_TIMING: queue_to_execution=%ldms cooldown_elapsed=%ldms", 
+                     queue_to_execution_time, time_since_last_actuation);
+            APP_LOG_INFO(timing_log_buffer);
             
             if (time_since_last_actuation >= 300) { // 300ms cooldown
                 // Execute servo command
+                auto execution_start = std::chrono::high_resolution_clock::now();
                 execute_servo_command(command.target_x, command.target_y, command.target_z, command.confidence);
+                auto execution_end = std::chrono::high_resolution_clock::now();
+                auto execution_duration = std::chrono::duration_cast<std::chrono::microseconds>(
+                    execution_end - execution_start).count();
+                
+                // Log execution time
+                APP_LOG_INFO("SERVO_TIMING: execution_time=" + std::to_string(execution_duration) + "us");
+                
+                // Update last actuation time
+                last_direction_change_ = std::chrono::steady_clock::now();
             } else {
-                APP_LOG_INFO("Skipping servo command: Cooldown period active (" + std::to_string(time_since_last_actuation) + "ms since command queued)");
+                APP_LOG_INFO("Skipping servo command: Cooldown period active (" + std::to_string(time_since_last_actuation) + "ms since last actuation)");
             }
         } else {
             // No commands, sleep briefly to prevent busy-waiting
@@ -551,7 +583,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
         // Check if all detections have very low confidence (likely noise when camera is covered)
         camera_covered = true;
         for (const auto& det : detections) {
-            if (det.score > 0.1f) {  // If any detection has reasonable confidence, camera is not covered
+            if (det.score > 10.0f) {  // If any detection has reasonable confidence, camera is not covered
                 camera_covered = false;
                 break;
             }
@@ -744,9 +776,15 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
         float angular_error_degrees = 0.0f;
         float distance_factor = 0.0f;
         float combined_confidence = 0.0f;
+        // Additional variables for angular error calculation
+        float impact_pixel_x = 0.0f;
+        float impact_pixel_y = 0.0f;
+        float dx = 0.0f;
+        float dy = 0.0f;
+        float radial_px = 0.0f;
         
         switch (safety_status) {
-            case SAFETY_OK:
+            case SAFETY_OK: {
                 if (current_fallback_mode_ != NORMAL_OPERATION) {
                     APP_LOG_INFO("Returning to NORMAL_OPERATION.");
                     current_fallback_mode_ = NORMAL_OPERATION;
@@ -758,8 +796,64 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 // Crosshair is at center of frame (0, 0, track.position.z)
                 impact_distance = calculate_impact_point_distance(track.predicted_impact_point, crosshair_point);
                 
-                // Calculate angular error between crosshair and impact point
-                angular_error_degrees = calculate_angular_error_degrees(track.predicted_impact_point, crosshair_point, track.position.z);
+                // Calculate angular error between crosshair and impact point using camera intrinsics
+                // Convert impact point from world coordinates to pixel coordinates
+                impact_pixel_x = (track.predicted_impact_point.x * focal_length_px_) / track.position.z + image_center_x_;
+                impact_pixel_y = (track.predicted_impact_point.y * focal_length_px_) / track.position.z + image_center_y_;
+                
+                // Calculate inner fraction center for more precise targeting
+                {
+                    float fraction = config_.get_inner_fraction();
+                    float bbox_width = track.last_detection.xmax - track.last_detection.xmin;
+                    float bbox_height = track.last_detection.ymax - track.last_detection.ymin;
+                    
+                    float inner_xmin = track.last_detection.xmin + (1.0f - fraction) * 0.5f * bbox_width;
+                    float inner_xmax = track.last_detection.xmax - (1.0f - fraction) * 0.5f * bbox_width;
+                    float inner_ymin = track.last_detection.ymin + (1.0f - fraction) * 0.5f * bbox_height;
+                    float inner_ymax = track.last_detection.ymax - (1.0f - fraction) * 0.5f * bbox_height;
+                    
+                    // Inner fraction center in normalized coordinates
+                    float inner_center_x_norm = (inner_xmin + inner_xmax) * 0.5f;
+                    float inner_center_y_norm = (inner_ymin + inner_ymax) * 0.5f;
+                    
+                    // Convert to pixel coordinates
+                    float inner_center_x_px = inner_center_x_norm * config_.get_tpu_target_width();
+                    float inner_center_y_px = inner_center_y_norm * config_.get_tpu_target_height();
+                    
+                    // Calculate radial displacement in pixels from inner fraction center
+                    dx = impact_pixel_x - inner_center_x_px;
+                    dy = impact_pixel_y - inner_center_y_px;
+                    
+                    // Enhanced logging for verification
+                    snprintf(log_buffer, sizeof(log_buffer), "INNER_FRACTION_CENTER: track_id=%ld inner_x=%.2f inner_y=%.2f bbox_center_x=%.2f bbox_center_y=%.2f", 
+                             track.id, inner_center_x_px, inner_center_y_px, 
+                             (track.last_detection.xmin + track.last_detection.xmax) * 0.5f * config_.get_tpu_target_width(),
+                             (track.last_detection.ymin + track.last_detection.ymax) * 0.5f * config_.get_tpu_target_height());
+                    APP_LOG_INFO(log_buffer);
+                }
+                
+                radial_px = std::sqrt(dx*dx + dy*dy);
+                
+                // Calculate angular error using camera intrinsics (atan approach)
+                angular_error_degrees = camera_cone_error_degrees_from_pixels(radial_px);
+                
+                // Enhanced logging for verification with detailed calculation information
+                {
+                    float angular_error_rad = std::atan(radial_px / focal_length_px_);
+                    float angular_error_deg_calc = angular_error_rad * (180.0f / PI);
+                    
+                    snprintf(log_buffer, sizeof(log_buffer), 
+                             "ANGULAR_ERROR_VALIDATION: track_id=%ld radial_px=%.2f focal_length_px=%.2f angular_deg=%.2f (calc=%.2f) threshold=%.2f", 
+                             track.id, radial_px, focal_length_px_, angular_error_degrees, angular_error_deg_calc, config_.get_max_angular_error_degrees());
+                    APP_LOG_INFO(log_buffer);
+                    
+                    // Additional verification logging for debugging
+                    char debug_log_buffer[256];
+                    snprintf(debug_log_buffer, sizeof(debug_log_buffer), 
+                             "ANGULAR_ERROR_DEBUG: track_id=%ld impact_pixel=(%.2f,%.2f) image_center=(%.2f,%.2f) dx=%.2f dy=%.2f", 
+                             track.id, impact_pixel_x, impact_pixel_y, image_center_x_, image_center_y_, dx, dy);
+                    APP_LOG_INFO(debug_log_buffer);
+                }
                 
                 // Hard angular veto: if angular error exceeds threshold, no servo command is issued
                 if (angular_error_degrees > config_.get_max_angular_error_degrees()) {
@@ -796,6 +890,7 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                     APP_LOG_INFO(log_buffer);
                 }
                 break;
+            }
             case SAFETY_WARNING_UNCERTAINTY:
             case SAFETY_WARNING_TRACK_UNSTABLE:
                 if (current_fallback_mode_ != FALLBACK_A_REDUCED_PERFORMANCE) {
@@ -1020,6 +1115,24 @@ float LogicModule::estimate_target_distance(const DetectionResult& detection) {
     
     // Apply per-class smoothing to the corrected distance estimate
     float smoothed_distance = add_class_distance_estimate(detection.class_id, corrected_distance);
+    
+    // Log distance smoothing validation with enhanced details
+    char dist_log_buffer[512];
+    const auto& history = class_distance_histories_[detection.class_id];
+    size_t count = history.full ? CLASS_DISTANCE_WINDOW_SIZE : history.index;
+    
+    // Create a string with the current window values for detailed logging
+    std::string window_values = "[";
+    for (size_t i = 0; i < count; ++i) {
+        if (i > 0) window_values += ",";
+        window_values += std::to_string(history.distances[i]);
+    }
+    window_values += "]";
+    
+    snprintf(dist_log_buffer, sizeof(dist_log_buffer), 
+             "DISTANCE_SMOOTHING: class=%d raw=%.3fm corrected=%.3fm smoothed=%.3fm window_count=%zu window_values=%s", 
+             detection.class_id, raw_distance, corrected_distance, smoothed_distance, count, window_values.c_str());
+    APP_LOG_INFO(dist_log_buffer);
     
     // Get top 3 classes with their smoothed distances for logging
     auto top_classes = get_top_classes_with_distances(3);
@@ -1376,25 +1489,6 @@ float LogicModule::calculate_impact_point_distance(const Vec3& impact_point, con
     return std::sqrt(dx*dx + dy*dy + dz*dz);
 }
 
-float LogicModule::calculate_angular_error_degrees(const Vec3& impact_point, const Vec3& crosshair_point, float target_distance) {
-    // Calculate angular error in degrees between crosshair and impact point
-    // Using small angle approximation: angle ≈ displacement / distance
-    
-    // Calculate displacement in x and y directions (assuming z is depth)
-    float dx = impact_point.x - crosshair_point.x;
-    float dy = impact_point.y - crosshair_point.y;
-    
-    // Calculate radial displacement in pixels
-    float radial_displacement = std::sqrt(dx*dx + dy*dy);
-    
-    // Convert to angular displacement in radians
-    // Using small angle approximation: angle (radians) = displacement / distance
-    float angular_error_radians = (target_distance > 0.0f) ? (radial_displacement / target_distance) : 0.0f;
-    
-    // Convert to degrees
-    constexpr float RAD_TO_DEG = 180.0f / PI;
-    return angular_error_radians * RAD_TO_DEG;
-}
 // Safety thresholds - TODO: These should come from config
     
 Uncertainty LogicModule::propagate_uncertainty(const TrackedObject& target, float flight_time) {
@@ -1498,6 +1592,20 @@ void LogicModule::perform_sensor_fusion(const OrientationData& imu_data) {
     APP_LOG_DEBUG("Sensor fusion updated - Yaw: " + std::to_string(imu_data.yaw) + 
                   ", Pitch: " + std::to_string(imu_data.pitch) + 
                   ", Roll: " + std::to_string(imu_data.roll));
+}
+
+// New method for camera-space angular error calculation
+float LogicModule::camera_cone_error_degrees_from_pixels(float radial_px) const
+{
+    // Clamp input to prevent numerical issues
+    if (radial_px < 0.0f) radial_px = 0.0f;
+    
+    // Calculate angular error using camera intrinsics
+    float angular_error_rad = std::atan(radial_px / focal_length_px_);
+    float angular_error_deg = angular_error_rad * (180.0f / PI);
+    
+    // Hard clamp to 90° for safety
+    return std::min(angular_error_deg, 90.0f);
 }
 
 // Test routine to verify correctness of adjusted distances
