@@ -20,6 +20,10 @@ public:
     bool start();
     void stop();
     bool is_running() const;
+    
+    // Timing methods for monitoring
+    long long get_queue_pop_timing_us() const { return avg_queue_pop_time_us_; }
+    long long get_preprocess_timing_us() const { return avg_preprocess_time_us_; }
 
 private:
     void worker_thread_func();
@@ -33,4 +37,8 @@ private:
 
     std::atomic<bool> running_{false};
     std::thread worker_thread_;
+    
+    // Timing statistics
+    mutable std::atomic<long long> avg_queue_pop_time_us_{0};
+    mutable std::atomic<long long> avg_preprocess_time_us_{0};
 };

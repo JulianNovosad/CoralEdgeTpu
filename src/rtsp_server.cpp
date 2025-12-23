@@ -82,6 +82,12 @@ void RTSPServerWrapper::stop() {
     
     running_ = false;
     
+    // Close the RTSP server to interrupt the event loop
+    if (rtspServer_ != nullptr) {
+        Medium::close(rtspServer_);
+        rtspServer_ = nullptr;
+    }
+    
     if (serverThread_.joinable()) {
         serverThread_.join();
     }
@@ -90,12 +96,7 @@ void RTSPServerWrapper::stop() {
         streamThread_.join();
     }
     
-    // Cleanup Live555 objects
-    if (rtspServer_ != nullptr) {
-        Medium::close(rtspServer_);
-        rtspServer_ = nullptr;
-    }
-    
+    // Additional cleanup for Live555 objects
     if (sms_ != nullptr) {
         Medium::close(sms_);
         sms_ = nullptr;
@@ -130,9 +131,23 @@ void RTSPServerWrapper::stop() {
 void RTSPServerWrapper::serverThread() {
     APP_LOG_INFO("RTSP server thread started");
     
-    // Run the event loop
+    // Run the event loop with proper shutdown handling
     if (env_ && scheduler_) {
-        env_->taskScheduler().doEventLoop(); // This will block until stop is called
+        // Live555's doEventLoop() expects an EventLoopWatchVariable* which is std::atomic<char>*
+        std::atomic<char> continueEventLoop{1}; // 1 = continue, 0 = stop
+        
+        while (running_) {
+            // Process events - this will block until an event occurs or the flag becomes 0
+            env_->taskScheduler().doEventLoop(&continueEventLoop);
+            
+            // Check if shutdown was requested and update the flag accordingly
+            if (!running_) {
+                continueEventLoop = 0;
+            }
+            
+            // Brief pause to prevent busy waiting if the event loop returns
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
     
     APP_LOG_INFO("RTSP server thread stopped");

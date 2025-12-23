@@ -119,10 +119,7 @@ void Monitor::monitor_thread_func() {
         std::cout << "[Orientation Sensor]" << std::endl;
         if (app_.get_orientation_sensor() && app_.get_orientation_sensor()->is_running()) {
             std::cout << "  Status: RUNNING" << std::endl;
-            auto imu_data = app_.get_orientation_sensor()->get_latest_orientation_data();
-            std::cout << "  Yaw: " << std::fixed << std::setprecision(2) << imu_data.yaw << " deg" << std::endl;
-            std::cout << "  Pitch: " << std::fixed << std::setprecision(2) << imu_data.pitch << " deg" << std::endl;
-            std::cout << "  Roll: " << std::fixed << std::setprecision(2) << imu_data.roll << " deg" << std::endl;
+            
         } else {
             std::cout << "  Status: STOPPED" << std::endl;
         }
@@ -166,17 +163,40 @@ void Monitor::monitor_thread_func() {
         
         // Pipeline Timing Information
         std::cout << "[Pipeline Timing]" << std::endl;
-        // TODO: Add timing measurements for each stage of the pipeline
-        std::cout << "  Capture: TODO us" << std::endl;
-        std::cout << "  Queue pop: TODO us" << std::endl;
-        std::cout << "  Pre-processing: TODO us" << std::endl;
-        std::cout << "  Inference: TODO us" << std::endl;
-        std::cout << "  Encoding: TODO us" << std::endl;
-        std::cout << "  NAL handling: TODO us" << std::endl;
-        std::cout << "  Total loop: TODO us" << std::endl;
+        if (app_.get_primary_camera()) {
+            std::cout << "  Capture: " << std::to_string(app_.get_primary_camera()->get_capture_timing_us()) << " us" << std::endl;
+        } else {
+            std::cout << "  Capture: N/A" << std::endl;
+        }
+        if (app_.get_image_processor()) {
+            std::cout << "  Queue pop: " << std::to_string(app_.get_image_processor()->get_queue_pop_timing_us()) << " us" << std::endl;
+            std::cout << "  Pre-processing: " << std::to_string(app_.get_image_processor()->get_preprocess_timing_us()) << " us" << std::endl;
+        } else {
+            std::cout << "  Queue pop: N/A" << std::endl;
+            std::cout << "  Pre-processing: N/A" << std::endl;
+        }
+        if (app_.get_inference_engine()) {
+            std::cout << "  Inference: " << std::to_string(app_.get_inference_engine()->get_inference_timing_us()) << " us" << std::endl;
+        } else {
+            std::cout << "  Inference: N/A" << std::endl;
+        }
+        if (app_.get_h264_encoder()) {
+            std::cout << "  Encoding: " << std::to_string(app_.get_h264_encoder()->get_encode_timing_us()) << " us" << std::endl;
+            std::cout << "  NAL handling: " << std::to_string(app_.get_h264_encoder()->get_nal_timing_us()) << " us" << std::endl;
+        } else {
+            std::cout << "  Encoding: N/A" << std::endl;
+            std::cout << "  NAL handling: N/A" << std::endl;
+        }
+        if (app_.get_primary_camera()) {
+            std::cout << "  Total loop: " << std::to_string(app_.get_primary_camera()->get_total_loop_timing_us()) << " us" << std::endl;
+        } else {
+            std::cout << "  Total loop: N/A" << std::endl;
+        }
         std::cout << std::endl;
         
-        // Wait before next update
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        // Wait before next update - break this sleep into smaller chunks to be more responsive to shutdown
+        for (int i = 0; i < 20 && running_; ++i) {  // 20 iterations of 50ms = 1000ms total
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
     }
 }

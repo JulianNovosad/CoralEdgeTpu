@@ -27,7 +27,22 @@ struct Vec3 {
     Vec3 operator+(const Vec3& other) const { return {x + other.x, y + other.y, z + other.z}; }
     Vec3 operator-(const Vec3& other) const { return {x - other.x, y - other.y, z - other.z}; }
     Vec3 operator*(float scalar) const { return {x * scalar, y * scalar, z * scalar}; }
-    float magnitude() const { return std::sqrt(x*x + y*y + z*z); }
+    float magnitude() const { 
+        // Check for valid values to prevent overflow
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+            return 0.0f; // Return 0 for invalid values
+        }
+        
+        // Calculate squared magnitude
+        float mag_sq = x*x + y*y + z*z;
+        
+        // Check for overflow in squared magnitude
+        if (!std::isfinite(mag_sq) || mag_sq > 1e10f) { // Prevent overflow in sqrt
+            return 1e5f; // Return a large but finite value
+        }
+        
+        return std::sqrt(mag_sq); 
+    }
     float dot(const Vec3& other) const { return x*other.x + y*other.y + z*other.z; }
     Vec3 cross(const Vec3& other) const { return {y*other.z - z*other.y, z*other.x - x*other.z, x*other.y - y*other.x}; }
     Vec3 normalize() const { float mag = magnitude(); return mag > 0 ? Vec3{x/mag, y/mag, z/mag} : Vec3{0,0,0}; }
@@ -144,7 +159,7 @@ public:
     float calculate_flight_time(float distance);
     
     // New method for calculating impact point based on target movement and orientation
-    bool calculate_impact_point(const TrackedObject& target, const OrientationData& imu_data, Vec3& out_impact_point, float& out_flight_time);
+    bool calculate_impact_point(const TrackedObject& target, Vec3& out_impact_point, float& out_flight_time);
 
 private:
     BallisticProfile profile_;
@@ -173,15 +188,15 @@ public:
 private:
     void worker_thread_func();
     void servo_worker_thread_func(); // New servo worker thread function
-    void process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data);
+    void process(const std::vector<DetectionResult>& detections);
     void update_object_tracks(const std::vector<DetectionResult>& detections);
     SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, const Uncertainty& uncertainty, std::string& safety_status_message);
     void issue_servo_commands(float target_x, float target_y, float target_z, float confidence);
     void execute_servo_command(float target_x, float target_y, float target_z, float confidence); // New function to actually execute servo commands
     float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
-    void perform_sensor_fusion(const OrientationData& imu_data);
-    void calculate_ballistics_for_tracks(const OrientationData& imu_data);
-    void perform_safety_and_actuation(const OrientationData& imu_data);
+    void perform_sensor_fusion();
+    void calculate_ballistics_for_tracks();
+    void perform_safety_and_actuation();
     void send_telemetry_data(const std::string& telemetry_message);
     
     // New methods for enhanced ballistics and uncertainty
@@ -230,6 +245,7 @@ private:
     float servo_position_ = 0.0f;
     bool servo_direction_ = true;
     std::chrono::steady_clock::time_point last_direction_change_;
+    mutable std::mutex last_direction_change_mutex_;  // Mutex for last_direction_change_
     
     // Servo command queue for decoupled actuation
     struct ServoCommand {
@@ -244,8 +260,7 @@ private:
     std::thread servo_worker_thread_;
     std::atomic<bool> servo_worker_running_ = false;
     
-    // Storage for latest IMU data
-    OrientationData latest_imu_data_;
+    
     
     // Per-class distance tracking for multi-class smoothing
     static const size_t CLASS_DISTANCE_WINDOW_SIZE = 10;

@@ -382,13 +382,13 @@ public:
             // Set initial controls for high FPS
             request->controls().set(libcamera::controls::AeEnable, true);
             
-            ret = request->addBuffer(video_stream_, video_buffers[i].get()); 
+            ret = request->addBuffer(video_stream_, video_buffers[i].get(), std::unique_ptr<libcamera::Fence>()); 
             if (ret) {
                 std::cout << "Failed to add main buffer to request (Error: " << ret << ")." << std::endl;
                 return false;
             }
 
-            ret = request->addBuffer(tpu_stream_, tpu_buffers[i].get());
+            ret = request->addBuffer(tpu_stream_, tpu_buffers[i].get(), std::unique_ptr<libcamera::Fence>());
             if (ret) {
                 std::cout << "Failed to add TPU buffer to request (Error: " << ret << ")." << std::endl;
                 return false;

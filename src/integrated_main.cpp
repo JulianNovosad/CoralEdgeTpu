@@ -21,7 +21,17 @@ void signal_handler(int signal) {
     // Forward the signal to the detector process
     if (detector_pid > 0) {
         std::cout << "Forwarding signal to detector process (PID: " << detector_pid << ")" << std::endl;
-        kill(detector_pid, signal);
+        // First try graceful termination
+        kill(detector_pid, SIGTERM);
+        
+        // Wait briefly for graceful shutdown
+        usleep(500000); // 500ms
+        
+        // Check if process is still alive and kill if necessary
+        if (kill(detector_pid, 0) == 0) {  // Process still exists
+            std::cout << "Detector process still alive, sending SIGKILL..." << std::endl;
+            kill(detector_pid, SIGKILL);
+        }
     }
 }
 
@@ -94,11 +104,28 @@ bool start_detector() {
 void stop_detector() {
     if (detector_pid > 0) {
         std::cout << "Terminating detector process..." << std::endl;
+        
+        // Try graceful termination first
         kill(detector_pid, SIGTERM);
         
-        // Wait for detector process to terminate
+        // Wait briefly for graceful shutdown (non-blocking)
         int status;
-        waitpid(detector_pid, &status, 0);
+        pid_t result = waitpid(detector_pid, &status, WNOHANG);
+        if (result == 0) {
+            // Process didn't exit immediately, wait a bit more
+            usleep(500000); // 500ms
+            
+            // Check again
+            result = waitpid(detector_pid, &status, WNOHANG);
+            if (result == 0) {
+                // Process still hasn't exited, force kill
+                std::cout << "Detector process not responding to SIGTERM, sending SIGKILL..." << std::endl;
+                kill(detector_pid, SIGKILL);
+                
+                // Wait for the process to be killed
+                waitpid(detector_pid, &status, 0);
+            }
+        }
         detector_pid = -1;
     }
 }

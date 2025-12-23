@@ -24,6 +24,10 @@ public:
     void stop();
     bool is_running() const { return running_; }
     void get_state() const;
+    
+    // Timing methods for monitoring
+    long long get_encode_timing_us() const { return avg_encode_time_us_; }
+    long long get_nal_timing_us() const { return avg_nal_time_us_; }
 
 private:
     void worker_thread_func();
@@ -42,6 +46,10 @@ private:
     x264_picture_t picture_in_;
     x264_picture_t picture_out_;
     x264_param_t param_;
+    
+    // Timing statistics
+    mutable std::atomic<long long> avg_encode_time_us_{0};
+    mutable std::atomic<long long> avg_nal_time_us_{0};
 };
 
 #endif // H264_ENCODER_H

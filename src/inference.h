@@ -105,6 +105,9 @@ public:
      */
     int get_input_height() const { return input_height_; }
     void get_state() const;
+    
+    // Timing methods for monitoring
+    long long get_inference_timing_us() const { return avg_inference_time_us_; }
 
 private:
     void worker_thread_func();
@@ -134,6 +137,9 @@ public:
     // Freshness indicators
     std::atomic<long long> last_inference_timestamp_{0}; ///< Timestamp of the last inference
     std::atomic<int> inference_rate_{0}; ///< Current inference rate
+    
+    // Timing statistics
+    mutable std::atomic<long long> avg_inference_time_us_{0}; ///< Average inference time in microseconds
     
 private:
     TfLiteDelegate* edgetpu_delegate_ = nullptr; ///< The single Edge TPU delegate.

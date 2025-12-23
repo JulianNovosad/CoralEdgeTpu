@@ -106,6 +106,15 @@ public:
     void set_overlay_callback(std::function<void(cv::Mat& frame)> callback) {
         overlay_callback_ = callback;
     }
+    
+    // Timing methods for monitoring
+    long long get_capture_timing_us() const { return avg_capture_time_us_; }
+    long long get_total_loop_timing_us() const { return avg_total_loop_time_us_; }
+    
+private:
+    // Timing statistics
+    mutable std::atomic<long long> avg_capture_time_us_{0};
+    mutable std::atomic<long long> avg_total_loop_time_us_{0};
 
     unsigned int width_; ///< Breedte van de hoofdstream.
     unsigned int height_; ///< Hoogte van de hoofdstream.

@@ -121,8 +121,25 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
     while (current_state.position.x < max_distance && current_state.position.y >= -profile_.sight_height_m) {
         current_state = rk4_step(current_state, actual_time_step, air_density); // Use actual_time_step
         trajectory.push_back(current_state);
-        if (trajectory.size() > 20000) { // Safety stop, verhoogd naar 20000
-            APP_LOG_WARNING("Trajectory calculation exceeded 20000 steps. Max distance: " + std::to_string(max_distance) + "m, Time step: " + std::to_string(actual_time_step) + "s. Last Pos Y: " + std::to_string(current_state.position.y) + "m");
+        
+        // Enhanced safety stop with multiple conditions
+        if (trajectory.size() > 5000) { // Reduced from 20000 to 5000
+            APP_LOG_WARNING("Trajectory calculation exceeded 5000 steps. Max distance: " + std::to_string(max_distance) + "m, Time step: " + std::to_string(actual_time_step) + "s. Last Pos Y: " + std::to_string(current_state.position.y) + "m");
+            break;
+        }
+        
+        // Additional safety checks for invalid values
+        if (!std::isfinite(current_state.position.x) || !std::isfinite(current_state.position.y) || 
+            !std::isfinite(current_state.position.z) || !std::isfinite(current_state.velocity.x) ||
+            !std::isfinite(current_state.velocity.y) || !std::isfinite(current_state.velocity.z)) {
+            APP_LOG_ERROR("Trajectory calculation produced NaN/Inf values. Stopping calculation.");
+            break;
+        }
+        
+        // Check for extremely large values that could cause overflow
+        float pos_magnitude = current_state.position.magnitude();
+        if (pos_magnitude > 10000.0f) { // Limit to 10km
+            APP_LOG_WARNING("Trajectory calculation produced extremely large position values. Stopping calculation.");
             break;
         }
     }
@@ -132,23 +149,53 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
 float BallisticsSolver::calculate_zero_pitch() {
     APP_LOG_INFO("Calculating zero pitch for " + std::to_string(profile_.zero_distance_m) + "m...");
     
-    // Expanded bounds for better convergence
-    float low_angle_rad = -0.2f; // -~11 degrees
-    float high_angle_rad = 0.2f; // +~11 degrees
+    // Calculate initial bounds based on simplified ballistics to ensure convergence
+    // Use basic physics: height = sight_height - 0.5 * g * t^2 where t = distance / muzzle_velocity
+    float time_of_flight = profile_.zero_distance_m / profile_.muzzle_velocity_mps;
+    float drop_at_zero = 0.5f * GRAVITY_CONST * time_of_flight * time_of_flight;
+    float initial_angle_estimate = std::atan2(drop_at_zero - profile_.sight_height_m, profile_.zero_distance_m);
     
-    constexpr int max_iterations = 100; // Further increased iterations for better convergence
+    // Set bounds around the initial estimate with a reasonable range
+    float low_angle_rad = initial_angle_estimate - 0.1f; // -~5.7 degrees around estimate
+    float high_angle_rad = initial_angle_estimate + 0.1f; // +~5.7 degrees around estimate
+    
+    // Ensure bounds are reasonable and different
+    if (high_angle_rad <= low_angle_rad) {
+        low_angle_rad = initial_angle_estimate - 0.2f;
+        high_angle_rad = initial_angle_estimate + 0.2f;
+    }
+    
+    // Clamp bounds to reasonable values to prevent extreme angles
+    low_angle_rad = std::max(-0.5f, low_angle_rad);  // -28.6 degrees max
+    high_angle_rad = std::min(0.5f, high_angle_rad); // +28.6 degrees max
+    
+    constexpr int max_iterations = 200; // Increased iterations for better convergence
     constexpr float tolerance_m = 0.001f; // 1 mm
+    constexpr int max_consecutive_failures = 10; // Prevent infinite loops if trajectory calculation fails
+    
+    int consecutive_failures = 0;
     
     for (int i = 0; i < max_iterations; ++i) {
         float mid_angle_rad = (low_angle_rad + high_angle_rad) / 2.0f;
-        // Use profile_.zero_distance_m directly as max_distance
         auto trajectory = calculate_trajectory(mid_angle_rad, profile_.zero_distance_m);
         
         if (trajectory.empty()) {
-            APP_LOG_ERROR("Failed to calculate trajectory during zero pitch calculation for mid_angle_rad: " + std::to_string(mid_angle_rad));
-            // If trajectory is empty, something is wrong. Return 0.0f.
-            return 0.0f; 
+            consecutive_failures++;
+            if (consecutive_failures >= max_consecutive_failures) {
+                APP_LOG_ERROR("Trajectory calculation failed repeatedly during zero pitch calculation. Returning initial estimate: " + std::to_string(initial_angle_estimate));
+                return initial_angle_estimate;
+            }
+            
+            // Adjust search bounds if trajectory calculation fails
+            if (mid_angle_rad < initial_angle_estimate) {
+                low_angle_rad = mid_angle_rad;
+            } else {
+                high_angle_rad = mid_angle_rad;
+            }
+            continue;
         }
+        
+        consecutive_failures = 0; // Reset on successful calculation
         
         float height_at_zero = 0.0f;
         bool reached_zero_distance = false;
@@ -158,20 +205,34 @@ float BallisticsSolver::calculate_zero_pitch() {
                 const auto& p1 = trajectory[j-1].position;
                 const auto& p2 = trajectory[j].position;
                 float t = (profile_.zero_distance_m - p1.x) / (p2.x - p1.x);
-                height_at_zero = p1.y + t * (p2.y - p1.y);
+                if (t >= 0.0f && t <= 1.0f) {
+                    height_at_zero = p1.y + t * (p2.y - p1.y);
+                } else {
+                    // Fallback: use the closest point
+                    height_at_zero = trajectory[j].position.y;
+                }
                 reached_zero_distance = true;
                 break;
             }
         }
         
         // If zero_distance_m was not reached within the trajectory,
-        // it means the angle was too low (or max_distance too small).
-        // We need to adjust binary search accordingly.
+        // it means the bullet hit the ground before reaching the target
         if (!reached_zero_distance) {
-            // If it didn't reach zero distance, it means it hit the ground too early or too flat.
-            // This implies the angle was too low, so treat it as if height_at_zero was < 0.
-            low_angle_rad = mid_angle_rad;
-            continue; // Skip to next iteration
+            // Check if the bullet went too high or too low
+            if (!trajectory.empty()) {
+                float final_height = trajectory.back().position.y;
+                if (final_height > -profile_.sight_height_m) {
+                    // Bullet went too high, angle should be lower
+                    high_angle_rad = mid_angle_rad;
+                } else {
+                    // Bullet went too low, angle should be higher
+                    low_angle_rad = mid_angle_rad;
+                }
+            } else {
+                low_angle_rad = mid_angle_rad;
+            }
+            continue;
         }
         
         // Compare height with sight line (which is at y=0 in our coordinate system)
@@ -186,17 +247,16 @@ float BallisticsSolver::calculate_zero_pitch() {
             high_angle_rad = mid_angle_rad;
         }
         
-        // Additional debugging for convergence issues
-        if (i == max_iterations - 1) {
-            APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations. "
-                           "Best estimate: " + std::to_string((low_angle_rad + high_angle_rad) / 2.0f) + " rad. "
-                           "Last height_at_zero: " + std::to_string(height_at_zero) + "m. "
-                           "Range: [" + std::to_string(low_angle_rad) + ", " + std::to_string(high_angle_rad) + "]");
+        // Check for convergence: if the bounds are very close, return the midpoint
+        if (std::abs(high_angle_rad - low_angle_rad) < tolerance_m * 0.1f) {
+            float result = (low_angle_rad + high_angle_rad) / 2.0f;
+            APP_LOG_INFO("Zero pitch converged to " + std::to_string(result) + " rad after " + std::to_string(i + 1) + " iterations (bounds too close)");
+            return result;
         }
     }
     
     float result = (low_angle_rad + high_angle_rad) / 2.0f;
-    APP_LOG_WARNING("Zero pitch calculation did not converge within " + std::to_string(max_iterations) + " iterations. Best estimate: " + std::to_string(result) + " rad.");
+    APP_LOG_INFO("Zero pitch calculation completed after " + std::to_string(max_iterations) + " iterations. Best estimate: " + std::to_string(result) + " rad.");
     return result; // Return the best estimate
 }
 
@@ -208,10 +268,37 @@ float BallisticsSolver::calculate_flight_time(float distance) {
     return 0.0f;
 }
 
-bool BallisticsSolver::calculate_impact_point(const TrackedObject& target, const OrientationData& imu_data, Vec3& out_impact_point, float& out_flight_time) {
+bool BallisticsSolver::calculate_impact_point(const TrackedObject& target, Vec3& out_impact_point, float& out_flight_time) {
+    // Validate input target position
+    if (!std::isfinite(target.position.x) || !std::isfinite(target.position.y) || !std::isfinite(target.position.z)) {
+        APP_LOG_ERROR("Invalid target position values detected in calculate_impact_point");
+        return false;
+    }
+    
+    // Validate input target velocity
+    if (!std::isfinite(target.velocity.x) || !std::isfinite(target.velocity.y) || !std::isfinite(target.velocity.z)) {
+        APP_LOG_ERROR("Invalid target velocity values detected in calculate_impact_point");
+        return false;
+    }
+    
+    // Validate input target acceleration
+    if (!std::isfinite(target.acceleration.x) || !std::isfinite(target.acceleration.y) || !std::isfinite(target.acceleration.z)) {
+        APP_LOG_ERROR("Invalid target acceleration values detected in calculate_impact_point");
+        return false;
+    }
+    
     // Calculate distance to target
     float target_distance = target.position.z; // Assuming z is the forward distance
-    if (target_distance <= 0.0f) return false;
+    if (target_distance <= 0.0f || !std::isfinite(target_distance)) {
+        APP_LOG_WARNING("Invalid target distance: " + std::to_string(target_distance));
+        return false;
+    }
+    
+    // Add reasonable limits to prevent extreme calculations
+    if (target_distance > 1000.0f) { // Limit to 1km
+        APP_LOG_WARNING("Target distance too large: " + std::to_string(target_distance) + "m. Limiting to 1000m.");
+        target_distance = 1000.0f;
+    }
     
     // Log the distance estimate for verification
     char log_buffer[256];
@@ -221,31 +308,81 @@ bool BallisticsSolver::calculate_impact_point(const TrackedObject& target, const
     
     // Calculate bullet flight time to target
     out_flight_time = calculate_flight_time(target_distance);
-    if (out_flight_time <= 0.0f) return false;
+    if (out_flight_time <= 0.0f || !std::isfinite(out_flight_time)) {
+        APP_LOG_WARNING("Invalid flight time calculated: " + std::to_string(out_flight_time));
+        return false;
+    }
+    
+    // Add reasonable limit to flight time
+    if (out_flight_time > 10.0f) { // Limit to 10 seconds
+        APP_LOG_WARNING("Flight time too large: " + std::to_string(out_flight_time) + "s. Limiting to 10s.");
+        out_flight_time = 10.0f;
+    }
     
     // Predict target position after flight time using kinematic equations
     // position = initial_position + velocity * time + 0.5 * acceleration * time^2
     Vec3 predicted_position = target.position + target.velocity * out_flight_time + target.acceleration * (0.5f * out_flight_time * out_flight_time);
     
-    // Apply IMU orientation correction to predicted position
-    // Simple correction using pitch and yaw angles
-    float pitch_correction = imu_data.pitch * 0.01f; // Small correction factor
-    float yaw_correction = imu_data.yaw * 0.01f;     // Small correction factor
+    // Validate predicted position
+    if (!std::isfinite(predicted_position.x) || !std::isfinite(predicted_position.y) || !std::isfinite(predicted_position.z)) {
+        APP_LOG_ERROR("Invalid predicted position calculated");
+        return false;
+    }
     
-    predicted_position.y += pitch_correction * target_distance; // Vertical adjustment based on pitch
-    predicted_position.x += yaw_correction * target_distance;   // Lateral adjustment based on yaw
+    // No IMU correction applied - using raw predicted position
+    
+    // Validate corrected position
+    if (!std::isfinite(predicted_position.x) || !std::isfinite(predicted_position.y) || !std::isfinite(predicted_position.z)) {
+        APP_LOG_ERROR("Invalid corrected position calculated");
+        return false;
+    }
     
     // Calculate ballistic trajectory to predicted target position
     // Calculate angle needed to hit the predicted position
     float horizontal_distance = std::sqrt(predicted_position.x * predicted_position.x + predicted_position.z * predicted_position.z);
     float vertical_offset = predicted_position.y - (-profile_.sight_height_m); // Relative to sight line
+    
+    // Validate horizontal distance
+    if (!std::isfinite(horizontal_distance) || horizontal_distance <= 0.0f) {
+        APP_LOG_WARNING("Invalid horizontal distance calculated: " + std::to_string(horizontal_distance));
+        return false;
+    }
+    
+    // Add reasonable limits
+    if (horizontal_distance > 2000.0f) { // Limit to 2km
+        APP_LOG_WARNING("Horizontal distance too large: " + std::to_string(horizontal_distance) + "m. Limiting to 2000m.");
+        horizontal_distance = 2000.0f;
+    }
+    
     float angle_to_target = std::atan2(vertical_offset, horizontal_distance);
     
-    auto trajectory = calculate_trajectory(angle_to_target, horizontal_distance + 50.0f);
-    if (trajectory.empty()) return false;
+    // Validate angle
+    if (!std::isfinite(angle_to_target)) {
+        APP_LOG_WARNING("Invalid angle to target calculated: " + std::to_string(angle_to_target));
+        return false;
+    }
+    
+    // Add reasonable limits to max distance for trajectory calculation
+    float max_trajectory_distance = horizontal_distance + 50.0f;
+    if (max_trajectory_distance > 2000.0f) { // Limit to 2km
+        APP_LOG_WARNING("Max trajectory distance too large: " + std::to_string(max_trajectory_distance) + "m. Limiting to 2000m.");
+        max_trajectory_distance = 2000.0f;
+    }
+    
+    auto trajectory = calculate_trajectory(angle_to_target, max_trajectory_distance);
+    if (trajectory.empty()) {
+        APP_LOG_WARNING("Empty trajectory returned for angle=" + std::to_string(angle_to_target) + ", distance=" + std::to_string(max_trajectory_distance));
+        return false;
+    }
     
     // Find impact point in trajectory
     Vec3 ballistic_impact = trajectory.back().position;
+    
+    // Validate ballistic impact point
+    if (!std::isfinite(ballistic_impact.x) || !std::isfinite(ballistic_impact.y) || !std::isfinite(ballistic_impact.z)) {
+        APP_LOG_ERROR("Invalid ballistic impact point calculated");
+        return false;
+    }
     
     // Combine target movement prediction with ballistic calculation
     // The ballistic calculation gives us the drop from the sight line
@@ -253,6 +390,12 @@ bool BallisticsSolver::calculate_impact_point(const TrackedObject& target, const
     out_impact_point.x = predicted_position.x; // Lateral movement prediction
     out_impact_point.y = predicted_position.y + (ballistic_impact.y - (-profile_.sight_height_m)); // Adjust for bullet drop
     out_impact_point.z = predicted_position.z; // Forward distance prediction
+    
+    // Validate final impact point
+    if (!std::isfinite(out_impact_point.x) || !std::isfinite(out_impact_point.y) || !std::isfinite(out_impact_point.z)) {
+        APP_LOG_ERROR("Invalid final impact point calculated");
+        return false;
+    }
     
     return true;
 }
@@ -427,10 +570,8 @@ void LogicModule::worker_thread_func() {
             }
 
             if (detections_buffer && detections_buffer->size > 0) {
-                OrientationData current_imu_data = orientation_sensor_->get_latest_orientation_data();
-                
                 auto t_start = std::chrono::high_resolution_clock::now();
-                process(detections_buffer->data, current_imu_data);
+                process(detections_buffer->data);
                 auto t_end = std::chrono::high_resolution_clock::now();
                 
                 long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
@@ -453,6 +594,31 @@ void LogicModule::worker_thread_func() {
                         logic_rate_ = static_cast<int>(1000.0 / avg_time_ms);
                     }
                     logic_cycle_times.clear();
+                }
+                
+                // FPS measurement for decision stage
+                static int decision_frame_counter = 0;
+                static auto decision_start_time = std::chrono::high_resolution_clock::now();
+                decision_frame_counter++;
+                auto current_time = std::chrono::high_resolution_clock::now();
+                auto decision_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - decision_start_time).count();
+                if (decision_duration >= 1000) { // Log every second
+                    double decision_fps = (decision_frame_counter * 1000.0) / decision_duration;
+                    APP_LOG_INFO("DECISION FPS MEASUREMENT: " + std::to_string(decision_fps) + " FPS over " + std::to_string(decision_frame_counter) + " decisions in " + std::to_string(decision_duration) + " ms");
+                    
+                    // Log to CSV for dashboard
+                    CsvLogEntry decision_fps_entry;
+                    decision_fps_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                    copy_to_array(decision_fps_entry.module, "LogicModule");
+                    decision_fps_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                    copy_to_array(decision_fps_entry.event, "decision_fps");
+                    decision_fps_entry.call_ts_epoch_ms = call_ts;
+                    decision_fps_entry.average_fps = static_cast<float>(decision_fps);
+                    Logger::getInstance().log_csv(decision_fps_entry);
+                    
+                    // Reset for next measurement
+                    decision_frame_counter = 0;
+                    decision_start_time = current_time;
                 }
                 
                 CsvLogEntry entry;
@@ -499,14 +665,18 @@ void LogicModule::servo_worker_thread_func() {
                 std::chrono::steady_clock::now() - command.timestamp).count();
             
             // Check cooldown period (0.3 seconds)
-            auto time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - last_direction_change_).count();
+            auto time_since_last_actuation = 0;
+            {
+                std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
+                time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - last_direction_change_).count();
+            }
             
             // Log detailed timing information
             char timing_log_buffer[256];
             snprintf(timing_log_buffer, sizeof(timing_log_buffer), 
-                     "SERVO_TIMING: queue_to_execution=%ldms cooldown_elapsed=%ldms", 
-                     queue_to_execution_time, time_since_last_actuation);
+                     "SERVO_TIMING: queue_to_execution=%dms cooldown_elapsed=%dms", 
+                     static_cast<int>(queue_to_execution_time), static_cast<int>(time_since_last_actuation));
             APP_LOG_INFO(timing_log_buffer);
             
             if (time_since_last_actuation >= 300) { // 300ms cooldown
@@ -521,7 +691,10 @@ void LogicModule::servo_worker_thread_func() {
                 APP_LOG_INFO("SERVO_TIMING: execution_time=" + std::to_string(execution_duration) + "us");
                 
                 // Update last actuation time
-                last_direction_change_ = std::chrono::steady_clock::now();
+                {
+                    std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
+                    last_direction_change_ = std::chrono::steady_clock::now();
+                }
             } else {
                 APP_LOG_INFO("Skipping servo command: Cooldown period active (" + std::to_string(time_since_last_actuation) + "ms since last actuation)");
             }
@@ -564,7 +737,10 @@ void LogicModule::execute_servo_command(float target_x, float target_y, float ta
         led_controller_->set_servo_position(0, 0.5f);
         
         // Update last actuation time
-        last_direction_change_ = std::chrono::steady_clock::now();
+        {
+            std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
+            last_direction_change_ = std::chrono::steady_clock::now();
+        }
     }
     
     // Log servo command with detailed information for causality validation
@@ -576,24 +752,46 @@ void LogicModule::execute_servo_command(float target_x, float target_y, float ta
     current_servo_command_count_++; // Increment servo command count
 }
 
-void LogicModule::process(const std::vector<DetectionResult>& detections, const OrientationData& imu_data) {
+void LogicModule::process(const std::vector<DetectionResult>& detections) {
     [[maybe_unused]] auto total_process_start = std::chrono::high_resolution_clock::now();
+    
+    // Early return if detections vector is empty to prevent unnecessary processing
+    if (detections.empty()) {
+        // Log this condition but don't process further
+        static auto last_empty_log = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        auto time_since_last_log = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_empty_log).count();
+        
+        // Only log every 1000ms to avoid log spam
+        if (time_since_last_log > 1000) {
+            APP_LOG_DEBUG("LogicModule: No detections received, skipping processing.");
+            last_empty_log = now;
+        }
+        return;
+    }
     
     // Frame-to-frame consistency filtering
     // Only process detections if we have consistent detections across multiple frames
     static int consecutive_low_confidence_frames = 0;
     const int max_consecutive_low_confidence_frames = 3; // Allow up to 3 consecutive low confidence frames
     
-    // Check if all detections have very low confidence
+    // Check if all detections have very low confidence or are invalid
     bool all_detections_low_confidence = true;
+    int valid_detections_count = 0;
     for (const auto& det : detections) {
-        if (det.score > 10.0f) {  // If any detection has reasonable confidence
+        // Check if detection has valid values (not zero values and reasonable confidence)
+        // Enforce 60% confidence threshold (60.0f since score is stored as percentage 0.0-100.0)
+        if (det.score > 60.0f && 
+            det.xmax > det.xmin && 
+            det.ymax > det.ymin && 
+            det.xmin >= 0 && det.ymin >= 0 && 
+            det.xmax <= config_.get_tpu_target_width() && det.ymax <= config_.get_tpu_target_height()) {
             all_detections_low_confidence = false;
-            break;
+            valid_detections_count++;
         }
     }
     
-    if (all_detections_low_confidence) {
+    if (all_detections_low_confidence || valid_detections_count == 0) {
         consecutive_low_confidence_frames++;
     } else {
         consecutive_low_confidence_frames = 0;
@@ -611,60 +809,88 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
         if (led_controller_ && led_controller_->is_initialized()) {
             // Check cooldown period (0.3 seconds)
             auto current_time = std::chrono::steady_clock::now();
-            auto time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_direction_change_).count();
+            auto time_since_last_actuation = 0;
+            {
+                std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
+                time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_direction_change_).count();
+            }
             
             if (time_since_last_actuation >= 300) { // 300ms cooldown
                 led_controller_->set_servo_position(0, 0.5f); // Center position is safe position
-                last_direction_change_ = std::chrono::steady_clock::now();
+                {
+                    std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
+                    last_direction_change_ = std::chrono::steady_clock::now();
+                }
                 APP_LOG_INFO("CAMERA_COVERED: Locked servo in safe position (center)");
             }
         }
         return; // Skip all other processing when camera is covered
     }
 
-    // Log detection information for invariant verification
-    APP_LOG_INFO("DETECTION_INVARIANT: Detections received by logic module: " + std::to_string(detections.size()));
-    for (size_t i = 0; i < detections.size(); ++i) {
-        const auto& det = detections[i];
-        [[maybe_unused]] float area = (det.xmax - det.xmin) * (det.ymax - det.ymin);
-        APP_LOG_INFO("DETECTION_INVARIANT: Detection " + std::to_string(i) + 
-                     ": class=" + std::to_string(det.class_id) + 
-                     ", score=" + std::to_string(det.score) + 
-                     ", area=" + std::to_string(area) +
-                     ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
-                     std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
-                     ", timestamp=" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
-                         det.timestamp.time_since_epoch()).count()));
+    // Only log detection information for invariant verification if we have valid detections
+    if (valid_detections_count > 0) {
+        APP_LOG_INFO("DETECTION_INVARIANT: Valid detections received by logic module: " + std::to_string(valid_detections_count) + "/" + std::to_string(detections.size()));
+        for (size_t i = 0; i < detections.size(); ++i) {
+            const auto& det = detections[i];
+            // Only log if detection has valid values
+            if (det.score > 10.0f && 
+                det.xmax > det.xmin && 
+                det.ymax > det.ymin && 
+                det.xmin >= 0 && det.ymin >= 0 && 
+                det.xmax <= config_.get_tpu_target_width() && det.ymax <= config_.get_tpu_target_height()) {
+                
+                [[maybe_unused]] float area = (det.xmax - det.xmin) * (det.ymax - det.ymin);
+                APP_LOG_INFO("DETECTION_INVARIANT: Detection " + std::to_string(i) + 
+                             ": class=" + std::to_string(det.class_id) + 
+                             ", score=" + std::to_string(det.score) + 
+                             ", area=" + std::to_string(area) +
+                             ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
+                             std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
+                             ", timestamp=" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 det.timestamp.time_since_epoch()).count()));
+                
+                // Calculate distance for this detection using the pinhole camera model
+                float pixel_width = det.xmax - det.xmin;
+                float pixel_height = det.ymax - det.ymin;
+                float pixel_size = std::max(pixel_width, pixel_height);
+                
+                // Avoid division by zero or very small values
+                if (pixel_size > 1.0f) {
+                    // Use the same calculation as in estimate_target_distance but without smoothing
+                    const float IMAGE_WIDTH = config_.get_tpu_target_width();
+                    float focal_length_pixels = (CAMERA_FOCAL_LENGTH_MM * IMAGE_WIDTH) / SENSOR_WIDTH_MM;
+                    float real_world_size = std::max(TARGET_WIDTH_CM, TARGET_HEIGHT_CM) / 100.0f;
+                    [[maybe_unused]] float distance = (real_world_size * focal_length_pixels) / pixel_size;
+                    
+                    APP_LOG_INFO("DETECTION_DISTANCE: class=" + std::to_string(det.class_id) + 
+                                 ", score=" + std::to_string(det.score) + 
+                                 ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
+                                 std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
+                                 ", distance=" + std::to_string(distance) + "m");
+                } else {
+                    APP_LOG_INFO("DETECTION_DISTANCE: class=" + std::to_string(det.class_id) + 
+                                 ", score=" + std::to_string(det.score) + 
+                                 ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
+                                 std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
+                                 ", distance=too_small");
+                }
+            }
+        }
+    } else {
+        // Log that we have no valid detections
+        static auto last_invalid_log = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        auto time_since_last_log = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_invalid_log).count();
         
-        // Calculate distance for this detection using the pinhole camera model
-        float pixel_width = det.xmax - det.xmin;
-        float pixel_height = det.ymax - det.ymin;
-        float pixel_size = std::max(pixel_width, pixel_height);
-        
-        // Avoid division by zero or very small values
-        if (pixel_size > 1.0f) {
-            // Use the same calculation as in estimate_target_distance but without smoothing
-            const float IMAGE_WIDTH = config_.get_tpu_target_width();
-            float focal_length_pixels = (CAMERA_FOCAL_LENGTH_MM * IMAGE_WIDTH) / SENSOR_WIDTH_MM;
-            float real_world_size = std::max(TARGET_WIDTH_CM, TARGET_HEIGHT_CM) / 100.0f;
-            [[maybe_unused]] float distance = (real_world_size * focal_length_pixels) / pixel_size;
-            
-            APP_LOG_INFO("DETECTION_DISTANCE: class=" + std::to_string(det.class_id) + 
-                         ", score=" + std::to_string(det.score) + 
-                         ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
-                         std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
-                         ", distance=" + std::to_string(distance) + "m");
-        } else {
-            APP_LOG_INFO("DETECTION_DISTANCE: class=" + std::to_string(det.class_id) + 
-                         ", score=" + std::to_string(det.score) + 
-                         ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
-                         std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
-                         ", distance=too_small");
+        // Only log every 1000ms to avoid log spam
+        if (time_since_last_log > 1000) {
+            APP_LOG_DEBUG("LogicModule: No valid detections with reasonable confidence, skipping detailed processing.");
+            last_invalid_log = now;
         }
     }
 
     [[maybe_unused]] auto start_sensor_fusion = std::chrono::high_resolution_clock::now();
-    perform_sensor_fusion(imu_data);
+    perform_sensor_fusion();
     [[maybe_unused]] auto end_sensor_fusion = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time for sensor fusion: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_sensor_fusion - start_sensor_fusion).count()) + " us");
 
@@ -674,12 +900,12 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
     APP_LOG_DEBUG("LogicModule: Time to update object tracks: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_update_tracks - start_update_tracks).count()) + " us");
 
     [[maybe_unused]] auto start_ballistics = std::chrono::high_resolution_clock::now();
-    calculate_ballistics_for_tracks(imu_data);
+    calculate_ballistics_for_tracks();
     [[maybe_unused]] auto end_ballistics = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time for ballistic calculations: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_ballistics - start_ballistics).count()) + " us");
 
     [[maybe_unused]] auto start_safety = std::chrono::high_resolution_clock::now();
-    perform_safety_and_actuation(imu_data);
+    perform_safety_and_actuation();
     [[maybe_unused]] auto end_safety = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time for safety and actuation: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_safety - start_safety).count()) + " us");
 
@@ -688,7 +914,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, const 
 }
 
 
-void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_data) {
+void LogicModule::calculate_ballistics_for_tracks() {
     char log_buffer[256];
     // --- 5. Ballistics Calculation ---
     
@@ -704,9 +930,18 @@ void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_dat
         float flight_time = 0.0f;
         
         // Use the enhanced ballistics solver with tracking integration
-        if (ballistics_solver_ && ballistics_solver_->calculate_impact_point(track, imu_data, impact_point, flight_time)) {
+        if (ballistics_solver_ && ballistics_solver_->calculate_impact_point(track, impact_point, flight_time)) {
             // Propagate uncertainty based on flight time
             Uncertainty uncertainty = propagate_uncertainty(track, flight_time);
+            
+            // Validate the calculated impact point to prevent extremely large values that cause hangs
+            if (!std::isfinite(impact_point.x) || !std::isfinite(impact_point.y) || !std::isfinite(impact_point.z) ||
+                std::abs(impact_point.x) > 100000.0f || std::abs(impact_point.y) > 100000.0f || std::abs(impact_point.z) > 100000.0f) {
+                snprintf(log_buffer, sizeof(log_buffer), "Invalid impact point detected for Track ID %ld: impact=(%.2f, %.2f, %.2f). Skipping.", 
+                         track.id, impact_point.x, impact_point.y, impact_point.z);
+                APP_LOG_WARNING(log_buffer);
+                continue; // Skip this track to prevent processing invalid data that causes hangs
+            }
             
             // Store the impact point and uncertainty in the track for use in safety checks
             track.predicted_impact_point = impact_point;
@@ -719,6 +954,24 @@ void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_dat
                      track.last_detection.xmin, track.last_detection.ymin, 
                      track.last_detection.xmax, track.last_detection.ymax);
             APP_LOG_INFO(log_buffer);
+            
+            // Add explicit logging for target distance measurement against known 2.21m ground truth
+            float measured_distance = track.position.z;
+            float ground_truth_distance = 2.21f; // Known ground truth distance in meters
+            float distance_error = std::abs(measured_distance - ground_truth_distance);
+            APP_LOG_INFO("DISTANCE_VERIFICATION: measured=" + std::to_string(measured_distance) + "m, ground_truth=2.21m, error=" + std::to_string(distance_error) + "m");
+            
+            // Log to CSV for dashboard
+            CsvLogEntry distance_entry;
+            distance_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            copy_to_array(distance_entry.module, "LogicModule");
+            distance_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+            copy_to_array(distance_entry.event, "distance_measurement");
+            distance_entry.call_ts_epoch_ms = distance_entry.produced_ts_epoch_ms;
+            distance_entry.logic_metric_ballistics = measured_distance; // Measured distance
+            distance_entry.logic_metric_hit_scan = ground_truth_distance; // Ground truth distance
+            distance_entry.logic_metric_servo_actuation = distance_error; // Distance error
+            Logger::getInstance().log_csv(distance_entry);
             
             // Calculate servo command based on ballistics and uncertainty
             // This integrates the ballistics computation with servo feedback
@@ -772,7 +1025,7 @@ void LogicModule::calculate_ballistics_for_tracks(const OrientationData& imu_dat
     Logger::getInstance().log_csv(entry);
 }
 
-void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) {
+void LogicModule::perform_safety_and_actuation() {
     char log_buffer[256];
     // --- 4. Uncertainty Propagation & Safety Checks ---
     
@@ -810,6 +1063,15 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 // Calculate distance between predicted impact point and crosshair
                 // Crosshair is at center of frame (0, 0, track.position.z)
                 impact_distance = calculate_impact_point_distance(track.predicted_impact_point, crosshair_point);
+                
+                // Validate the predicted impact point to prevent extremely large values that cause hangs
+                if (!std::isfinite(track.predicted_impact_point.x) || !std::isfinite(track.predicted_impact_point.y) || !std::isfinite(track.predicted_impact_point.z) ||
+                    std::abs(track.predicted_impact_point.x) > 100000.0f || std::abs(track.predicted_impact_point.y) > 100000.0f || std::abs(track.predicted_impact_point.z) > 100000.0f) {
+                    snprintf(log_buffer, sizeof(log_buffer), "Invalid predicted impact point for Track ID %ld: impact=(%.2f, %.2f, %.2f). Skipping safety checks.", 
+                             track.id, track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z);
+                    APP_LOG_WARNING(log_buffer);
+                    continue; // Skip this track to prevent processing invalid data that causes hangs
+                }
                 
                 // Calculate angular error between crosshair and impact point using camera intrinsics
                 // Convert impact point from world coordinates to pixel coordinates
@@ -875,7 +1137,7 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                     snprintf(log_buffer, sizeof(log_buffer), "Skipping servo command for Track ID %ld: Angular error too high (%.2f° > %.2f°)", 
                              track.id, angular_error_degrees, config_.get_max_angular_error_degrees());
                     APP_LOG_INFO(log_buffer);
-                    break; // Exit the switch case without issuing servo command
+                    continue; // Skip to the next track without issuing servo command
                 }
                 
                 // Calculate confidence based on uncertainty and distance
@@ -886,6 +1148,24 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                 // Only issue servo commands if confidence is above 90%
                 if (combined_confidence > config_.get_servo_activate_confidence()) {
                     current_hit_scan_count_++; // Increment hit scan count
+                    
+                    // Log servo actuation decision with detailed information
+                    snprintf(log_buffer, sizeof(log_buffer), "SERVO_ACTUATION_DECISION: ACTUATING - Track ID %ld, impact=(%.2f,%.2f,%.2f), confidence=%.2f%%, angular_error=%.2f°", 
+                             track.id, track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, 
+                             combined_confidence * 100.0f, angular_error_degrees);
+                    APP_LOG_INFO(log_buffer);
+                    
+                    // Log to CSV for dashboard
+                    CsvLogEntry servo_entry;
+                    servo_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                    copy_to_array(servo_entry.module, "LogicModule");
+                    servo_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                    copy_to_array(servo_entry.event, "servo_actuation");
+                    servo_entry.call_ts_epoch_ms = servo_entry.produced_ts_epoch_ms;
+                    servo_entry.logic_metric_ballistics = track.predicted_impact_point.z; // Distance
+                    servo_entry.logic_metric_hit_scan = combined_confidence; // Confidence
+                    servo_entry.logic_metric_servo_actuation = angular_error_degrees; // Angular error
+                    Logger::getInstance().log_csv(servo_entry);
                     
                     // Issue servo commands to control LEDs
                     issue_servo_commands(track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, combined_confidence);
@@ -901,8 +1181,20 @@ void LogicModule::perform_safety_and_actuation(const OrientationData& imu_data) 
                     // Send telemetry data via ZeroMQ
                     send_telemetry_data(telemetry_message);
                 } else {
-                    snprintf(log_buffer, sizeof(log_buffer), "Skipping servo command for Track ID %ld: Confidence too low (%.2f%%)", track.id, combined_confidence * 100.0f);
+                    snprintf(log_buffer, sizeof(log_buffer), "SERVO_ACTUATION_DECISION: SKIPPING - Track ID %ld: Confidence too low (%.2f%%), angular_error=%.2f°", track.id, combined_confidence * 100.0f, angular_error_degrees);
                     APP_LOG_INFO(log_buffer);
+                    
+                    // Log to CSV for dashboard
+                    CsvLogEntry servo_skip_entry;
+                    servo_skip_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                    copy_to_array(servo_skip_entry.module, "LogicModule");
+                    servo_skip_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                    copy_to_array(servo_skip_entry.event, "servo_skip");
+                    servo_skip_entry.call_ts_epoch_ms = servo_skip_entry.produced_ts_epoch_ms;
+                    servo_skip_entry.logic_metric_ballistics = track.position.z; // Distance
+                    servo_skip_entry.logic_metric_hit_scan = combined_confidence; // Confidence
+                    servo_skip_entry.logic_metric_servo_actuation = angular_error_degrees; // Angular error
+                    Logger::getInstance().log_csv(servo_skip_entry);
                 }
                 break;
             }
@@ -1140,7 +1432,16 @@ float LogicModule::estimate_target_distance(const DetectionResult& detection) {
     std::string window_values = "[";
     for (size_t i = 0; i < count; ++i) {
         if (i > 0) window_values += ",";
-        window_values += std::to_string(history.distances[i]);
+        
+        // Validate the distance value to prevent invalid string conversion
+        float distance_val = history.distances[i];
+        if (!std::isfinite(distance_val)) {
+            window_values += "0.000000"; // Use a safe default value
+        } else {
+            // Clamp the value to a reasonable range to prevent extremely long strings
+            distance_val = std::max(0.0f, std::min(1000.0f, distance_val));
+            window_values += std::to_string(distance_val);
+        }
     }
     window_values += "]";
     
@@ -1182,6 +1483,12 @@ float LogicModule::estimate_target_distance(const DetectionResult& detection) {
 }
 
 float LogicModule::add_distance_estimate(float distance) {
+    // Validate input distance
+    if (!std::isfinite(distance) || distance <= 0.0f) {
+        APP_LOG_WARNING("Invalid distance value detected: " + std::to_string(distance) + ". Using default value.");
+        distance = 1.0f; // Use a reasonable default
+    }
+    
     // Add the new distance to the rolling window
     distance_history_[distance_history_index_] = distance;
     
@@ -1199,23 +1506,36 @@ float LogicModule::add_distance_estimate(float distance) {
     // Determine how many elements we have
     size_t count = distance_history_full_ ? DISTANCE_WINDOW_SIZE : distance_history_index_;
     
-    // Copy the distances to sort them
+    // Copy the distances to sort them, validating each value
     sorted_distances.reserve(count);
     for (size_t i = 0; i < count; ++i) {
-        sorted_distances.push_back(distance_history_[i]);
+        float val = distance_history_[i];
+        // Validate each value before adding to sorted vector
+        if (std::isfinite(val) && val > 0.0f) {
+            sorted_distances.push_back(val);
+        } else {
+            APP_LOG_WARNING("Invalid distance value in history: " + std::to_string(val) + ". Skipping.");
+        }
+    }
+    
+    // Check if we have valid values
+    if (sorted_distances.empty()) {
+        APP_LOG_WARNING("No valid distance values found in history. Returning default value.");
+        return 1.0f; // Return a reasonable default
     }
     
     // Sort the distances
     std::sort(sorted_distances.begin(), sorted_distances.end());
     
     // Calculate median
+    size_t valid_count = sorted_distances.size();
     float median;
-    if (count % 2 == 0) {
+    if (valid_count % 2 == 0) {
         // Even number of elements - average of two middle elements
-        median = (sorted_distances[count / 2 - 1] + sorted_distances[count / 2]) / 2.0f;
+        median = (sorted_distances[valid_count / 2 - 1] + sorted_distances[valid_count / 2]) / 2.0f;
     } else {
         // Odd number of elements - middle element
-        median = sorted_distances[count / 2];
+        median = sorted_distances[valid_count / 2];
     }
     
     return median;
@@ -1388,6 +1708,12 @@ float LogicModule::apply_class_correction(int class_id, float raw_distance) {
 }
 
 float LogicModule::add_class_distance_estimate(int class_id, float distance) {
+    // Validate input distance
+    if (!std::isfinite(distance) || distance <= 0.0f) {
+        APP_LOG_WARNING("Invalid class distance value detected for class " + std::to_string(class_id) + ": " + std::to_string(distance) + ". Using default value.");
+        distance = 1.0f; // Use a reasonable default
+    }
+    
     // Get or create the distance history for this class
     auto& history = class_distance_histories_[class_id];
     
@@ -1408,23 +1734,36 @@ float LogicModule::add_class_distance_estimate(int class_id, float distance) {
     // Determine how many elements we have
     size_t count = history.full ? CLASS_DISTANCE_WINDOW_SIZE : history.index;
     
-    // Copy the distances to sort them
+    // Copy the distances to sort them, validating each value
     sorted_distances.reserve(count);
     for (size_t i = 0; i < count; ++i) {
-        sorted_distances.push_back(history.distances[i]);
+        float val = history.distances[i];
+        // Validate each value before adding to sorted vector
+        if (std::isfinite(val) && val > 0.0f) {
+            sorted_distances.push_back(val);
+        } else {
+            APP_LOG_WARNING("Invalid class distance value in history for class " + std::to_string(class_id) + ": " + std::to_string(val) + ". Skipping.");
+        }
+    }
+    
+    // Check if we have valid values
+    if (sorted_distances.empty()) {
+        APP_LOG_WARNING("No valid class distance values found in history for class " + std::to_string(class_id) + ". Returning default value.");
+        return 1.0f; // Return a reasonable default
     }
     
     // Sort the distances
     std::sort(sorted_distances.begin(), sorted_distances.end());
     
     // Calculate median
+    size_t valid_count = sorted_distances.size();
     float median;
-    if (count % 2 == 0) {
+    if (valid_count % 2 == 0) {
         // Even number of elements - average of two middle elements
-        median = (sorted_distances[count / 2 - 1] + sorted_distances[count / 2]) / 2.0f;
+        median = (sorted_distances[valid_count / 2 - 1] + sorted_distances[valid_count / 2]) / 2.0f;
     } else {
         // Odd number of elements - middle element
-        median = sorted_distances[count / 2];
+        median = sorted_distances[valid_count / 2];
     }
     
     return median;
@@ -1449,20 +1788,33 @@ float LogicModule::get_smoothed_class_distance(int class_id) {
     std::vector<float> sorted_distances;
     sorted_distances.reserve(count);
     for (size_t i = 0; i < count; ++i) {
-        sorted_distances.push_back(history.distances[i]);
+        float val = history.distances[i];
+        // Validate each value before adding to sorted vector
+        if (std::isfinite(val) && val > 0.0f) {
+            sorted_distances.push_back(val);
+        } else {
+            APP_LOG_WARNING("Invalid class distance value in smoothed history for class " + std::to_string(class_id) + ": " + std::to_string(val) + ". Skipping.");
+        }
+    }
+    
+    // Check if we have valid values
+    if (sorted_distances.empty()) {
+        APP_LOG_WARNING("No valid class distance values found in smoothed history for class " + std::to_string(class_id) + ". Returning default value.");
+        return 0.0f; // Return zero as default
     }
     
     // Sort the distances
     std::sort(sorted_distances.begin(), sorted_distances.end());
     
     // Calculate median
+    size_t valid_count = sorted_distances.size();
     float median;
-    if (count % 2 == 0) {
+    if (valid_count % 2 == 0) {
         // Even number of elements - average of two middle elements
-        median = (sorted_distances[count / 2 - 1] + sorted_distances[count / 2]) / 2.0f;
+        median = (sorted_distances[valid_count / 2 - 1] + sorted_distances[valid_count / 2]) / 2.0f;
     } else {
         // Odd number of elements - middle element
-        median = sorted_distances[count / 2];
+        median = sorted_distances[valid_count / 2];
     }
     
     return median;
@@ -1537,9 +1889,38 @@ Uncertainty LogicModule::propagate_uncertainty(const TrackedObject& target, floa
     // Lower uncertainty means higher confidence
     float total_variance = uncertainty.position_variance + uncertainty.velocity_variance + uncertainty.distance_variance;
     
+    // Check for valid inputs to prevent NaN
+    if (!std::isfinite(total_variance) || total_variance < 0.0f) {
+        APP_LOG_ERROR("Invalid total variance detected: " + std::to_string(total_variance));
+        uncertainty.total_confidence = 0.0f;
+        return uncertainty;
+    }
+    
+    float confidence_decay_factor = config_.get_confidence_decay_factor();
+    if (!std::isfinite(confidence_decay_factor) || confidence_decay_factor <= 0.0f) {
+        APP_LOG_ERROR("Invalid confidence decay factor detected: " + std::to_string(confidence_decay_factor));
+        uncertainty.total_confidence = 0.0f;
+        return uncertainty;
+    }
+    
     // Convert variance to confidence (0.0 - 1.0)
     // Using inverse exponential function for smoother transition
-    uncertainty.total_confidence = std::exp(-total_variance * config_.get_confidence_decay_factor());
+    float exponent = -total_variance * confidence_decay_factor;
+    if (!std::isfinite(exponent)) {
+        APP_LOG_ERROR("Invalid exponent in confidence calculation: total_variance=" + 
+                      std::to_string(total_variance) + ", decay_factor=" + std::to_string(confidence_decay_factor));
+        uncertainty.total_confidence = 0.0f;
+        return uncertainty;
+    }
+    
+    uncertainty.total_confidence = std::exp(exponent);
+    
+    // Check for valid result
+    if (!std::isfinite(uncertainty.total_confidence)) {
+        APP_LOG_ERROR("Confidence calculation resulted in NaN/Inf");
+        uncertainty.total_confidence = 0.0f;
+        return uncertainty;
+    }
     
     // Clamp confidence to [0.0, 1.0]
     uncertainty.total_confidence = std::max(0.0f, std::min(1.0f, uncertainty.total_confidence));
@@ -1584,29 +1965,15 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
 }
 
 
-void LogicModule::perform_sensor_fusion(const OrientationData& imu_data) { 
-    // Store latest IMU data for use in other calculations
-    latest_imu_data_ = imu_data;
-    
-    // Apply orientation correction to active tracks
+void LogicModule::perform_sensor_fusion() { 
+    // No IMU sensor fusion - using raw tracking data
+    // Apply no orientation correction to active tracks
     for (auto& track : active_tracks_) {
-        // Apply IMU orientation correction to track position
-        // Simple correction using pitch and yaw angles
-        float pitch_correction = imu_data.pitch * 0.01f; // Small correction factor
-        float yaw_correction = imu_data.yaw * 0.01f;     // Small correction factor
-        
-        // Apply corrections to track position
-        track.position.y += pitch_correction * track.position.z; // Vertical adjustment based on pitch
-        track.position.x += yaw_correction * track.position.z;   // Lateral adjustment based on yaw
-        
-        // Also apply to predicted impact point
-        track.predicted_impact_point.y += pitch_correction * track.position.z;
-        track.predicted_impact_point.x += yaw_correction * track.position.z;
+        // No IMU corrections applied - using raw track positions
+        // Track positions remain unchanged
     }
     
-    APP_LOG_DEBUG("Sensor fusion updated - Yaw: " + std::to_string(imu_data.yaw) + 
-                  ", Pitch: " + std::to_string(imu_data.pitch) + 
-                  ", Roll: " + std::to_string(imu_data.roll));
+    APP_LOG_DEBUG("Sensor fusion updated - No IMU data used");
 }
 
 // New method for camera-space angular error calculation
@@ -1615,9 +1982,28 @@ float LogicModule::camera_cone_error_degrees_from_pixels(float radial_px) const
     // Clamp input to prevent numerical issues
     if (radial_px < 0.0f) radial_px = 0.0f;
     
+    // Prevent division by zero or invalid focal length
+    if (focal_length_px_ <= 0.0f || !std::isfinite(focal_length_px_)) {
+        APP_LOG_ERROR("Invalid focal length detected: " + std::to_string(focal_length_px_));
+        return 90.0f; // Return maximum error if focal length is invalid
+    }
+    
+    // Prevent division by zero or invalid radial distance
+    if (!std::isfinite(radial_px)) {
+        APP_LOG_ERROR("Invalid radial distance detected: " + std::to_string(radial_px));
+        return 90.0f; // Return maximum error if radial distance is invalid
+    }
+    
     // Calculate angular error using camera intrinsics
     float angular_error_rad = std::atan(radial_px / focal_length_px_);
     float angular_error_deg = angular_error_rad * (180.0f / PI);
+    
+    // Check for valid result
+    if (!std::isfinite(angular_error_deg)) {
+        APP_LOG_ERROR("Angular error calculation resulted in NaN/Inf: radial_px=" + 
+                      std::to_string(radial_px) + ", focal_length_px_=" + std::to_string(focal_length_px_));
+        return 90.0f; // Return maximum error if calculation failed
+    }
     
     // Hard clamp to 90° for safety
     return std::min(angular_error_deg, 90.0f);

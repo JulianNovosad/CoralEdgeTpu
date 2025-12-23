@@ -29,6 +29,9 @@ Application::~Application() {
     // Perform post-shutdown cleanup
     post_shutdown_cleanup();
     
+    // Perform final cleanup of any remaining processes
+    supervisor_.final_cleanup();
+    
     Logger::getInstance().stop_writer_thread();
     APP_LOG_INFO("Shutdown complete.");
 }
@@ -164,32 +167,59 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 bool Application::start_modules() {
     APP_LOG_INFO("Starting all modules...");
     bool start_ok = true;
-    start_ok &= image_processor_->start(); // Start ImageProcessor first
-    start_ok &= inference_engine_->start();
-    start_ok &= primary_camera_->start();
-    start_ok &= orientation_sensor_->start();
-    start_ok &= logic_module_->start();
+    
+    // Start modules in dependency order
+    // 1. Start low-level services first
     start_ok &= system_monitor_->start();
-    start_ok &= h264_encoder_->start(); // Start the H264 encoder
+    start_ok &= orientation_sensor_->start();
+    
+    // 2. Start processing modules
+    start_ok &= image_processor_->start();
+    start_ok &= inference_engine_->start();
+    
+    // 3. Start logic module (depends on inference)
+    start_ok &= logic_module_->start();
+    
+    // 4. Start camera (this may fail if camera is not available)
+    if (!primary_camera_->start()) {
+        APP_LOG_WARNING("Camera module failed to start. This may be due to camera hardware not being connected or IPA module issues.");
+        start_ok = false;
+    }
+    
+    // 5. Start encoder and streaming modules
+    start_ok &= h264_encoder_->start();
+    start_ok &= rtsp_server_->start();
+    
+    // 6. Start input monitoring
     start_ok &= keyboard_monitor_->start();
-    start_ok &= rtsp_server_->start(); // Start the RTSP server
+    
+    // 7. Start monitor
     monitor_->start();
-
+    
     // Start the overlay consumer thread
     overlay_consumer_running_ = true;
     overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
 
     if (!start_ok) {
         APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
-        if (keyboard_monitor_->is_running()) keyboard_monitor_->stop();
-        if (system_monitor_->is_running()) system_monitor_->stop();
-        if (logic_module_->is_running()) logic_module_->stop();
-        if (orientation_sensor_->is_running()) orientation_sensor_->stop();
-        if (primary_camera_->is_running()) primary_camera_->stop();
-        if (h264_encoder_->is_running()) h264_encoder_->stop(); // Stop the H264 encoder
-        if (rtsp_server_->isRunning()) rtsp_server_->stop(); // Stop the RTSP server
-        if (image_processor_->is_running()) image_processor_->stop(); // Stop ImageProcessor
-        if (inference_engine_->is_running()) inference_engine_->stop();
+        // Stop all modules that were successfully started
+        if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
+        if (rtsp_server_ && rtsp_server_->isRunning()) rtsp_server_->stop();
+        if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
+        if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
+        if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
+        if (inference_engine_ && inference_engine_->is_running()) inference_engine_->stop();
+        if (image_processor_ && image_processor_->is_running()) image_processor_->stop();
+        if (orientation_sensor_ && orientation_sensor_->is_running()) orientation_sensor_->stop();
+        if (system_monitor_ && system_monitor_->is_running()) system_monitor_->stop();
+        if (monitor_) monitor_->stop();
+        
+        // Stop overlay consumer thread
+        overlay_consumer_running_ = false;
+        if (overlay_consumer_thread_.joinable()) {
+            overlay_consumer_thread_.join();
+        }
+        
         return false;
     }
     APP_LOG_INFO("All modules started successfully.");
@@ -680,9 +710,18 @@ void Application::overlay_queue_consumer_thread_func() {
 void Application::main_loop() {
     APP_LOG_INFO("Running application. Press Ctrl+C to quit.");
     while (!shutdown_requested) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // More frequent check
     }
     APP_LOG_INFO("Shutdown requested. Exiting main loop.");
+    
+    // Set the recovery_running_ flag to false to ensure the recovery thread exits immediately
+    recovery_running_ = false;
+    
+    // Wait briefly for recovery thread to stop gracefully
+    if (recovery_thread_.joinable()) {
+        APP_LOG_INFO("Waiting for recovery thread to stop...");
+        recovery_thread_.join();
+    }
 }
 
 void Application::pre_launch_cleanup() {

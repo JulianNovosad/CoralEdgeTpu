@@ -6,6 +6,8 @@
 #include <memory>
 #include <functional>
 #include <csignal> // For signal handling
+#include <set>
+#include <sys/types.h> // For pid_t
 
 #include "util_logging.h"
 
@@ -41,17 +43,30 @@ public:
     void register_module_stop(const std::string& module_name, std::function<void()> stop_function);
 
     /**
+     * @brief Registers a child process PID for tracking during shutdown.
+     * @param pid The process ID to track.
+     */
+    void register_child_process(pid_t pid);
+
+    /**
      * @brief Initiates the graceful shutdown process for all registered modules.
      */
     void initiate_shutdown();
 
     /**
-     * @brief Sets up signal handlers for graceful shutdown (e.g., SIGINT, SIGTERM).
+     * @brief Sets up signal handlers for graceful shutdown (e.g., SIGINT, SIGTERM, SIGQUIT).
      */
     void setup_signal_handlers();
 
+    /**
+     * @brief Performs final cleanup of any remaining processes.
+     */
+    void final_cleanup();
+
 private:
     std::vector<std::pair<std::string, std::function<void()>>> registered_modules_;
+    std::set<pid_t> child_pids_;
+    static bool shutdown_in_progress_;
 };
 
 #endif // APPLICATION_SUPERVISOR_H

@@ -58,8 +58,7 @@ install_package "build-essential" "build essentials"
 install_package "cmake" "CMake"
 install_package "pkg-config" "pkg-config"
 
-# Install project-specific dependencies
-install_package "libcamera-dev" "libcamera development files"
+# Install project-specific dependencies (excluding libcamera-dev since we use local build)
 install_package "libzmq3-dev" "ZeroMQ development files"
 install_package "libjpeg-dev" "JPEG development files"
 install_package "libopencv-dev" "OpenCV development files"
@@ -208,6 +207,29 @@ if [ "$TF_VALID" = "false" ]; then
     cd ..
 else
     echo "Skipping TensorFlow download - valid version already exists"
+fi
+
+# 4a. Build and install local libcamera (if not already done)
+echo "4a. Checking libcamera installation..."
+if [ ! -f "/usr/local/lib/aarch64-linux-gnu/libcamera.so" ]; then
+    echo "Building and installing local libcamera from /home/pi/libcamera..."
+    if [ -d "/home/pi/libcamera" ]; then
+        cd /home/pi/libcamera
+        # Ensure meson build directory exists
+        if [ ! -d "build" ]; then
+            meson setup build --prefix=/usr/local
+        fi
+        # Build and install
+        ninja -C build
+        sudo meson install -C build
+        sudo ldconfig
+        echo "Local libcamera built and installed successfully"
+        cd /home/pi/CoralEdgeTpu
+    else
+        echo "WARNING: /home/pi/libcamera directory not found, using system libcamera"
+    fi
+else
+    echo "Local libcamera already installed"
 fi
 
 # 5. Build final C++ app with CMake

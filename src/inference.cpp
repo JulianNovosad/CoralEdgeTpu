@@ -388,6 +388,31 @@ void InferenceEngine::worker_thread_func() {
                 continue;
             }
             
+            // FPS measurement for inference stage
+            static int inference_frame_counter = 0;
+            static auto inference_start_time = std::chrono::high_resolution_clock::now();
+            inference_frame_counter++;
+            auto current_time = std::chrono::high_resolution_clock::now();
+            auto inference_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - inference_start_time).count();
+            if (inference_duration >= 1000) { // Log every second
+                double inference_fps = (inference_frame_counter * 1000.0) / inference_duration;
+                APP_LOG_INFO("INFERENCE FPS MEASUREMENT: " + std::to_string(inference_fps) + " FPS over " + std::to_string(inference_frame_counter) + " inferences in " + std::to_string(inference_duration) + " ms");
+                
+                // Log to CSV for dashboard
+                CsvLogEntry inference_fps_entry;
+                inference_fps_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                copy_to_array(inference_fps_entry.module, "InferenceEngine");
+                inference_fps_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                copy_to_array(inference_fps_entry.event, "inference_fps");
+                inference_fps_entry.call_ts_epoch_ms = call_ts;
+                inference_fps_entry.average_fps = static_cast<float>(inference_fps);
+                Logger::getInstance().log_csv(inference_fps_entry);
+                
+                // Reset for next measurement
+                inference_frame_counter = 0;
+                inference_start_time = current_time;
+            }
+            
             // Batch logging: only log every 5th inference to reduce overhead
             static int inference_log_counter = 0;
             inference_log_counter++;

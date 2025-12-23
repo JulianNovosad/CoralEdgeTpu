@@ -536,13 +536,13 @@ bool CameraCapture::setup_camera() {
         // Set initial controls for high FPS
         request->controls().set(libcamera::controls::AeEnable, true);
         
-        ret = request->addBuffer(video_stream_, video_buffers[i].get()); 
+        ret = request->addBuffer(video_stream_, video_buffers[i].get(), std::unique_ptr<libcamera::Fence>()); 
         if (ret) {
             APP_LOG_ERROR("Failed to add main buffer to request (Error: " + std::to_string(ret) + ").");
             return false;
         }
 
-        ret = request->addBuffer(tpu_stream_, tpu_buffers[i].get());
+        ret = request->addBuffer(tpu_stream_, tpu_buffers[i].get(), std::unique_ptr<libcamera::Fence>());
         if (ret) {
             APP_LOG_ERROR("Failed to add TPU buffer to request (Error: " + std::to_string(ret) + ").");
             return false;
@@ -657,6 +657,31 @@ void CameraCapture::request_processor_thread_func() {
             APP_LOG_DEBUG("ExposureTime (us): " + std::to_string(*md_exposure_us) + ", converted exposure_ms: " + std::to_string(exposure_ms));
         } else {
             APP_LOG_DEBUG("CameraCapture: ExposureTime not found in request metadata.");
+        }
+        
+        // Log sensor FPS for verification
+        static int sensor_frame_counter = 0;
+        static auto sensor_start_time = std::chrono::high_resolution_clock::now();
+        sensor_frame_counter++;
+        auto current_time = std::chrono::high_resolution_clock::now();
+        auto sensor_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - sensor_start_time).count();
+        if (sensor_duration >= 1000) { // Log every second
+            double sensor_fps = (sensor_frame_counter * 1000.0) / sensor_duration;
+            APP_LOG_INFO("SENSOR FPS MEASUREMENT: " + std::to_string(sensor_fps) + " FPS over " + std::to_string(sensor_frame_counter) + " frames in " + std::to_string(sensor_duration) + " ms");
+            
+            // Log to CSV for dashboard
+            CsvLogEntry entry;
+            entry.produced_ts_epoch_ms = produced_ts;
+            copy_to_array(entry.module, "CameraCapture");
+            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+            copy_to_array(entry.event, "sensor_fps");
+            entry.call_ts_epoch_ms = call_ts;
+            entry.average_fps = static_cast<float>(sensor_fps);
+            Logger::getInstance().log_csv(entry);
+            
+            // Reset for next measurement
+            sensor_frame_counter = 0;
+            sensor_start_time = current_time;
         }
 
         // --- Safety check for buffers ---

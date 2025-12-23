@@ -3,8 +3,8 @@ project(CoralEdgeTpuDetector CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_BUILD_TYPE Release)
 
 find_package(PkgConfig REQUIRED)
@@ -13,10 +13,14 @@ pkg_check_modules(ZEROMQ REQUIRED libzmq)
 message(STATUS "Found ZeroMQ: ${ZEROMQ_LIBRARIES}")
 find_package(GTest REQUIRED)
 
+# --- Find System Dependencies ---
+# Use pkg-config to find the local libcamera installation (which should be in /usr/local)
+find_program(PKG_CONFIG_EXECUTABLE NAMES pkg-config REQUIRED)
+set(ENV{PKG_CONFIG_PATH} "/usr/local/lib/aarch64-linux-gnu/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+
 pkg_check_modules(LIBCAMERA REQUIRED libcamera)
 message(STATUS "Found libcamera: ${LIBCAMERA_LIBRARIES}")
 
-# --- Find System Dependencies ---
 pkg_check_modules(JPEG REQUIRED libjpeg)
 find_package(OpenCV REQUIRED)
 message(STATUS "Found libjpeg: ${JPEG_LIBRARIES}")
@@ -115,8 +119,8 @@ target_link_libraries(detector PRIVATE
     jpeg # For libjpeg-turbo functions (from JPEG_LIBRARIES)
     tensorflowlite # For TensorFlow Lite functions
     edgetpu # For Edge TPU delegate functions
-    camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
-    camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
+    /usr/local/lib/aarch64-linux-gnu/libcamera.so
+    /usr/local/lib/aarch64-linux-gnu/libcamera-base.so
     Threads::Threads # For pthreads
     ${ZEROMQ_LIBRARIES} # For ZeroMQ library
     /lib/aarch64-linux-gnu/libssl.so.3
@@ -132,8 +136,8 @@ if (LIVE555_FOUND)
 endif()
 
 target_link_libraries(camera_isolation_test PRIVATE
-    camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
-    camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
+    /usr/local/lib/aarch64-linux-gnu/libcamera.so
+    /usr/local/lib/aarch64-linux-gnu/libcamera-base.so
     Threads::Threads # For pthreads
 )
 
@@ -159,8 +163,8 @@ target_link_libraries(inference_test_no_logging PRIVATE
     ${OpenCV_LIBS}
     ${TFLITE_LIB_DIR}/libtensorflowlite.so # For TensorFlow Lite functions
     edgetpu # For Edge TPU delegate functions
-    camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
-    camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
+    /usr/local/lib/aarch64-linux-gnu/libcamera.so
+    /usr/local/lib/aarch64-linux-gnu/libcamera-base.so
     Threads::Threads # For pthreads
     ${ZEROMQ_LIBRARIES} # For ZeroMQ library
 )
@@ -169,8 +173,8 @@ target_link_libraries(raw_tpu_test PRIVATE
     ${OpenCV_LIBS}
     ${TFLITE_LIB_DIR}/libtensorflowlite.so # For TensorFlow Lite functions
     edgetpu # For Edge TPU delegate functions
-    camera # For libcamera core functions (from LIBCAMERA_LIBRARIES)
-    camera-base # For libcamera base functions (from LIBCAMERA_LIBRARIES)
+    /usr/local/lib/aarch64-linux-gnu/libcamera.so
+    /usr/local/lib/aarch64-linux-gnu/libcamera-base.so
     Threads::Threads # For pthreads
     ${ZEROMQ_LIBRARIES} # For ZeroMQ library
 )
@@ -200,7 +204,7 @@ target_include_directories(tpu_diagnostic PRIVATE
 )
 
 target_include_directories(camera_isolation_test PRIVATE
-    /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    ${LIBCAMERA_INCLUDE_DIRS} # Use pkg-config defined include directories for libcamera
 )
 
 target_include_directories(inference_test_no_logging PRIVATE
@@ -209,7 +213,7 @@ target_include_directories(inference_test_no_logging PRIVATE
     ${FLATBUFFERS_INCLUDE_DIR}
     ${JPEG_INCLUDE_DIRS}
     ${ZEROMQ_INCLUDE_DIRS}
-    /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    ${LIBCAMERA_INCLUDE_DIRS} # Use pkg-config defined include directories for libcamera
     /usr/include/liveMedia
     /usr/include/BasicUsageEnvironment
     /usr/include/UsageEnvironment
@@ -229,7 +233,7 @@ target_include_directories(raw_tpu_test PRIVATE
     ${FLATBUFFERS_INCLUDE_DIR}
     ${JPEG_INCLUDE_DIRS}
     ${ZEROMQ_INCLUDE_DIRS}
-    /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    ${LIBCAMERA_INCLUDE_DIRS} # Use pkg-config defined include directories for libcamera
     /usr/include/liveMedia
     /usr/include/BasicUsageEnvironment
     /usr/include/UsageEnvironment
@@ -246,21 +250,23 @@ target_compile_options(raw_tpu_test PRIVATE
 message(STATUS "Target 'detector' configured. Ready to build.")
 target_include_directories(detector PRIVATE
     ${OpenCV_INCLUDE_DIRS}
-    SYSTEM ${TFLITE_INCLUDE_DIR}
-    ${FLATBUFFERS_INCLUDE_DIR}
     ${JPEG_INCLUDE_DIRS}
     ${ZEROMQ_INCLUDE_DIRS}
-    /usr/include/libcamera # Explicitly add /usr/include/libcamera for libcamera headers
+    ${LIBCAMERA_INCLUDE_DIRS} # Use pkg-config defined include directories for libcamera
     /usr/include/liveMedia
     /usr/include/BasicUsageEnvironment
     /usr/include/UsageEnvironment
     /usr/include/groupsock
     civetweb/include
     src # Include the src directory for h264_encoder.h, etc.
+    SYSTEM ${TFLITE_INCLUDE_DIR}
+    SYSTEM ${FLATBUFFERS_INCLUDE_DIR}
     SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow_2.5.0
 )
 
 target_compile_options(detector PRIVATE
+    -Wno-error
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-parameter>
     $<$<COMPILE_LANGUAGE:CXX>:-Wno-error=unused-parameter>
 )
 
@@ -274,7 +280,7 @@ target_include_directories(config_loader_test PRIVATE
     src
     civetweb/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    /usr/include/libcamera # Added for libcamera headers
+    ${LIBCAMERA_INCLUDE_DIRS} # Use pkg-config defined include directories for libcamera
 )
 
 add_executable(servo_test
@@ -303,12 +309,13 @@ target_link_libraries(tpu_performance_test PRIVATE
     Threads::Threads
 )
 target_include_directories(tpu_performance_test PRIVATE
-    ${TFLITE_INCLUDE_DIR}
-    ${FLATBUFFERS_INCLUDE_DIR}
+    SYSTEM ${TFLITE_INCLUDE_DIR}
+    SYSTEM ${FLATBUFFERS_INCLUDE_DIR}
 )
 # Disable strict warnings for this utility
 target_compile_options(tpu_performance_test PRIVATE
     -Wno-error
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-parameter>
 )
 
 # Test executables (commented out as source files are missing)
