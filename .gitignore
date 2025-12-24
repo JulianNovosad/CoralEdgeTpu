@@ -18,7 +18,6 @@ Makefile
 # Temporary log files
 *.log
 *.txt
-*.pbtxt
 
 # Executables
 detector
