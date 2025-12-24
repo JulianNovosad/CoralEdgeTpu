@@ -1,1 +1,67 @@
 logs/
+
+# Build artifacts and executables
+build/
+*.o
+*.a
+*.so
+*.exe
+*.out
+*.bin
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Temporary log files
+*.log
+*.txt
+*.pbtxt
+
+# Executables
+detector
+camera_isolation_test
+inference_test_no_logging
+raw_tpu_test
+tpu_diagnostic
+tpu_performance_test
+config_loader_test
+dlopen_test
+servo_test
+list_tpu_devices
+check_edgetpu_version
+civetweb_test
+dashboard
+integrated_system
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Config backups
+config.json.bak
+*.bak
+
+# Python files
+*.pyc
+__pycache__/
+*.pyo
+
+# Editor temporary files
+*~
+\#*\#
