@@ -76,7 +76,7 @@ add_executable(detector
     src/application_supervisor.cpp
     src/system_monitor.cpp
     src/keyboard_monitor.cpp
-    src/rtsp_server.cpp
+    src/http_streamer.cpp
     civetweb/src/civetweb.c
 )
 add_executable(camera_isolation_test
