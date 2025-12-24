@@ -1,1 +1,0 @@
-/usr/bin/c++ -Werror -Wall -Wextra -Werror -O3 -DNDEBUG CMakeFiles/tpu_performance_test.dir/tpu_performance_test.cpp.o -o tpu_performance_test  -Wl,-rpath,/home/pi/CoralEdgeTpu/lib /home/pi/CoralEdgeTpu/lib/libtensorflowlite.so -ledgetpu 

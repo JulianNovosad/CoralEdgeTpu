@@ -1,1 +1,0 @@
-/usr/bin/c++ -Werror -Wall -Wextra -Werror -O3 -DNDEBUG CMakeFiles/list_tpu_devices.dir/list_tpu_devices.cpp.o -o list_tpu_devices  -ledgetpu 

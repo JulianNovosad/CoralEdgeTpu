@@ -1,1 +1,0 @@
-/usr/bin/c++ -Werror -Wall -Wextra -Werror -O3 -DNDEBUG CMakeFiles/dashboard.dir/dashboard_fixed.cpp.o -o dashboard 

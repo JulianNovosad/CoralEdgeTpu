@@ -1,1 +1,0 @@
-/usr/bin/c++ -Werror -Wall -Wextra -Werror -O3 -DNDEBUG CMakeFiles/check_edgetpu_version.dir/check_edgetpu_version.cpp.o -o check_edgetpu_version  -ledgetpu 
