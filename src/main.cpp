@@ -6,9 +6,16 @@
 #include "util_logging.h"
 #include <signal.h>
 #include <pthread.h>
+#include <termios.h>  // for terminal settings
+#include <unistd.h>   // for STDIN_FILENO
+
+// Global variable to store original terminal settings
+struct termios original_termios;
 
 // This is a global flag checked by the main loop and set by the ApplicationSupervisor.
 extern std::atomic<bool> shutdown_requested;
+
+
 
 std::vector<std::string> load_labels(const std::string& path) {
     std::vector<std::string> labels;

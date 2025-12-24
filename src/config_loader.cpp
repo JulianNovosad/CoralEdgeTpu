@@ -37,6 +37,14 @@ unsigned int ConfigLoader::get_high_res_height() const {
     return config_data_.value("/application/high_res_height"_json_pointer, 1080);
 }
 
+unsigned int ConfigLoader::get_reduced_res_width() const {
+    return config_data_.value("/application/reduced_res_width"_json_pointer, 960); // Default to half of 1920
+}
+
+unsigned int ConfigLoader::get_reduced_res_height() const {
+    return config_data_.value("/application/reduced_res_height"_json_pointer, 540); // Default to half of 1080
+}
+
 std::string ConfigLoader::get_listen_address() const {
     return config_data_.value("/application/listen_address"_json_pointer, "0.0.0.0");
 }
@@ -201,23 +209,6 @@ unsigned short ConfigLoader::get_video_stream_port() const {
     }
     // Fallback to default value
     return 1001;
-}
-
-// RTSP-specific configuration getters
-int ConfigLoader::get_rtsp_port() const {
-    return config_data_.value("/application/video_stream/rtsp_port"_json_pointer, 8554);
-}
-
-std::string ConfigLoader::get_rtsp_mount_point() const {
-    return config_data_.value("/application/video_stream/rtsp_mount_point"_json_pointer, "/live");
-}
-
-std::string ConfigLoader::get_rtsp_username() const {
-    return config_data_.value("/application/video_stream/rtsp_username"_json_pointer, "");
-}
-
-std::string ConfigLoader::get_rtsp_password() const {
-    return config_data_.value("/application/video_stream/rtsp_password"_json_pointer, "");
 }
 
 // --- TPU Stream Configuration Getters ---

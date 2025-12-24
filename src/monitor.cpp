@@ -152,6 +152,15 @@ void Monitor::monitor_thread_func() {
         }
         std::cout << std::endl;
         
+        // Visualization Processor Status
+        std::cout << "[Visualization Processor]" << std::endl;
+        if (app_.get_visualization_processor() && app_.get_visualization_processor()->is_running()) {
+            std::cout << "  Status: RUNNING" << std::endl;
+        } else {
+            std::cout << "  Status: STOPPED" << std::endl;
+        }
+        std::cout << std::endl;
+        
         // Keyboard Monitor Status
         std::cout << "[Keyboard Monitor]" << std::endl;
         if (app_.get_keyboard_monitor() && app_.get_keyboard_monitor()->is_running()) {

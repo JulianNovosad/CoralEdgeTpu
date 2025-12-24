@@ -21,17 +21,36 @@ int libcamera_pixel_format_to_opencv_type(const libcamera::PixelFormat& format) 
     return -1; // Indicate an unsupported format
 }
 
-// Constructor
+// Constructor for processors that apply detection overlays
+ImageProcessor::ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue,
+                               DetectionResultsQueue& detection_queue,  // New parameter
+                               std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
+                               libcamera::PixelFormat input_pixel_format,
+                               int output_width, int output_height)   // Changed parameter name
+    : input_queue_(input_queue), output_queue_(output_queue), detection_queue_ptr_(&detection_queue), // Store as pointer
+      buffer_pool_(buffer_pool),
+      input_pixel_format_(input_pixel_format),
+      output_width_(output_width), output_height_(output_height) { // Changed member names
+    {
+        std::stringstream ss;
+        ss << "ImageProcessor initialized with detection overlay support, output size: " << output_width_ << "x" << output_height_ << ", input format: " << input_pixel_format_.toString().c_str();
+        std::string log_message = ss.str(); // Make explicit string
+        APP_LOG_INFO(log_message);
+    }
+}
+
+// Constructor for processors that only do basic processing (like for TPU inference)
 ImageProcessor::ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue,
                                std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
                                libcamera::PixelFormat input_pixel_format,
-                               int tpu_input_width, int tpu_input_height)
-    : input_queue_(input_queue), output_queue_(output_queue), buffer_pool_(buffer_pool),
+                               int output_width, int output_height)
+    : input_queue_(input_queue), output_queue_(output_queue), detection_queue_ptr_(nullptr), // No detection results
+      buffer_pool_(buffer_pool),
       input_pixel_format_(input_pixel_format),
-      tpu_input_width_(tpu_input_width), tpu_input_height_(tpu_input_height) {
+      output_width_(output_width), output_height_(output_height) {
     {
         std::stringstream ss;
-        ss << "ImageProcessor initialized with TPU input size: " << tpu_input_width_ << "x" << tpu_input_height_ << ", input format: " << input_pixel_format_.toString().c_str();
+        ss << "ImageProcessor initialized without detection overlay support, output size: " << output_width_ << "x" << output_height_ << ", input format: " << input_pixel_format_.toString().c_str();
         std::string log_message = ss.str(); // Make explicit string
         APP_LOG_INFO(log_message);
     }
@@ -70,7 +89,7 @@ bool ImageProcessor::is_running() const {
 
 // Worker thread function where image processing happens
 void ImageProcessor::worker_thread_func() {
-    APP_LOG_INFO("ImageProcessor worker thread running.");
+    APP_LOG_INFO("ImageProcessor worker thread running with overlay support.");
     set_thread_name("ImageProcessor");
 
     int opencv_input_type = libcamera_pixel_format_to_opencv_type(input_pixel_format_);
@@ -91,6 +110,40 @@ void ImageProcessor::worker_thread_func() {
             
             // Record queue pop time
             input_image.queue_pop_time = process_start_time;
+            
+            // Log when a frame is dequeued for debugging
+            APP_LOG_INFO("ImageProcessor: Dequeued frame from input queue. Frame ID: " + std::to_string(input_image.frame_id) + 
+                        ", Timestamp: " + std::to_string(input_image.timestamp_epoch_ms) +
+                        ", Size: " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) +
+                        ", Format: " + input_image.format.toString().c_str());
+            
+            // Debug: Check if frame buffer contains valid data and detect raw Bayer format
+            if (input_image.buffer && !input_image.buffer->data.empty()) {
+                // Check first few bytes to see if they're all zeros (which would indicate black image)
+                size_t check_bytes = std::min(static_cast<size_t>(10), input_image.buffer->data.size());
+                bool all_zeros = true;
+                for (size_t i = 0; i < check_bytes; ++i) {
+                    if (input_image.buffer->data[i] != 0) {
+                        all_zeros = false;
+                        break;
+                    }
+                }
+                
+                // Check if format is raw Bayer which isn't displayable
+                std::string format_str = input_image.format.toString().c_str();
+                if (format_str.find("BGGR") != std::string::npos || 
+                    format_str.find("RAW") != std::string::npos) {
+                    APP_LOG_WARNING("ImageProcessor: Received raw Bayer format (" + format_str + ") which is not directly displayable. Frame may appear black.");
+                }
+                
+                if (all_zeros) {
+                    APP_LOG_WARNING("ImageProcessor: Frame contains all zeros in first " + std::to_string(check_bytes) + " bytes - may be black image");
+                } else {
+                    APP_LOG_INFO("ImageProcessor: Frame contains non-zero data in first " + std::to_string(check_bytes) + " bytes");
+                }
+            } else {
+                APP_LOG_WARNING("ImageProcessor: Frame buffer is null or empty");
+            }
 
             // Ensure the input image buffer is valid
             if (!input_image.buffer || input_image.buffer->data.empty() || input_image.width == 0 || input_image.height == 0) {
@@ -99,72 +152,112 @@ void ImageProcessor::worker_thread_func() {
             }
 
             // 2. Process image (color conversion and/or resizing)
-            // Ensure that the input_pixel_format_ (which comes from config.json) is used here.
-            // We expect RGB888 from CameraCapture and we are configured for RGB888.
             cv::Mat input_frame_mat;
+            auto conversion_start = std::chrono::high_resolution_clock::now();
             if (input_image.format == libcamera::formats::RGB888) {
                 input_frame_mat = cv::Mat(input_image.height, input_image.width, CV_8UC3, input_image.buffer->data.data());
                 APP_LOG_DEBUG("ImageProcessor: Created Mat with size " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + " for RGB888 input");
+            } else if (input_image.format == libcamera::formats::YUYV) {
+                // Convert YUYV to RGB888 - use faster conversion method
+                cv::Mat yuyv_mat = cv::Mat(input_image.height, input_image.width, CV_8UC2, input_image.buffer->data.data());
+                // Use a faster conversion method
+                cv::cvtColor(yuyv_mat, input_frame_mat, cv::COLOR_YUV2BGR_YUYV, 3); // Use 3 channels for faster processing
+                APP_LOG_DEBUG("ImageProcessor: Converted YUYV to BGR, created Mat with size " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height));
             } else {
-                APP_LOG_ERROR("ImageProcessor: Unexpected input format (FOURCC: " + std::to_string(input_image.format.fourcc()) + "). Expected RGB888. Skipping frame.");
+                APP_LOG_ERROR("ImageProcessor: Unexpected input format (FOURCC: " + std::to_string(input_image.format.fourcc()) + "). Expected RGB888 or YUYV. Skipping frame.");
                 input_image.buffer.reset(); // Return buffer to pool
                 continue;
             }
+            auto conversion_end = std::chrono::high_resolution_clock::now();
+            
+            // Record conversion timing
+            input_image.conversion_start_time = conversion_start;
+            input_image.conversion_end_time = conversion_end;
+            
+            // Calculate and store average conversion time
+            auto conversion_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(conversion_end - conversion_start).count();
+            // Use atomic operation for thread safety
+            long long current_avg = avg_conversion_time_us_.load();
+            avg_conversion_time_us_.store((current_avg + conversion_duration_us) / 2);
 
             cv::Mat processed_mat;
             APP_LOG_DEBUG("ImageProcessor: Comparing input size " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + 
-                          " with target size " + std::to_string(tpu_input_width_) + "x" + std::to_string(tpu_input_height_));
-            if (input_image.width == (unsigned int)tpu_input_width_ && input_image.height == (unsigned int)tpu_input_height_) {
-                // No resizing or color conversion needed
-                // For zero-copy optimization, we can pass the buffer directly in some cases
-                // Since dimensions match, we can avoid the copy and just pass through the buffer
-                // But we still need to create a new ImageData object with the same buffer
-                processed_mat = input_frame_mat; // Just reference the same data
-                APP_LOG_DEBUG("ImageProcessor: No resizing needed, passing through buffer directly");
+                          " with target size " + std::to_string(output_width_) + "x" + std::to_string(output_height_));
+            if (input_image.width == (unsigned int)output_width_ && input_image.height == (unsigned int)output_height_) {
+                // No resizing needed, use the input frame directly
+                processed_mat = input_frame_mat; // Avoid clone if we're not going to modify the image
+                APP_LOG_DEBUG("ImageProcessor: No resizing needed, using frame directly");
             } else {
-                // Resize if dimensions differ
-                APP_LOG_WARNING("ImageProcessor: Resizing RGB888 frame from " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) +
-                                " to " + std::to_string(tpu_input_width_) + "x" + std::to_string(tpu_input_height_) + ".");
-                cv::resize(input_frame_mat, processed_mat, cv::Size(tpu_input_width_, tpu_input_height_), 0, 0, cv::INTER_LINEAR);
+                // Resize if dimensions differ - use fastest interpolation for real-time processing
+                APP_LOG_WARNING("ImageProcessor: Resizing frame from " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) +
+                                " to " + std::to_string(output_width_) + "x" + std::to_string(output_height_) + ".");
+                cv::resize(input_frame_mat, processed_mat, cv::Size(output_width_, output_height_), 0, 0, cv::INTER_NEAREST);
             }
 
-            // 3. Acquire a buffer from the pool for the processed image.
-            std::shared_ptr<PooledBuffer<uint8_t>> processed_buffer_data;
-            if (input_image.width == (unsigned int)tpu_input_width_ && input_image.height == (unsigned int)tpu_input_height_) {
-                // Dimensions match, we can reuse the input buffer for zero-copy operation
-                processed_buffer_data = input_image.buffer;
+            // 3. Try to get matching detection results for this frame (if detection queue is available)
+            auto visualization_start = std::chrono::high_resolution_clock::now();
+            if (detection_queue_ptr_ != nullptr) {
+                std::shared_ptr<DetectionResultBuffer> detection_buffer;
+                // Attempt to pop detection results, but don't block if none are available
+                if (detection_queue_ptr_->pop(detection_buffer)) {
+                    // Apply detection overlays to the processed frame
+                    apply_detections_to_frame(processed_mat, detection_buffer);
+                    APP_LOG_DEBUG("ImageProcessor: Applied " + std::to_string(detection_buffer->size) + " detections to frame " + std::to_string(input_image.frame_id));
+                } else {
+                    // No detection results available for this frame, continue without overlays
+                    APP_LOG_DEBUG("ImageProcessor: No detection results available for frame " + std::to_string(input_image.frame_id));
+                }
             } else {
-                // Dimensions don't match, we need a new buffer
-                processed_buffer_data = buffer_pool_->acquire();
-                if (!processed_buffer_data) {
-                    APP_LOG_WARNING("ImageProcessor: Failed to acquire buffer for processed image. Dropping frame.");
-                    input_image.buffer.reset(); // Return input buffer to pool
-                    continue;
-                }
+                // No detection queue configured, continue without overlays
+                APP_LOG_DEBUG("ImageProcessor: Detection processing disabled for this instance, frame " + std::to_string(input_image.frame_id));
+            }
+            auto visualization_end = std::chrono::high_resolution_clock::now();
+            
+            // Record visualization timing
+            input_image.visualization_start_time = visualization_start;
+            input_image.visualization_end_time = visualization_end;
+            
+            // Calculate and store average visualization time
+            auto visualization_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(visualization_end - visualization_start).count();
+            avg_visualization_time_us_ = (avg_visualization_time_us_.load() + visualization_duration_us) / 2; // Running average
 
-                // Ensure processed_buffer_data->data has enough capacity
-                size_t required_size = processed_mat.total() * processed_mat.elemSize();
-                if (required_size > processed_buffer_data->data.capacity()) {
-                    APP_LOG_ERROR("ImageProcessor: Processed image size (" + std::to_string(required_size) +
-                                  ") exceeds buffer pool capacity (" + std::to_string(processed_buffer_data->data.capacity()) + "). Dropping frame.");
-                    input_image.buffer.reset(); // Return input buffer to pool
-                    processed_buffer_data.reset(); // Return acquired buffer to pool
-                    continue;
-                }
-                
-                // Copy processed image data to the pooled buffer
-                std::memcpy(processed_buffer_data->data.data(), processed_mat.data, required_size);
-                processed_buffer_data->size = required_size;
-                // Explicitly resize the underlying std::vector to reflect the actual data size
-                processed_buffer_data->data.resize(required_size);
+            // 4. Acquire a buffer from the pool for the processed image with overlays.
+            std::shared_ptr<PooledBuffer<uint8_t>> processed_buffer_data = buffer_pool_->acquire();
+            if (!processed_buffer_data) {
+                APP_LOG_WARNING("ImageProcessor: Failed to acquire buffer for processed image. Dropping frame.");
+                input_image.buffer.reset(); // Return input buffer to pool
+                continue;
             }
 
+            // Ensure processed_buffer_data->data has enough capacity
+            size_t required_size = processed_mat.total() * processed_mat.elemSize();
+            if (required_size > processed_buffer_data->data.capacity()) {
+                APP_LOG_ERROR("ImageProcessor: Processed image size (" + std::to_string(required_size) +
+                              ") exceeds buffer pool capacity (" + std::to_string(processed_buffer_data->data.capacity()) + "). Dropping frame.");
+                input_image.buffer.reset(); // Return input buffer to pool
+                processed_buffer_data.reset(); // Return acquired buffer to pool
+                continue;
+            }
+            
+            // Safety check to ensure processed_mat is valid before copying
+            if (processed_mat.empty() || processed_mat.data == nullptr) {
+                APP_LOG_ERROR("ImageProcessor: Processed matrix is empty or has null data. Dropping frame.");
+                input_image.buffer.reset(); // Return input buffer to pool
+                processed_buffer_data.reset(); // Return acquired buffer to pool
+                continue;
+            }
+            
+            // Copy processed image data (with overlays) to the pooled buffer
+            std::memcpy(processed_buffer_data->data.data(), processed_mat.data, required_size);
+            processed_buffer_data->size = required_size;
+            // Explicitly resize the underlying std::vector to reflect the actual data size
+            processed_buffer_data->data.resize(required_size);
 
-            // 4. Create new ImageData object and push to output queue
+            // 5. Create new ImageData object and push to output queue
             ImageData output_image_data(input_image.timestamp_epoch_ms, input_image.frame_id);
-            output_image_data.width = tpu_input_width_;
-            output_image_data.height = tpu_input_height_;
-            output_image_data.format = libcamera::formats::RGB888; // Output is always RGB888 for TPU
+            output_image_data.width = output_width_;
+            output_image_data.height = output_height_;
+            output_image_data.format = libcamera::formats::RGB888; // Output is RGB888 with overlays
             output_image_data.buffer = processed_buffer_data;
             // Pass through zero-copy information if available
             output_image_data.fd = input_image.fd;
@@ -175,21 +268,120 @@ void ImageProcessor::worker_thread_func() {
             output_image_data.preprocess_start_time = input_image.preprocess_start_time;
             output_image_data.preprocess_end_time = std::chrono::high_resolution_clock::now();
 
+            // Log when a frame is pushed to the output queue for debugging
+            APP_LOG_INFO("ImageProcessor: Pushing processed frame to output queue. Frame ID: " + std::to_string(output_image_data.frame_id) + 
+                        ", Timestamp: " + std::to_string(output_image_data.timestamp_epoch_ms) +
+                        ", Size: " + std::to_string(output_image_data.width) + "x" + std::to_string(output_image_data.height));
+            
+            // Debug: Check if processed frame buffer contains valid data
+            if (output_image_data.buffer && !output_image_data.buffer->data.empty()) {
+                // Check first few bytes to see if they're all zeros (which would indicate black image)
+                size_t check_bytes = std::min(static_cast<size_t>(10), output_image_data.buffer->data.size());
+                bool all_zeros = true;
+                for (size_t i = 0; i < check_bytes; ++i) {
+                    if (output_image_data.buffer->data[i] != 0) {
+                        all_zeros = false;
+                        break;
+                    }
+                }
+                if (all_zeros) {
+                    APP_LOG_WARNING("ImageProcessor: Processed frame contains all zeros in first " + std::to_string(check_bytes) + " bytes - may be black image");
+                } else {
+                    APP_LOG_INFO("ImageProcessor: Processed frame contains non-zero data in first " + std::to_string(check_bytes) + " bytes");
+                }
+            } else {
+                APP_LOG_WARNING("ImageProcessor: Processed frame buffer is null or empty");
+            }
+            
             if (!push_latest_only(output_queue_, std::move(output_image_data))) {
                 APP_LOG_WARNING("ImageProcessor failed to push processed frame with latest-only semantics.");
                 // output_image_data.buffer will be destructed here, returning its buffer to the pool.
+            } else {
+                APP_LOG_DEBUG("ImageProcessor: Successfully pushed processed frame to output queue. Frame ID: " + std::to_string(output_image_data.frame_id));
             }
 
             auto process_end_time = std::chrono::high_resolution_clock::now();
             [[maybe_unused]] long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(process_end_time - process_start_time).count();
-            APP_LOG_DEBUG("ImageProcessor processed frame in " + std::to_string(duration_ms) + " ms. Input size " +
+            
+            // Calculate detailed timing breakdown
+            auto preprocess_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(process_end_time - input_image.queue_pop_time).count();
+            avg_preprocess_time_us_ = (avg_preprocess_time_us_.load() + preprocess_duration_us) / 2; // Running average
+            
+            APP_LOG_DEBUG("ImageProcessor processed frame with overlays in " + std::to_string(duration_ms) + " ms. Input size " +
                           std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Output size " +
-                          std::to_string(tpu_input_width_) + "x" + std::to_string(tpu_input_height_) + ", Format RGB888");
+                          std::to_string(output_width_) + "x" + std::to_string(output_height_) + ", Format RGB888");
+            
+            // Log detailed timing breakdown if available
+            if (input_image.conversion_start_time.time_since_epoch().count() > 0 && 
+                input_image.conversion_end_time.time_since_epoch().count() > 0) {
+                auto conversion_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                    input_image.conversion_end_time - input_image.conversion_start_time).count();
+                APP_LOG_DEBUG("ImageProcessor timing breakdown - Conversion: " + std::to_string(conversion_time_us) + " us");
+            }
+            
+            if (input_image.visualization_start_time.time_since_epoch().count() > 0 && 
+                input_image.visualization_end_time.time_since_epoch().count() > 0) {
+                auto visualization_time_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                    input_image.visualization_end_time - input_image.visualization_start_time).count();
+                APP_LOG_DEBUG("ImageProcessor timing breakdown - Visualization: " + std::to_string(visualization_time_us) + " us");
+            }
         } else {
-            // Small sleep to prevent busy-waiting when no input is available
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            // Minimal sleep to prevent busy-waiting when no input is available
+            std::this_thread::sleep_for(std::chrono::microseconds(100)); // Reduced from 1ms to 100us to reduce latency
         }
     }
     
     APP_LOG_INFO("ImageProcessor worker thread finished.");
+}
+
+// Function to apply detection results as overlays to an image
+void ImageProcessor::apply_detections_to_frame(cv::Mat& frame, const std::shared_ptr<DetectionResultBuffer>& detections) {
+    if (!detections) {
+        return; // Nothing to do if no detection buffer
+    }
+
+    int frame_width = frame.cols;
+    int frame_height = frame.rows;
+
+    // Process each detection in the buffer
+    for (size_t i = 0; i < detections->size; ++i) {
+        const DetectionResult& detection = detections->data[i];
+
+        // Convert normalized coordinates to pixel coordinates
+        int x_min = static_cast<int>(detection.xmin * frame_width);
+        int y_min = static_cast<int>(detection.ymin * frame_height);
+        int x_max = static_cast<int>(detection.xmax * frame_width);
+        int y_max = static_cast<int>(detection.ymax * frame_height);
+
+        // Ensure coordinates are within frame bounds
+        x_min = std::max(0, x_min);
+        y_min = std::max(0, y_min);
+        x_max = std::min(frame_width - 1, x_max);
+        y_max = std::min(frame_height - 1, y_max);
+
+        // Draw bounding box in bright red - use faster line drawing
+        cv::Scalar box_color(0, 0, 255); // Red (BGR format)
+        cv::rectangle(frame, cv::Point(x_min, y_min), cv::Point(x_max, y_max), box_color, 2, cv::LINE_8, 0);
+
+        // Draw class ID and score - only if box is large enough to show text
+        if ((x_max - x_min) > 20 && (y_max - y_min) > 20) {
+            std::string label = "ID:" + std::to_string(detection.class_id) + " S:" + std::to_string(static_cast<int>(detection.score * 100)) + "%";
+
+            // Calculate text size to position it above the bounding box
+            int baseline = 0;
+            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.4, 1, &baseline); // Smaller font for better performance
+
+            // Draw label background
+            cv::Point label_origin(x_min, std::max(y_min - textSize.height, 0));
+            cv::Point label_bottom_right(std::min(label_origin.x + textSize.width, frame_width), 
+                                       std::min(label_origin.y + textSize.height + baseline, frame_height));
+
+            // Draw filled rectangle for label background
+            cv::rectangle(frame, label_origin, label_bottom_right, box_color, cv::FILLED);
+
+            // Draw label text
+            cv::putText(frame, label, cv::Point(label_origin.x, label_origin.y + textSize.height), 
+                       cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255), 1, cv::LINE_8, false);
+        }
+    }
 }

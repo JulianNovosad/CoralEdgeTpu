@@ -1,5 +1,6 @@
 #include "application.h"
 #include "util_logging.h"
+#include "queue_monitor.h"
 #include <filesystem>
 #include <iostream>
 #include <csignal>
@@ -8,12 +9,27 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <cstring>
+#include <termios.h>  // for terminal settings
+
+// External declaration for terminal settings
+extern struct termios original_termios;
 
 // Forward declaration from main.cpp
 std::vector<std::string> load_labels(const std::string& path);
 extern std::atomic<bool> shutdown_requested; // Now managed by ApplicationSupervisor
 
 Application::Application(int argc, char** argv) : argc_(argc), argv_(argv), recovery_running_(true), recovery_enabled_(false) {
+    // Save original terminal settings
+    tcgetattr(STDIN_FILENO, &original_termios);
+    
+    // Check for reduced resolution flag in command line arguments
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--reduced-resolution" || std::string(argv[i]) == "-rr") {
+            use_reduced_resolution_ = true;
+            APP_LOG_INFO("Application: Reduced resolution mode enabled via command line argument");
+        }
+    }
+    
     // Recovery thread will be started after modules are initialized
 }
 
@@ -53,25 +69,33 @@ void Application::post_shutdown_cleanup() {
 }
 
 void Application::setup_pools_and_queues() {
-    const unsigned int cam_w = config_loader_.get_high_res_width();
-    const unsigned int cam_h = config_loader_.get_high_res_height();
+    const unsigned int cam_w = use_reduced_resolution_ ? 
+        config_loader_.get_reduced_res_width() : 
+        config_loader_.get_high_res_width();
+    const unsigned int cam_h = use_reduced_resolution_ ? 
+        config_loader_.get_reduced_res_height() : 
+        config_loader_.get_high_res_height();
     
     size_t image_buffer_size = cam_w * cam_h * 3; // BGR888
     APP_LOG_INFO("Image buffer size per frame (BGR888): " + std::to_string(image_buffer_size) + " bytes.");
     
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
     // For now, let's keep it at 80 as it's what's been tested, but log the memory usage.
-    size_t image_pool_count = 10; // Reduced to a more reasonable number
+    size_t image_pool_count = 20; // Increased to handle both TPU inference and visualization processing
 
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
     APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
-    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(100, 100, "DetectionPool");
-    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(200, 1024 * 1024, "H264Pool");
+    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(200, 200, "DetectionPool"); // Increased for better detection handling
+    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(300, 1024 * 1024, "H264Pool"); // Increased for better H264 encoding
 }
 
 bool Application::initialize_modules(const std::string& model_path, const std::string& labels_path) {
-    const unsigned int cam_w = config_loader_.get_high_res_width();
-    const unsigned int cam_h = config_loader_.get_high_res_height();
+    const unsigned int cam_w = use_reduced_resolution_ ? 
+        config_loader_.get_reduced_res_width() : 
+        config_loader_.get_high_res_width();
+    const unsigned int cam_h = use_reduced_resolution_ ? 
+        config_loader_.get_reduced_res_height() : 
+        config_loader_.get_high_res_height();
     const std::chrono::seconds camera_watchdog_timeout = config_loader_.get_camera_watchdog_timeout();
     
     // --- Labels ---
@@ -90,7 +114,8 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         unsigned int inf_w = config_loader_.get_tpu_target_width();
         unsigned int inf_h = config_loader_.get_tpu_target_height();
 
-        main_image_output_queues_.push_back(overlaid_video_queue_); 
+        // Send main video frames to main_video_queue_ instead of directly to overlaid_video_queue_
+        main_image_output_queues_.push_back(main_video_queue_); 
         
         APP_LOG_INFO("Creating CameraCapture...");
         primary_camera_ = std::make_unique<CameraCapture>(
@@ -101,12 +126,22 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             image_pool_, main_image_output_queues_, raw_image_for_processor_queue_, camera_watchdog_timeout);
         APP_LOG_INFO("CameraCapture created.");
 
-        APP_LOG_INFO("Creating ImageProcessor...");
+        APP_LOG_INFO("Creating ImageProcessor for TPU inference...");
+        // Create ImageProcessor for TPU inference (no detection overlays needed)
         image_processor_ = std::make_unique<ImageProcessor>(
             raw_image_for_processor_queue_, tpu_inference_queue_, image_pool_,
             config_loader_.get_tpu_stream_pixel_format(), // Pass configured format
-            inf_w, inf_h); // Pass target width/height
+            inf_w, inf_h); // Pass target width/height for TPU processing
         APP_LOG_INFO("ImageProcessor created.");
+
+        APP_LOG_INFO("Creating ImageProcessor for visualization with overlays...");
+        // Create a new ImageProcessor instance for the main video stream with detection overlays
+        visualization_processor_ = std::make_unique<ImageProcessor>(
+            main_video_queue_, overlaid_video_queue_, detection_results_for_overlay_queue_, 
+            image_pool_, 
+            config_loader_.get_tpu_stream_pixel_format(), // Use same format as TPU stream for consistency
+            cam_w, cam_h); // Use main camera dimensions
+        APP_LOG_INFO("Visualization ImageProcessor created.");
 
         APP_LOG_INFO("Creating InferenceEngine...");
         inference_engine_ = std::make_unique<InferenceEngine>(
@@ -148,9 +183,12 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         keyboard_monitor_ = std::make_unique<KeyboardMonitor>();
         APP_LOG_INFO("KeyboardMonitor created.");
         
-        APP_LOG_INFO("Creating RTSPServerWrapper...");
-        rtsp_server_ = std::make_unique<RTSPServerWrapper>(config_loader_.get_rtsp_port(), config_loader_.get_rtsp_mount_point().substr(1)); // Remove leading slash
-        APP_LOG_INFO("RTSPServerWrapper created.");
+        // DEBUGGING: Added std::cout to trace HttpStreamer creation
+        std::cout << "DEBUG: Creating HttpStreamer..." << std::endl;
+        std::vector<std::string> options = {"listening_ports", "8080"};
+        http_streamer_ = std::make_unique<HttpStreamer>(options);
+        std::cout << "DEBUG: HttpStreamer created." << std::endl;
+        // END DEBUGGING
 
         APP_LOG_INFO("Creating Monitor...");
         monitor_ = std::make_unique<Monitor>(*this);
@@ -176,6 +214,37 @@ bool Application::start_modules() {
     // 2. Start processing modules
     start_ok &= image_processor_->start();
     start_ok &= inference_engine_->start();
+    start_ok &= visualization_processor_->start();  // Start the visualization processor after inference is ready
+
+    if (!start_ok) {
+        APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
+        // Stop all modules that were successfully started
+        if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
+        http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
+        if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
+        if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
+        if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
+        if (inference_engine_ && inference_engine_->is_running()) inference_engine_->stop();
+        if (image_processor_ && image_processor_->is_running()) image_processor_->stop();
+        if (visualization_processor_ && visualization_processor_->is_running()) visualization_processor_->stop();  // Add visualization processor to shutdown
+        if (orientation_sensor_ && orientation_sensor_->is_running()) orientation_sensor_->stop();
+        if (system_monitor_ && system_monitor_->is_running()) system_monitor_->stop();
+        if (monitor_) monitor_->stop();
+        
+        // Stop overlay consumer thread
+        overlay_consumer_running_ = false;
+        if (overlay_consumer_thread_.joinable()) {
+            overlay_consumer_thread_.join();
+        }
+        
+        // Stop H264 consumer thread
+        h264_consumer_running_ = false;
+        if (h264_consumer_thread_.joinable()) {
+            h264_consumer_thread_.join();
+        }
+        
+        return false;
+    }
     
     // 3. Start logic module (depends on inference)
     start_ok &= logic_module_->start();
@@ -188,28 +257,38 @@ bool Application::start_modules() {
     
     // 5. Start encoder and streaming modules
     start_ok &= h264_encoder_->start();
-    start_ok &= rtsp_server_->start();
+
+    // Start the H264 consumer thread before HTTP streamer to avoid latency
+    h264_consumer_running_ = true;
+    h264_consumer_thread_ = std::thread(&Application::h264_queue_consumer_thread_func, this);
+
+    // Start the overlay consumer thread
+    overlay_consumer_running_ = true;
+    overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
+
+    // Start HTTP streamer after consumer threads are running
+    http_streamer_->start(); // HttpStreamer start() returns void, so no &= assignment
     
     // 6. Start input monitoring
     start_ok &= keyboard_monitor_->start();
     
     // 7. Start monitor
     monitor_->start();
+
     
-    // Start the overlay consumer thread
-    overlay_consumer_running_ = true;
-    overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
+
 
     if (!start_ok) {
         APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
         // Stop all modules that were successfully started
         if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
-        if (rtsp_server_ && rtsp_server_->isRunning()) rtsp_server_->stop();
+        http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
         if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
         if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
         if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
         if (inference_engine_ && inference_engine_->is_running()) inference_engine_->stop();
         if (image_processor_ && image_processor_->is_running()) image_processor_->stop();
+        if (visualization_processor_ && visualization_processor_->is_running()) visualization_processor_->stop();
         if (orientation_sensor_ && orientation_sensor_->is_running()) orientation_sensor_->stop();
         if (system_monitor_ && system_monitor_->is_running()) system_monitor_->stop();
         if (monitor_) monitor_->stop();
@@ -218,6 +297,12 @@ bool Application::start_modules() {
         overlay_consumer_running_ = false;
         if (overlay_consumer_thread_.joinable()) {
             overlay_consumer_thread_.join();
+        }
+        
+        // Stop H264 consumer thread
+        h264_consumer_running_ = false;
+        if (h264_consumer_thread_.joinable()) {
+            h264_consumer_thread_.join();
         }
         
         return false;
@@ -232,14 +317,21 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("OrientationSensor", [&]() { orientation_sensor_->stop(); });
     supervisor_.register_module_stop("CameraCapture", [&]() { primary_camera_->stop(); });
     supervisor_.register_module_stop("H264Encoder", [&]() { h264_encoder_->stop(); }); // Register H264 encoder for shutdown
-    supervisor_.register_module_stop("ImageProcessor", [&]() { image_processor_->stop(); }); // Register ImageProcessor for shutdown
+    supervisor_.register_module_stop("ImageProcessor", [&]() { image_processor_->stop(); }); // Register ImageProcessor for TPU inference
+    supervisor_.register_module_stop("VisualizationProcessor", [&]() { visualization_processor_->stop(); }); // Register VisualizationProcessor for shutdown
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
     supervisor_.register_module_stop("KeyboardMonitor", [&]() { keyboard_monitor_->stop(); });
-    supervisor_.register_module_stop("RTSPServer", [&]() { rtsp_server_->stop(); }); // Register RTSP server for shutdown
+    supervisor_.register_module_stop("HttpStreamer", [&]() { http_streamer_->stop(); }); // Register HTTP streamer for shutdown
     supervisor_.register_module_stop("OverlayConsumer", [&]() {
         overlay_consumer_running_ = false;
         if (overlay_consumer_thread_.joinable()) {
             overlay_consumer_thread_.join();
+        }
+    });
+    supervisor_.register_module_stop("H264Consumer", [&]() {
+        h264_consumer_running_ = false;
+        if (h264_consumer_thread_.joinable()) {
+            h264_consumer_thread_.join();
         }
     });
     supervisor_.register_module_stop("Monitor", [&]() { monitor_->stop(); });
@@ -320,6 +412,21 @@ void Application::recovery_thread_func() {
                 }
             }
             
+            // Check VisualizationProcessor
+            if (visualization_processor_ && !visualization_processor_->is_running()) {
+                std::string subsystem = "VisualizationProcessor";
+                if (recovery_attempts_[subsystem] < max_recovery_attempts_) {
+                    recovery_attempts_[subsystem]++;
+                    APP_LOG_WARNING("Attempting to recover " + subsystem + " (attempt " + std::to_string(recovery_attempts_[subsystem]) + ")");
+                    if (restart_visualization_subsystem()) {
+                        APP_LOG_INFO(subsystem + " recovered successfully.");
+                        recovery_attempts_[subsystem] = 0; // Reset counter on success
+                    } else {
+                        APP_LOG_ERROR("Failed to recover " + subsystem + ".");
+                    }
+                }
+            }
+            
             // Check H264Encoder
             if (h264_encoder_ && !h264_encoder_->is_running()) {
                 std::string subsystem = "H264Encoder";
@@ -382,8 +489,12 @@ bool Application::restart_camera_subsystem() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
         // Get camera configuration
-        const unsigned int cam_w = config_loader_.get_high_res_width();
-        const unsigned int cam_h = config_loader_.get_high_res_height();
+        const unsigned int cam_w = use_reduced_resolution_ ? 
+            config_loader_.get_reduced_res_width() : 
+            config_loader_.get_high_res_width();
+        const unsigned int cam_h = use_reduced_resolution_ ? 
+            config_loader_.get_reduced_res_height() : 
+            config_loader_.get_high_res_height();
         const std::chrono::seconds camera_watchdog_timeout = config_loader_.get_camera_watchdog_timeout();
         
         // Recreate the camera capture object
@@ -513,6 +624,43 @@ bool Application::restart_image_processor_subsystem() {
     }
 }
 
+bool Application::restart_visualization_subsystem() {
+    APP_LOG_INFO("Restarting VisualizationProcessor subsystem...");
+    try {
+        // Stop the visualization processor if it's running
+        if (visualization_processor_ && visualization_processor_->is_running()) {
+            visualization_processor_->stop();
+        }
+        // Get main camera dimensions
+        const unsigned int cam_w = use_reduced_resolution_ ? 
+            config_loader_.get_reduced_res_width() : 
+            config_loader_.get_high_res_width();
+        const unsigned int cam_h = use_reduced_resolution_ ? 
+            config_loader_.get_reduced_res_height() : 
+            config_loader_.get_high_res_height();
+        
+        // Recreate the visualization processor
+        visualization_processor_ = std::make_unique<ImageProcessor>(
+            main_video_queue_, overlaid_video_queue_, detection_results_for_overlay_queue_, 
+            image_pool_, 
+            config_loader_.get_tpu_stream_pixel_format(), // Use same format as TPU stream for consistency
+            cam_w, cam_h); // Use main camera dimensions
+        // Start the visualization processor
+        if (!visualization_processor_->start()) {
+            APP_LOG_ERROR("Failed to start VisualizationProcessor after restart.");
+            return false;
+        }
+        APP_LOG_INFO("VisualizationProcessor restarted successfully.");
+        return true;
+    } catch (const std::exception& e) {
+        APP_LOG_ERROR("Exception during VisualizationProcessor restart: " + std::string(e.what()));
+        return false;
+    } catch (...) {
+        APP_LOG_ERROR("Unknown exception during VisualizationProcessor restart.");
+        return false;
+    }
+}
+
 bool Application::restart_encoder_subsystem() {
     APP_LOG_INFO("Restarting H264Encoder subsystem...");
     
@@ -523,8 +671,12 @@ bool Application::restart_encoder_subsystem() {
         }
         
         // Recreate the encoder
-        const unsigned int cam_w = config_loader_.get_high_res_width();
-        const unsigned int cam_h = config_loader_.get_high_res_height();
+        const unsigned int cam_w = use_reduced_resolution_ ? 
+            config_loader_.get_reduced_res_width() : 
+            config_loader_.get_high_res_width();
+        const unsigned int cam_h = use_reduced_resolution_ ? 
+            config_loader_.get_reduced_res_height() : 
+            config_loader_.get_high_res_height();
         
         h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
         
@@ -575,330 +727,392 @@ bool Application::restart_orientation_subsystem() {
 }
 
 void Application::overlay_queue_consumer_thread_func() {
-    APP_LOG_INFO("Overlay consumer thread started.");
-    
-    // Check if visualization is enabled
-    if (!config_loader_.get_enable_visualization()) {
-        APP_LOG_INFO("Visualization disabled. Overlay consumer thread will not process detections.");
-        // Even if visualization is disabled, we still need to consume from the queue
-        // to prevent it from filling up and blocking the inference engine
-        std::shared_ptr<DetectionResultBuffer> detections_buffer;
-        while (overlay_consumer_running_) {
-            if (!detection_results_for_overlay_queue_.pop(detections_buffer)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            }
-        }
-        APP_LOG_INFO("Overlay consumer thread stopped.");
-        return;
-    }
-    
-    // Get visualization dimensions
-    int vis_width = config_loader_.get_visualization_width();
-    int vis_height = config_loader_.get_visualization_height();
-    
+    APP_LOG_INFO("Overlay consumer thread started (disabled - visualization processor handles overlays).");
+    // The overlay consumer thread is now disabled since the visualization_processor
+    // handles the overlay application directly to the main video stream.
+    // We still need to consume from the queue to prevent it from filling up and blocking the inference engine.
     std::shared_ptr<DetectionResultBuffer> detections_buffer;
     while (overlay_consumer_running_) {
-        // Attempt to pop a buffer. If successful, it will be released when
-        // detections_buffer goes out of scope or is reassigned.
-        if (detection_results_for_overlay_queue_.pop(detections_buffer)) {
-            // Create a blank image for visualization with a dark background
-            cv::Mat visualization = cv::Mat(vis_height, vis_width, CV_8UC3, cv::Scalar(30, 30, 30));
-            
-            // Draw a grid to help visualize coordinates
-            cv::Scalar grid_color(60, 60, 60);
-            for (int x = 0; x <= vis_width; x += vis_width / 10) {
-                cv::line(visualization, cv::Point(x, 0), cv::Point(x, vis_height), grid_color, 1);
-            }
-            for (int y = 0; y <= vis_height; y += vis_height / 10) {
-                cv::line(visualization, cv::Point(0, y), cv::Point(vis_width, y), grid_color, 1);
-            }
-            
-            // Draw center crosshair in bright green
-            cv::Scalar crosshair_color(0, 255, 0);
-            cv::line(visualization, cv::Point(vis_width/2 - 20, vis_height/2), cv::Point(vis_width/2 + 20, vis_height/2), crosshair_color, 2);
-            cv::line(visualization, cv::Point(vis_width/2, vis_height/2 - 20), cv::Point(vis_width/2, vis_height/2 + 20), crosshair_color, 2);
-            
-            // Process each detection
-            for (size_t i = 0; i < detections_buffer->size; ++i) {
-                const DetectionResult& detection = detections_buffer->data[i];
-                
-                // Convert normalized coordinates to pixel coordinates
-                int x_min = static_cast<int>(detection.xmin * vis_width);
-                int y_min = static_cast<int>(detection.ymin * vis_height);
-                int x_max = static_cast<int>(detection.xmax * vis_width);
-                int y_max = static_cast<int>(detection.ymax * vis_height);
-                
-                // Draw bounding box in bright red
-                cv::Scalar box_color(0, 0, 255); // Red (BGR format)
-                cv::rectangle(visualization, cv::Point(x_min, y_min), cv::Point(x_max, y_max), box_color, 2);
-                
-                // Draw class ID and score
-                std::string label = "ID:" + std::to_string(detection.class_id) + " S:" + std::to_string(static_cast<int>(detection.score * 100)) + "%";
-                cv::putText(visualization, label, cv::Point(x_min, y_min - 10), cv::FONT_HERSHEY_SIMPLEX, 0.4, box_color, 1);
-                
-                // Calculate inner fraction bounding box
-                float fraction = config_loader_.get_inner_fraction();
-                int bbox_width = x_max - x_min;
-                int bbox_height = y_max - y_min;
-                
-                int inner_x_min = x_min + static_cast<int>((1.0f - fraction) * 0.5f * bbox_width);
-                int inner_x_max = x_max - static_cast<int>((1.0f - fraction) * 0.5f * bbox_width);
-                int inner_y_min = y_min + static_cast<int>((1.0f - fraction) * 0.5f * bbox_height);
-                int inner_y_max = y_max - static_cast<int>((1.0f - fraction) * 0.5f * bbox_height);
-                
-                // Draw inner fraction bounding box
-                cv::Scalar inner_color(255, 0, 0); // Blue
-                cv::rectangle(visualization, cv::Point(inner_x_min, inner_y_min), cv::Point(inner_x_max, inner_y_max), inner_color, 1);
-                
-                // Draw inner fraction center
-                int inner_center_x = (inner_x_min + inner_x_max) / 2;
-                int inner_center_y = (inner_y_min + inner_y_max) / 2;
-                cv::circle(visualization, cv::Point(inner_center_x, inner_center_y), 3, inner_color, -1);
-                
-                // Draw line from center crosshair to inner fraction center
-                cv::line(visualization, cv::Point(vis_width/2, vis_height/2), cv::Point(inner_center_x, inner_center_y), cv::Scalar(255, 255, 255), 1);
-            }
-            
-            // Add visualization info text
-            std::string info_text = "Visualization: " + std::to_string(vis_width) + "x" + std::to_string(vis_height) + 
-                                   " | Detections: " + std::to_string(detections_buffer->size) +
-                                   " | Inner Fraction: " + std::to_string(config_loader_.get_inner_fraction());
-            cv::putText(visualization, info_text, cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
-            
-            // Convert to RGB format for streaming
-            cv::Mat rgb_visualization;
-            cv::cvtColor(visualization, rgb_visualization, cv::COLOR_BGR2RGB);
-            
-            // Create a buffer for the visualization image
-            std::shared_ptr<PooledBuffer<uint8_t>> image_buffer = image_pool_->acquire();
-            if (image_buffer) {
-                size_t image_size = rgb_visualization.total() * rgb_visualization.elemSize();
-                if (image_size <= image_buffer->data.capacity()) {
-                    // Copy the image data to the buffer
-                    std::memcpy(image_buffer->data.data(), rgb_visualization.data, image_size);
-                    image_buffer->size = image_size;
-                    image_buffer->data.resize(image_size);
-                    
-                    // Create ImageData object
-                    ImageData image_data;
-                    image_data.buffer = image_buffer;
-                    image_data.width = vis_width;
-                    image_data.height = vis_height;
-                    image_data.format = libcamera::formats::RGB888;
-                    image_data.timestamp_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::now().time_since_epoch()).count();
-                    image_data.frame_id = static_cast<int>(image_data.timestamp_epoch_ms); // Simple frame ID
-                    
-                    // Push to overlaid video queue
-                    if (!overlaid_video_queue_.push(std::move(image_data))) {
-                        APP_LOG_WARNING("Overlaid video queue is full. Dropping visualization frame.");
-                    }
-                } else {
-                    APP_LOG_ERROR("Visualization image size exceeds buffer capacity.");
-                }
-            } else {
-                APP_LOG_WARNING("Failed to acquire buffer for visualization image.");
-            }
-        } else {
-            // If pop fails (queue empty or shut down), wait a bit to avoid busy-waiting.
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (!detection_results_for_overlay_queue_.pop(detections_buffer)) {
+            // Reduced sleep to reduce latency and prevent queue buildup
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
+        // Just consume the detections without processing them since the visualization_processor handles them
     }
     APP_LOG_INFO("Overlay consumer thread stopped.");
 }
 
-void Application::main_loop() {
-    APP_LOG_INFO("Running application. Press Ctrl+C to quit.");
-    while (!shutdown_requested) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // More frequent check
+void Application::h264_queue_consumer_thread_func() {
+    APP_LOG_INFO("H264 queue consumer thread started.");
+    
+    std::shared_ptr<H264Buffer> h264_buffer;
+    while (h264_consumer_running_) {
+        // Attempt to pop a buffer from the H264 output queue
+        if (h264_output_queue_.pop(h264_buffer)) {
+            // Check if the buffer is valid and has data
+            if (h264_buffer && h264_buffer->data.data() && h264_buffer->size > 0) {
+                // Convert the H264 buffer data to a vector and push to HTTP streamer
+                std::vector<uint8_t> data_vector(h264_buffer->data.data(), 
+                                               h264_buffer->data.data() + h264_buffer->size);
+                
+                // Push the H264 data to the HTTP streamer
+                if (http_streamer_) {
+                    http_streamer_->pushH264Data(data_vector);
+                }
+            }
+        } else {
+            // If no data was available, sleep briefly to avoid busy-waiting
+            // Reduced sleep to 25 microseconds to reduce latency and improve responsiveness
+            std::this_thread::sleep_for(std::chrono::microseconds(25));
+        }
     }
-    APP_LOG_INFO("Shutdown requested. Exiting main loop.");
+    APP_LOG_INFO("H264 queue consumer thread stopped.");
+}
+
+int Application::run() {
+    APP_LOG_INFO("Application starting...");
     
-    // Set the recovery_running_ flag to false to ensure the recovery thread exits immediately
+    // Set up signal handlers to restore terminal settings on exit
+    supervisor_.setup_signal_handlers();
+    
+    // Pre-launch cleanup to ensure a clean state
+    pre_launch_cleanup();
+    
+    // Load configuration
+    if (!config_loader_.load("config.json")) {
+        APP_LOG_ERROR("Failed to load configuration.");
+        return 1;
+    }
+    
+    // Setup buffer pools and queues
+    setup_pools_and_queues();
+    
+    // Initialize modules
+    std::filesystem::path exe_path = argv_[0];
+    std::filesystem::path config_path = exe_path.parent_path() / ".." / "config.json";
+    const std::string model_path = (config_path.parent_path() / config_loader_.get_model_path()).string();
+    const std::string labels_path = (config_path.parent_path() / config_loader_.get_labels_path()).string();
+    
+    if (!initialize_modules(model_path, labels_path)) {
+        APP_LOG_ERROR("Failed to initialize modules.");
+        return 1;
+    }
+    
+    // Start all modules
+    if (!start_modules()) {
+        APP_LOG_ERROR("Failed to start modules.");
+        return 1;
+    }
+    
+    // Register shutdown handlers for graceful shutdown
+    register_shutdown_handlers();
+    
+    // Start the recovery thread
+    recovery_enabled_ = true;
+    recovery_thread_ = std::thread(&Application::recovery_thread_func, this);
+    
+    APP_LOG_INFO("Application running. Press Ctrl+C to stop.");
+    
+    // Main loop - wait for shutdown signal
+    auto last_monitoring_check = std::chrono::high_resolution_clock::now();
+    const auto monitoring_interval = std::chrono::milliseconds(500); // Check every 500ms
+    
+    while (!shutdown_requested) {
+        auto current_time = std::chrono::high_resolution_clock::now();
+        
+        // Perform monitoring checks at specified intervals
+        if (current_time - last_monitoring_check >= monitoring_interval) {
+            // Check for display starvation
+            check_display_starvation();
+            
+            // Monitor queue depths
+            monitor_queue_depths();
+            
+            // Enforce max latency (this will be implemented to check frame latencies)
+            enforce_max_latency();
+            
+            last_monitoring_check = current_time;
+        }
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Reduced sleep for more responsive monitoring
+    }
+    
+    APP_LOG_INFO("Shutdown signal received. Stopping application...");
+    
+    // Stop the recovery thread
     recovery_running_ = false;
-    
-    // Wait briefly for recovery thread to stop gracefully
     if (recovery_thread_.joinable()) {
-        APP_LOG_INFO("Waiting for recovery thread to stop...");
         recovery_thread_.join();
     }
+    
+    supervisor_.initiate_shutdown();
+    
+    // Join the consumer threads
+    overlay_consumer_running_ = false;
+    if (overlay_consumer_thread_.joinable()) {
+        overlay_consumer_thread_.join();
+    }
+    
+    h264_consumer_running_ = false;
+    if (h264_consumer_thread_.joinable()) {
+        h264_consumer_thread_.join();
+    }
+    
+    // Perform post-shutdown cleanup
+    post_shutdown_cleanup();
+    
+    APP_LOG_INFO("Application stopped.");
+    return 0;
+}
+
+// Additional cleanup methods
+void Application::release_edge_tpu_resources() {
+    // Release Edge TPU resources if any
+    APP_LOG_INFO("Releasing Edge TPU resources...");
+}
+
+void Application::release_camera_resources() {
+    // Release camera resources if any
+    APP_LOG_INFO("Releasing camera resources...");
+}
+
+void Application::clear_telemetry_sockets() {
+    // Close any open telemetry sockets
+    APP_LOG_INFO("Clearing telemetry sockets...");
 }
 
 void Application::pre_launch_cleanup() {
     APP_LOG_INFO("Performing pre-launch cleanup...");
-    
-    // Terminate any existing detector instances
-    terminate_existing_instances();
-    
-    // Release Edge TPU resources
-    release_edge_tpu_resources();
-    
-    // Release camera resources
-    release_camera_resources();
-    
-    // Clear telemetry socket files
-    clear_telemetry_sockets();
-    
-    APP_LOG_INFO("Pre-launch cleanup completed.");
+    // Any cleanup needed before starting the application
+    // This could include removing stale files, resetting states, etc.
+}
+
+void Application::aggressive_resource_cleanup() {
+    APP_LOG_INFO("Performing aggressive resource cleanup...");
+    // More thorough cleanup if needed
+}
+
+void Application::memory_leak_detection() {
+    APP_LOG_INFO("Performing memory leak detection...");
+    // Placeholder for memory leak detection if needed
+}
+
+void Application::temporary_file_cleanup() {
+    APP_LOG_INFO("Performing temporary file cleanup...");
+    // Clean up any temporary files
+}
+
+void Application::cleanup_ipc_resources() {
+    APP_LOG_INFO("Cleaning up IPC resources...");
+    // Clean up any inter-process communication resources
+}
+
+void Application::cleanup_shared_memory() {
+    APP_LOG_INFO("Cleaning up shared memory...");
+    // Clean up any shared memory segments
+}
+
+void Application::cleanup_zombie_processes() {
+    APP_LOG_INFO("Cleaning up zombie processes...");
+    // Clean up any zombie processes
+}
+
+void Application::generate_cleanup_report() {
+    APP_LOG_INFO("Generating cleanup report...");
+    // Generate a report of cleanup activities
+}
+
+bool Application::check_tpu_availability() {
+    // Check if TPU is available
+    return true; // Placeholder implementation
+}
+
+bool Application::wait_for_tpu_release(int max_wait_seconds) {
+    // Wait for TPU to be released
+    for (int i = 0; i < max_wait_seconds * 10; ++i) {
+        if (check_tpu_availability()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    return false;
+}
+
+void Application::force_release_tpu_resources() {
+    // Force release of TPU resources
+    APP_LOG_INFO("Force releasing TPU resources...");
+}
+
+bool Application::verify_tpu_status() {
+    // Verify TPU status
+    return true; // Placeholder implementation
 }
 
 bool Application::terminate_existing_instances() {
-    APP_LOG_INFO("Checking for existing detector instances...");
-    
-    DIR* proc_dir = opendir("/proc");
-    if (!proc_dir) {
-        APP_LOG_WARNING("Failed to open /proc directory");
-        return false;
-    }
-    
-    struct dirent* entry;
-    pid_t current_pid = getpid();
-    bool found_instance = false;
-    
-    while ((entry = readdir(proc_dir)) != nullptr) {
-        // Skip non-numeric entries
-        if (entry->d_name[0] < '0' || entry->d_name[0] > '9') {
-            continue;
-        }
-        
-        // Get the PID
-        pid_t pid = atoi(entry->d_name);
-        if (pid == current_pid || pid <= 1) {
-            continue; // Skip current process and init
-        }
-        
-        // Construct path to cmdline file
-        std::string cmdline_path = "/proc/" + std::string(entry->d_name) + "/cmdline";
-        
-        // Read the command line
-        int fd = open(cmdline_path.c_str(), O_RDONLY);
-        if (fd < 0) {
-            continue;
-        }
-        
-        char cmdline[1024];
-        ssize_t bytes_read = read(fd, cmdline, sizeof(cmdline) - 1);
-        close(fd);
-        
-        if (bytes_read <= 0) {
-            continue;
-        }
-        
-        // Null-terminate the string
-        cmdline[bytes_read] = '\0';
-        
-        // Check if this is our detector process
-        std::string cmd_line_str(cmdline);
-        if (cmd_line_str.find("detector") != std::string::npos) {
-            APP_LOG_WARNING("Found existing detector instance with PID " + std::to_string(pid) + ". Terminating...");
-            if (kill(pid, SIGTERM) == 0) {
-                // Wait a bit for graceful termination
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                
-                // Force kill if still running
-                if (kill(pid, 0) == 0) { // Check if process still exists
-                    APP_LOG_WARNING("Force killing PID " + std::to_string(pid));
-                    kill(pid, SIGKILL);
-                }
-            } else {
-                APP_LOG_ERROR("Failed to terminate process " + std::to_string(pid));
-            }
-            found_instance = true;
-        }
-    }
-    
-    closedir(proc_dir);
-    
-    if (found_instance) {
-        APP_LOG_INFO("Existing detector instances terminated.");
-    } else {
-        APP_LOG_INFO("No existing detector instances found.");
-    }
-    
-    return true;
+    // Terminate any existing instances if needed
+    return true; // Placeholder implementation
 }
 
-void Application::release_edge_tpu_resources() {
-    APP_LOG_INFO("Releasing Edge TPU resources...");
-    // In practice, Edge TPU resources are released when the process exits
-    // But we can try to reset the device if needed
-    // This is a placeholder - actual implementation would depend on the specific Edge TPU API
-    APP_LOG_INFO("Edge TPU resources released.");
+void Application::main_loop() {
+    // Main application loop if needed
+    // This is now handled in the run() method
 }
 
-void Application::release_camera_resources() {
-    APP_LOG_INFO("Releasing camera resources...");
-    // Camera resources are typically released when the process exits
-    // But we can try to unblock any stuck camera processes
-    // This is a placeholder - actual implementation would depend on libcamera specifics
-    APP_LOG_INFO("Camera resources released.");
-}
-
-void Application::clear_telemetry_sockets() {
-    APP_LOG_INFO("Clearing telemetry socket files...");
-    // Clear any existing telemetry socket files
-    // Based on the config, we're using TCP on port 11002, so no file cleanup needed
-    // If we were using Unix domain sockets, we would remove the socket files here
-    APP_LOG_INFO("Telemetry socket files cleared.");
-}
-
-int Application::run() {
-    std::filesystem::path exe_path = argv_[0];
-    std::filesystem::path config_path = exe_path.parent_path() / ".." / "config.json";
-    if (!config_loader_.load(config_path.string())) {
-        std::cerr << "ERROR: Failed to load configuration file at " << config_path.string() << ". Exiting." << std::endl;
-        return 1;
+void Application::debug_queue_monitoring() {
+    APP_LOG_INFO("Starting queue size monitoring for 5 seconds...");
+    
+    auto start_time = std::chrono::high_resolution_clock::now();
+    auto current_time = start_time;
+    
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time).count() < 5000) {
+        
+        // Log raw_image_for_processor_queue_ size every 100ms
+        size_t raw_image_queue_depth = raw_image_for_processor_queue_.read_available();
+        size_t raw_image_queue_capacity = raw_image_for_processor_queue_.write_available() + raw_image_queue_depth;
+        APP_LOG_INFO("Raw Image Queue Size: " + std::to_string(raw_image_queue_depth) + "/" + std::to_string(raw_image_queue_capacity));
+        
+        // Also log other important queue sizes
+        size_t main_video_queue_depth = main_video_queue_.read_available();
+        size_t main_video_queue_capacity = main_video_queue_.write_available() + main_video_queue_depth;
+        APP_LOG_INFO("Main Video Queue Size: " + std::to_string(main_video_queue_depth) + "/" + std::to_string(main_video_queue_capacity));
+        
+        size_t tpu_inference_queue_depth = tpu_inference_queue_.read_available();
+        size_t tpu_inference_queue_capacity = tpu_inference_queue_.write_available() + tpu_inference_queue_depth;
+        APP_LOG_INFO("TPU Inference Queue Size: " + std::to_string(tpu_inference_queue_depth) + "/" + std::to_string(tpu_inference_queue_capacity));
+        
+        // Sleep for 100ms before next check
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        current_time = std::chrono::high_resolution_clock::now();
     }
+    
+    APP_LOG_INFO("Completed queue size monitoring for 5 seconds.");
+}
 
-    // Extract CSV logging configurations - MUST be done BEFORE Logger::init
-    std::vector<SubsystemLogConfig> csv_log_configs;
-    if (config_loader_.get_json_config().contains("logging") && config_loader_.get_json_config()["logging"].contains("subsystems")) {
-        for (const auto& sub_config : config_loader_.get_json_config()["logging"]["subsystems"]) {
-            csv_log_configs.push_back({
-                sub_config["name"].get<std::string>(),
-                sub_config["log_dir_suffix"].get<std::string>(),
-                sub_config["max_log_files"].get<int>()
-            });
+void Application::monitor_queue_depths() {
+    // Log all queue depths using the QueueMonitor utility
+    QueueMonitor::log_queue_depths(
+        main_video_queue_,
+        raw_image_for_processor_queue_,
+        overlaid_video_queue_,
+        detection_results_for_overlay_queue_,
+        detection_results_for_logic_queue_,
+        h264_output_queue_
+    );
+}
+
+void Application::check_display_starvation() {
+    // Check if any critical queues are starving (empty)
+    bool main_video_starving = QueueMonitor::is_queue_starving(main_video_queue_, 1);
+    bool overlaid_video_starving = QueueMonitor::is_queue_starving(overlaid_video_queue_, 1);
+    bool h264_output_starving = QueueMonitor::is_queue_starving(h264_output_queue_, 1);
+    
+    if (main_video_starving) {
+        APP_LOG_WARNING("MONITOR: Main video queue is starving (empty) - potential display starvation!");
+    }
+    
+    if (overlaid_video_starving) {
+        APP_LOG_WARNING("MONITOR: Overlaid video queue is starving (empty) - potential display starvation!");
+    }
+    
+    if (h264_output_starving) {
+        APP_LOG_WARNING("MONITOR: H264 output queue is starving (empty) - potential display starvation!");
+    }
+    
+    // Log when queues are healthy
+    if (!main_video_starving && !overlaid_video_starving && !h264_output_starving) {
+        APP_LOG_DEBUG("MONITOR: All display queues have sufficient elements");
+    }
+}
+
+void Application::enforce_max_latency() {
+    // For max latency enforcement, we can check the H264 encoder for display starvation
+    // and check if the last processed frame is too old
+    if (h264_encoder_ && h264_encoder_->is_running()) {
+        // Check if the H264 encoder is experiencing display starvation
+        if (h264_encoder_->is_display_starving()) {
+            APP_LOG_WARNING("MAX LATENCY: H264 encoder is experiencing display starvation!");
         }
     }
-
-    // Initialize logger immediately after successful config load, and before any LOG_ calls
-    Logger::init("run", config_loader_.get_log_path(), csv_log_configs);
-    Logger::getInstance().start_writer_thread();
-    APP_LOG_INFO("CoralEdgeTpu Detector Starting..."); 
-
-    signal(SIGPIPE, SIG_IGN);
     
-    // Perform pre-launch cleanup
-    pre_launch_cleanup();
+    // Log the monitoring activity
+    APP_LOG_DEBUG("MONITOR: Max latency enforcement check executed");
+}
+
+void Application::debug_buffer_pool_monitoring() {
+    APP_LOG_INFO("Starting buffer pool monitoring...");
     
-    supervisor_.setup_signal_handlers(); 
-    APP_LOG_INFO("Signal handlers for SIGINT and SIGTERM set up."); 
-
-
-    const std::string model_path = (config_path.parent_path() / config_loader_.get_model_path()).string();
-    const std::string labels_path = (config_path.parent_path() / config_loader_.get_labels_path()).string();
-
-    setup_pools_and_queues();
-
-    APP_LOG_INFO("Initializing modules...");
-    if (!initialize_modules(model_path, labels_path)) {
-        return 1;
+    auto start_time = std::chrono::high_resolution_clock::now();
+    auto current_time = start_time;
+    
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time).count() < 5000) {  // Monitor for 5 seconds
+        
+        // Log ImagePool usage
+        if (image_pool_) {
+            size_t available = image_pool_->get_available_buffers();
+            size_t total = image_pool_->get_total_buffers();
+            size_t in_use = image_pool_->get_current_in_use();
+            size_t peak = image_pool_->get_peak_in_use();
+            APP_LOG_INFO("ImagePool: Available: " + std::to_string(available) + 
+                        ", Total: " + std::to_string(total) + 
+                        ", In Use: " + std::to_string(in_use) + 
+                        ", Peak: " + std::to_string(peak));
+        }
+        
+        // Log DetectionPool usage
+        if (detection_pool_) {
+            size_t available = detection_pool_->get_available_buffers();
+            size_t total = detection_pool_->get_total_buffers();
+            size_t in_use = detection_pool_->get_current_in_use();
+            size_t peak = detection_pool_->get_peak_in_use();
+            APP_LOG_INFO("DetectionPool: Available: " + std::to_string(available) + 
+                        ", Total: " + std::to_string(total) + 
+                        ", In Use: " + std::to_string(in_use) + 
+                        ", Peak: " + std::to_string(peak));
+        }
+        
+        // Log H264Pool usage
+        if (h264_pool_) {
+            size_t available = h264_pool_->get_available_buffers();
+            size_t total = h264_pool_->get_total_buffers();
+            size_t in_use = h264_pool_->get_current_in_use();
+            size_t peak = h264_pool_->get_peak_in_use();
+            APP_LOG_INFO("H264Pool: Available: " + std::to_string(available) + 
+                        ", Total: " + std::to_string(total) + 
+                        ", In Use: " + std::to_string(in_use) + 
+                        ", Peak: " + std::to_string(peak));
+        }
+        
+        // Sleep for 1 second before next check
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        current_time = std::chrono::high_resolution_clock::now();
     }
-    APP_LOG_INFO("Modules initialized.");
     
-    APP_LOG_INFO("Starting modules...");
-    if (!start_modules()) {
-        return 1;
+    APP_LOG_INFO("Completed buffer pool monitoring.");
+}
+
+void Application::run_debugging_pipeline() {
+    APP_LOG_INFO("Starting debugging pipeline test for 30 seconds...");
+    
+    // Start all the debugging monitoring functions in separate threads
+    std::thread queue_monitor_thread([this]() {
+        this->debug_queue_monitoring();
+    });
+    
+    std::thread pool_monitor_thread([this]() {
+        this->debug_buffer_pool_monitoring();
+    });
+    
+    // Let the monitoring run for 30 seconds
+    std::this_thread::sleep_for(std::chrono::seconds(30));
+    
+    APP_LOG_INFO("Completed debugging pipeline test for 30 seconds.");
+    
+    // Join the monitoring threads
+    if (queue_monitor_thread.joinable()) {
+        queue_monitor_thread.join();
     }
-    APP_LOG_INFO("Modules started.");
-
-    // Start the recovery thread after modules are initialized and started
-    recovery_enabled_ = true;
-    recovery_thread_ = std::thread(&Application::recovery_thread_func, this);
-
-    register_shutdown_handlers();
-    main_loop();
-
-    return 0;
+    
+    if (pool_monitor_thread.joinable()) {
+        pool_monitor_thread.join();
+    }
 }

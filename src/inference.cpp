@@ -239,7 +239,7 @@ void InferenceEngine::worker_thread_func() {
     ImageData input_image;
     while (running_) {
         [[maybe_unused]] auto total_loop_start = std::chrono::high_resolution_clock::now();
-        // 1. Pop from input queue
+        // 1. Pop from input queue with non-blocking approach to prevent stalling
         [[maybe_unused]] auto pop_start = std::chrono::high_resolution_clock::now();
         if (input_queue_.pop(input_image)) {
             [[maybe_unused]] auto pop_end = std::chrono::high_resolution_clock::now();
@@ -341,6 +341,10 @@ void InferenceEngine::worker_thread_func() {
             // Update freshness indicators
             last_inference_timestamp_ = call_ts;
             
+            // Update average inference time for monitoring (this was missing!)
+            long long current_avg = avg_inference_time_us_.load();
+            avg_inference_time_us_.store((current_avg + duration_us) / 2);
+            
             // Store inference timing for statistics
             static std::vector<long long> inference_times_us;
             static int inference_count = 0;
@@ -398,15 +402,7 @@ void InferenceEngine::worker_thread_func() {
                 double inference_fps = (inference_frame_counter * 1000.0) / inference_duration;
                 APP_LOG_INFO("INFERENCE FPS MEASUREMENT: " + std::to_string(inference_fps) + " FPS over " + std::to_string(inference_frame_counter) + " inferences in " + std::to_string(inference_duration) + " ms");
                 
-                // Log to CSV for dashboard
-                CsvLogEntry inference_fps_entry;
-                inference_fps_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                copy_to_array(inference_fps_entry.module, "InferenceEngine");
-                inference_fps_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                copy_to_array(inference_fps_entry.event, "inference_fps");
-                inference_fps_entry.call_ts_epoch_ms = call_ts;
-                inference_fps_entry.average_fps = static_cast<float>(inference_fps);
-                Logger::getInstance().log_csv(inference_fps_entry);
+
                 
                 // Reset for next measurement
                 inference_frame_counter = 0;
@@ -415,29 +411,7 @@ void InferenceEngine::worker_thread_func() {
             
             // Batch logging: only log every 5th inference to reduce overhead
             static int inference_log_counter = 0;
-            inference_log_counter++;
-            if (inference_log_counter % 5 == 0) {
-                CsvLogEntry entry;
-                entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                copy_to_array(entry.module, "InferenceEngine");
-                entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                copy_to_array(entry.event, "inference_done");
-                entry.call_ts_epoch_ms = call_ts;
-                entry.tpu_inference_ms = static_cast<float>(duration_ms);
-                entry.tpu_input_w = input_width_;
-                entry.tpu_input_h = input_height_;
-                entry.tpu_temp_c = get_tpu_temperature();
-                Logger::getInstance().log_csv(entry);
-                
-                // Log performance metrics
-                entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                copy_to_array(entry.module, "InferenceEngine");
-                entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                copy_to_array(entry.event, "performance_logged");
-                entry.call_ts_epoch_ms = call_ts;
-                entry.tpu_inference_ms = static_cast<float>(duration_ms); // Convert to milliseconds
-                Logger::getInstance().log_csv(entry);
-            }
+
 
             // 4. Get output tensor
             [[maybe_unused]] auto get_output_start = std::chrono::high_resolution_clock::now();
@@ -463,7 +437,8 @@ void InferenceEngine::worker_thread_func() {
             [[maybe_unused]] auto push_output_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to push results to queues: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(push_output_end - push_output_start).count()) + " us");
         } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            // Reduce sleep time to reduce latency when no input is available
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
         [[maybe_unused]] auto total_loop_end = std::chrono::high_resolution_clock::now();
         APP_LOG_DEBUG("InferenceEngine: Total worker thread loop iteration time: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_loop_end - total_loop_start).count()) + " us");
@@ -781,6 +756,10 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     for (int i = 0; i < num_detections; ++i) {
         // Properly dequantize UINT8 score to float for threshold comparison
         float score_float = static_cast<float>(detection_scores_uint8[i] - scores_zero_point) * scores_scale;
+        
+        // Determine the actual range of the dequantized scores
+        // Edge TPU detection models typically output scores in 0.0-1.0 range (not 0.0-100.0)
+        // Compare against the threshold directly (both in 0.0-1.0 range)
         if (score_float > score_threshold_) { 
             if (result_count >= results_buffer->data.size()) {
                 APP_LOG_WARNING("More detections found than space in the result buffer. Some detections will be dropped.");
@@ -795,6 +774,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
             
             // Convert from 0-based index to 1-based ID as expected by labelmap
             res.class_id += 1;
+            // Store the dequantized score directly (in 0.0-1.0 range)
             res.score = score_float;
             
             // Validate class ID is within labelmap bounds (1-13 based on current labelmap)

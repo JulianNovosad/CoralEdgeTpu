@@ -93,6 +93,11 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     // Preserve zero-copy information
     image_data.fd = fd;
     image_data.offset = plane.offset; // Add offset information
+    
+    // Record ingest timing
+    image_data.ingest_start_time = process_start;
+    image_data.ingest_end_time = std::chrono::high_resolution_clock::now();
+    image_data.capture_time = std::chrono::high_resolution_clock::now(); // Record capture time
 
     // Handle format conversion if needed
     if (actual_format == libcamera::formats::YUYV) {
@@ -249,13 +254,21 @@ bool CameraCapture::start() {
     // First value is min frame duration, second is max frame duration
     // For main stream: allow flexibility in frame rate
     // For TPU stream: set to exact target frame rate
-    controls_to_set.set(libcamera::controls::FrameDurationLimits, {main_stream_frame_duration_us/2, main_stream_frame_duration_us*2});
-    APP_LOG_INFO("Setting FrameDurationLimits - Main stream: " + std::to_string(main_stream_frame_duration_us/2) + "-" + std::to_string(main_stream_frame_duration_us*2) + " us, TPU stream: " + std::to_string(tpu_stream_frame_duration_us) + " us (" + std::to_string(tpu_fps_) + " FPS)");
+    try {
+        controls_to_set.set(libcamera::controls::FrameDurationLimits, {main_stream_frame_duration_us/2, main_stream_frame_duration_us*2});
+        APP_LOG_INFO("Setting FrameDurationLimits - Main stream: " + std::to_string(main_stream_frame_duration_us/2) + "-" + std::to_string(main_stream_frame_duration_us*2) + " us, TPU stream: " + std::to_string(tpu_stream_frame_duration_us) + " us (" + std::to_string(tpu_fps_) + " FPS)");
+    } catch (const std::exception& e) {
+        APP_LOG_WARNING("FrameDurationLimits not supported by camera: " + std::string(e.what()) + ", skipping this control.");
+    }
     
     // Also set the target frame rate for the camera
     if (tpu_fps_ > 0) {
-        controls_to_set.set(libcamera::controls::AeEnable, true);
-        APP_LOG_INFO("Setting AE enable for target FPS: " + std::to_string(tpu_fps_));
+        try {
+            controls_to_set.set(libcamera::controls::AeEnable, true);
+            APP_LOG_INFO("Setting AE enable for target FPS: " + std::to_string(tpu_fps_));
+        } catch (const std::exception& e) {
+            APP_LOG_WARNING("AeEnable not supported by camera: " + std::string(e.what()) + ", skipping this control.");
+        }
     }
 
     int ret = camera_->start(&controls_to_set);
@@ -270,8 +283,9 @@ bool CameraCapture::start() {
     
     // Read back actual configured FrameDuration for logging if it was set
     const libcamera::ControlList &properties = camera_->properties();
-    if (properties.get(libcamera::controls::FrameDuration)) {
-        int64_t actual_frame_duration = *properties.get(libcamera::controls::FrameDuration);
+    auto frame_duration = properties.get(libcamera::controls::FrameDuration);
+    if (frame_duration) {
+        int64_t actual_frame_duration = *frame_duration;
         [[maybe_unused]] double actual_fps = 1000000.0 / actual_frame_duration;
         APP_LOG_INFO("Actual configured FrameDuration: " + std::to_string(actual_frame_duration) + " us (" + std::to_string(actual_fps) + " FPS)");
     } else {
@@ -409,11 +423,11 @@ bool CameraCapture::setup_camera() {
         return false;
     }
 
-    // Configure main stream (index 0) for 1536x864 resolution to support 120 FPS
+    // Configure main stream (index 0) using constructor parameters
     libcamera::StreamConfiguration& mainCfg = config->at(0);
-    mainCfg.pixelFormat = libcamera::formats::SRGGB10_CSI2P;  // 10-bit Bayer format as requested
-    mainCfg.size.width = 1536;  // Fixed to Mode 0 resolution for 120 FPS
-    mainCfg.size.height = 864;  // Fixed to Mode 0 resolution for 120 FPS
+    mainCfg.pixelFormat = libcamera::formats::YUYV;  // Displayable YUYV format instead of raw Bayer
+    mainCfg.size.width = width_;  // Use width from constructor
+    mainCfg.size.height = height_;  // Use height from constructor
     mainCfg.bufferCount = 16; // Increase buffer count for high frame rate
     
     // Validate main stream configuration
@@ -423,7 +437,7 @@ bool CameraCapture::setup_camera() {
 
     // Configure tpu stream (index 1) for 320x320 resolution
     libcamera::StreamConfiguration& tpuCfg = config->at(1);
-    tpuCfg.pixelFormat = libcamera::formats::RGB888;
+    tpuCfg.pixelFormat = libcamera::formats::YUYV;  // YUV format for lower memory usage
     tpuCfg.size.width = 320;   // Fixed to TPU input size
     tpuCfg.size.height = 320;  // Fixed to TPU input size
     tpuCfg.bufferCount = 16; // Increase buffer count for high frame rate
@@ -533,8 +547,13 @@ bool CameraCapture::setup_camera() {
             return false;
         }
 
-        // Set initial controls for high FPS
-        request->controls().set(libcamera::controls::AeEnable, true);
+        // Check if control is supported before setting to avoid unsupported control errors
+        const libcamera::ControlInfoMap &control_info_map = camera_->controls();
+        if (control_info_map.find(libcamera::controls::AeEnable.id()) != control_info_map.end()) {
+            request->controls().set(libcamera::controls::AeEnable, true);
+        } else {
+            APP_LOG_WARNING("AeEnable not supported by camera for request, skipping this control.");
+        }
         
         ret = request->addBuffer(video_stream_, video_buffers[i].get(), std::unique_ptr<libcamera::Fence>()); 
         if (ret) {
@@ -605,8 +624,8 @@ void CameraCapture::request_processor_thread_func() {
     APP_LOG_INFO("CameraCapture: Request processor thread started.");
     while (processing_running_.load()) {
         std::unique_lock<std::mutex> lock(request_queue_mutex_);
-        // Wait for up to 100ms to check if we should shut down
-        request_queue_cond_var_.wait_for(lock, std::chrono::milliseconds(100), [this] { 
+        // Wait for up to 10ms to check if we should shut down (reduced from 100ms to minimize latency)
+        request_queue_cond_var_.wait_for(lock, std::chrono::milliseconds(10), [this] { 
             return !request_queue_.empty() || !processing_running_.load(); 
         });
 
@@ -669,15 +688,7 @@ void CameraCapture::request_processor_thread_func() {
             double sensor_fps = (sensor_frame_counter * 1000.0) / sensor_duration;
             APP_LOG_INFO("SENSOR FPS MEASUREMENT: " + std::to_string(sensor_fps) + " FPS over " + std::to_string(sensor_frame_counter) + " frames in " + std::to_string(sensor_duration) + " ms");
             
-            // Log to CSV for dashboard
-            CsvLogEntry entry;
-            entry.produced_ts_epoch_ms = produced_ts;
-            copy_to_array(entry.module, "CameraCapture");
-            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-            copy_to_array(entry.event, "sensor_fps");
-            entry.call_ts_epoch_ms = call_ts;
-            entry.average_fps = static_cast<float>(sensor_fps);
-            Logger::getInstance().log_csv(entry);
+
             
             // Reset for next measurement
             sensor_frame_counter = 0;
@@ -709,22 +720,7 @@ void CameraCapture::request_processor_thread_func() {
                 if (processed_main) {
                     processed_any_frame = true;
                     // Batch logging: only log every 10th frame to reduce overhead
-                    static int main_log_counter = 0;
-                    main_log_counter++;
-                    if (main_log_counter % 10 == 0) {
-                        // Log for main video stream
-                        CsvLogEntry entry;
-                        entry.produced_ts_epoch_ms = produced_ts;
-                        copy_to_array(entry.module, "CameraCapture");
-                        entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                        copy_to_array(entry.event, "frame_captured_main");
-                        entry.call_ts_epoch_ms = call_ts;
-                        entry.camera_frame_id = frame_id;
-                        entry.camera_width = video_cfg.size.width;
-                        entry.camera_height = video_cfg.size.height;
-                        entry.camera_exposure_ms = static_cast<float>(exposure_ms);
-                        Logger::getInstance().log_csv(entry);
-                    }
+
                 }
             }
         } else if (captured_buffers.count(video_stream_)) {
@@ -744,21 +740,7 @@ void CameraCapture::request_processor_thread_func() {
                     processed_any_frame = true;
                     // Log for TPU stream
                     // Batch logging: only log every 10th frame to reduce overhead
-                    static int log_counter = 0;
-                    log_counter++;
-                    if (log_counter % 10 == 0) {
-                        CsvLogEntry entry;
-                        entry.produced_ts_epoch_ms = produced_ts;
-                        copy_to_array(entry.module, "CameraCapture");
-                        entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                        copy_to_array(entry.event, "frame_captured_tpu");
-                        entry.call_ts_epoch_ms = call_ts;
-                        entry.camera_frame_id = frame_id;
-                        entry.camera_width = tpu_cfg.size.width;
-                        entry.camera_height = tpu_cfg.size.height;
-                        entry.camera_exposure_ms = static_cast<float>(exposure_ms);
-                        Logger::getInstance().log_csv(entry);
-                    }
+
                     
                     // FPS measurement instrumentation
                     auto current_time = std::chrono::high_resolution_clock::now();
@@ -828,16 +810,7 @@ void CameraCapture::request_processor_thread_func() {
             // Log process time for dashboard FPS calculation
             static int process_time_log_counter = 0;
             process_time_log_counter++;
-            if (process_time_log_counter % 10 == 0) {
-                CsvLogEntry entry(produced_ts, "CameraCapture", static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id())), "CAMERA_PROCESS_TIME", call_ts);
-                entry.camera_frame_id = frame_id;
-                // Add process time as a field
-                entry.details[0] = '\0'; // Clear details first
-                std::string process_time_str = "process_time_us=" + std::to_string(total_process_us);
-                strncpy(entry.details.data(), process_time_str.c_str(), entry.details.size() - 1);
-                entry.details[entry.details.size() - 1] = '\0';
-                Logger::getInstance().log_csv(entry);
-            }
+
         }
     
         // --- REQUEUE ---

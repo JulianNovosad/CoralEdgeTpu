@@ -17,16 +17,15 @@
 // Utility function for latest-only queue semantics
 template<typename QueueType, typename DataType>
 bool push_latest_only(QueueType& queue, DataType&& data) {
-    // If queue is full, pop and discard the oldest item
-    if (queue.write_available() == 0) {
+    // If queue is full, pop and discard the oldest item to make space
+    while (queue.write_available() == 0) {
         DataType discarded;
         if (!queue.pop(discarded)) {
-            // Queue is empty but write_available() reported 0, unexpected state
+            // Queue is full but pop failed - this is an unexpected state
             APP_LOG_WARNING("Queue is full but pop failed - unexpected state");
             return false;
         }
-        // Log that we're discarding an item
-        APP_LOG_INFO("Discarding oldest item from queue (queue was full)");
+        // Continue discarding until there's space
     }
     
     // Now push the new data
@@ -65,6 +64,14 @@ struct ImageData {
     std::chrono::high_resolution_clock::time_point encode_end_time;       ///< Time when encoding ended
     std::chrono::high_resolution_clock::time_point rtsp_push_start_time;  ///< Time when RTSP push started
     std::chrono::high_resolution_clock::time_point rtsp_push_end_time;    ///< Time when RTSP push ended
+    std::chrono::high_resolution_clock::time_point ingest_start_time;     ///< Time when frame ingest started
+    std::chrono::high_resolution_clock::time_point ingest_end_time;       ///< Time when frame ingest ended
+    std::chrono::high_resolution_clock::time_point conversion_start_time; ///< Time when format conversion started
+    std::chrono::high_resolution_clock::time_point conversion_end_time;   ///< Time when format conversion ended
+    std::chrono::high_resolution_clock::time_point visualization_start_time; ///< Time when visualization started
+    std::chrono::high_resolution_clock::time_point visualization_end_time;   ///< Time when visualization ended
+    std::chrono::high_resolution_clock::time_point display_start_time;    ///< Time when frame display started
+    std::chrono::high_resolution_clock::time_point display_end_time;      ///< Time when frame display ended
 
     // Constructor to initialize timestamp and frame_id
     ImageData(long long ts_epoch_ms = 0, int f_id = -1)
@@ -95,7 +102,7 @@ struct OrientationData {
  */
 struct DetectionResult {
     int class_id;   ///< The ID of the detected class.
-    float score;    ///< The confidence score of the detection (0.0 - 100.0, percentage).
+    float score;    ///< The confidence score of the detection (0.0 - 1.0, normalized).
     float raw_score; ///< Raw dequantized model output for debugging.
     float xmin, ymin, xmax, ymax; ///< Bounding box coordinates (normalized 0.0 - 1.0 or pixel values).
     std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of when the detection was made.
@@ -115,16 +122,16 @@ struct InferenceFrame {
 // --- Type aliases for all pipeline queues ---
 
 /// @brief Type alias for a lock-free SPSC queue holding ImageData objects.
-typedef boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<100ul>> ImageQueue;
+typedef boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<50ul>> ImageQueue; // Reduced from 1600 to 50 to reduce latency
 
 // Define a type for a pooled buffer of detection results
 using DetectionResultBuffer = PooledBuffer<DetectionResult>;
 /// @brief Type alias for a lock-free SPSC queue holding shared pointers to pooled detection result buffers.
-using DetectionResultsQueue = boost::lockfree::spsc_queue<std::shared_ptr<DetectionResultBuffer>, boost::lockfree::capacity<100>>;
+using DetectionResultsQueue = boost::lockfree::spsc_queue<std::shared_ptr<DetectionResultBuffer>, boost::lockfree::capacity<50>>; // Reduced from 1600 to 50 to reduce latency
 
 // Define a type for a pooled buffer of H.264 NAL units
 using H264Buffer = PooledBuffer<uint8_t>;
 /// @brief Type alias for a lock-free SPSC queue holding shared pointers to pooled H.264 buffers.
-using H264Queue = boost::lockfree::spsc_queue<std::shared_ptr<H264Buffer>, boost::lockfree::capacity<100>>;
+using H264Queue = boost::lockfree::spsc_queue<std::shared_ptr<H264Buffer>, boost::lockfree::capacity<50>>; // Reduced from 1600 to 50 to reduce latency
 
 #endif // PIPELINE_STRUCTS_H

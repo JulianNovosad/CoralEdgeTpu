@@ -4,108 +4,101 @@ This file provides guidance to Qoder (qoder.com) when working with code in this 
 
 ## Project Overview
 
-This is the **Avant-garde M1-Delta Mk II Wapenveiligheidssysteem**, an advanced firearm safety system that combines AI object recognition with ballistic modeling to increase user safety and accuracy. The system acts as a "smart safety" that physically blocks the trigger and only releases it when aiming at a validated target with >90% hit probability.
+The CoralEdgeTpu project is an advanced computer vision system built for real-time object detection and tracking using Google Coral Edge TPU hardware. It implements a "smart safety" system that performs AI-based object recognition with ballistics calculations for precision targeting applications.
 
-## Core Architecture
+## Architecture
 
-The system is designed with an extremely tight **latency budget**:
-- Total end-to-end latency requirement: <100 ms
-- Mechanical servo actuation delay: ~70 ms
-- Software pipeline budget: <30 ms
+The system follows a multi-threaded pipeline architecture with these main components:
 
-Key architectural components:
-1. **Doeldetectie**: Object detection using a custom-trained MobileNetSSD model (INT8 quantized)
-2. **Safety Gating**: Servo motor that blocks the trigger, only releasing when ballistic hit point is within bullseye (13x13cm)
-3. **Ballistic Calculations**: Calculates impact point based on distance, bullet trajectory, and sensor data
-4. **Feedback**: Streams video with augmented reality overlay to an Android app
+- **Camera Capture**: Uses libcamera for high-performance video capture with dual streams (main display and TPU inference)
+- **Inference Engine**: TensorFlow Lite with Edge TPU acceleration for object detection
+- **Logic Module**: Core safety and ballistics calculations, including 3D trajectory prediction
+- **Image Processor**: Handles image preprocessing and post-processing operations
+- **H264 Encoder**: Video encoding for streaming
+- **RTSP Server**: Real-time streaming protocol server
+- **System Monitor**: Performance and health monitoring
+- **Orientation Sensor**: 3D orientation tracking
+- **PCA9685 Controller**: Servo motor control for actuation
 
-## Technology Stack
+## Build System
 
-- **Language**: C++ (no Python/containers in production)
-- **Hardware**: Raspberry Pi 5, Google Coral M.2 Edge TPU (PCIe), MG995 Servo via PCA9685 PWM driver
-- **Libraries**: TensorFlow Lite, libcamera, OpenCV, ZeroMQ, Boost
-- **Optimizations**: Zero-copy pipelines with DMA buffers, custom kernel patches, CPU isolation
+The project uses CMake for building with the following structure:
+- Primary executable: `detector` - Main application binary
+- Supporting executables: `camera_isolation_test`, `inference_test_no_logging`, `raw_tpu_test`, `tpu_diagnostic`, `tpu_performance_test`
+- Dependencies: libcamera, OpenCV, TensorFlow Lite, Edge TPU runtime, ZeroMQ, Live555, x264
 
-## Key Modules
+## Development Commands
 
-- **Application**: Main orchestrator (src/application.h, src/application.cpp)
-- **CameraCapture**: Video capture pipeline using libcamera (src/camera_capture.h, src/camera_capture.cpp)
-- **InferenceEngine**: TensorFlow Lite inference with Edge TPU acceleration (src/inference.h, src/inference.cpp)
-- **LogicModule**: Core ballistic calculations and safety logic (src/logic.h, src/logic.cpp)
-- **ImageProcessor**: Image preprocessing (src/image_processor.h, src/image_processor.cpp)
-- **SystemMonitor**: System health monitoring (src/system_monitor.h, src/system_monitor.cpp)
-
-## Build Commands
-
+### Building
 ```bash
-# Full build (installs dependencies, builds FlatBuffers, sets up TensorFlow)
+# Full build process (includes dependency setup)
 ./build.sh
 
-# Alternative manual build
+# Standard CMake build (if dependencies already set up)
 mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Werror" ../
+cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 
-# Build specific targets
-make detector                    # Main application
-make config_loader_test         # Configuration loader tests
-make servo_test                 # Servo controller tests
+# Alternative debug build
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Debug
+make -j$(nproc)
 ```
 
-## Test Commands
-
+### Running
 ```bash
-# Run specific tests
-./config_loader_test            # Configuration loader unit tests
-make config_loader_test && ./config_loader_test  # Build and run config tests
+# Run main detector application
+cd build && ./detector
 
-# List all available test targets
-make help | grep test
+# Run integrated system with dashboard
+./start_integrated.sh
+
+# Run tests
+cd build
+./config_loader_test
+./camera_isolation_test
+./inference_test_no_logging
 ```
 
-## Configuration
+### Testing and Analysis
+```bash
+# Run stress test
+./run_stress_test.sh
 
-Main configuration file: `config.json`
+# Run 4-hour GDB test
+./run_detector_gdb_4h.sh
 
-Key sections:
-- `application`: Model paths, resolution settings, thresholds
-- `ballistics`: Weapon and ammunition properties
-- `tracking`: Object tracking parameters
-- `safety`: Safety thresholds for trigger release
-- `network_ports`: Network port mappings for communication
+# Monitor stress test
+./stress_test_monitor.sh
 
-## Code Structure
+# RTSP frame capture and analysis
+python3 rtsp_frame_capture.py
 
-```
-src/
-├── application.h/cpp          # Main application orchestrator
-├── camera_capture.h/cpp       # Libcamera-based video capture
-├── inference.h/cpp            # TFLite inference engine
-├── logic.h/cpp                # Ballistic calculations and safety logic
-├── image_processor.h/cpp      # Image preprocessing
-├── config_loader.h/cpp        # Configuration management
-├── pca9685_controller.h/cpp   # Servo motor control
-├── system_monitor.h/cpp       # System health monitoring
-├── pipeline_structs.h         # Data structures for pipeline
-└── buffer_pool.h             # Memory management utilities
-
-tests/
-├── config_loader_test.cpp    # Unit tests for config loader
-└── other test files
+# Various analysis scripts
+python3 calculate_fps.py
+python3 comprehensive_analysis.py
+python3 enhanced_analysis.py
 ```
 
-## Performance Requirements
+### Cleanup
+```bash
+# Cleanup script
+./cleanup.sh
 
-Stage Gate Plan:
-1. **Stage 0**: Technical feasibility & performance limits (≥120 FPS camera/TPU)
-2. **Stage 1**: System-wide C++ implementation & bottleneck analysis
-3. **Stage 2**: Full integration & zero-copy optimization (<100ms end-to-end latency)
-4. **Stage 3**: Validation & verification (4-hour stress test)
+# Clean build directory
+rm -rf build/
+```
 
-## Key Files
+## Key Configuration
 
-- `detector`: Main executable
-- `config.json`: Main configuration
-- `detect_int8_edgetpu.tflite`: AI model
-- `coco_labels.txt`: Object detection labels
-- `logs/`: Log directory for all subsystems
+- Configuration file: `config.json` - Contains model paths, camera settings, ballistics parameters, and network ports
+- Model: `detect_int8_edgetpu.tflite` - INT8 quantized MobileNetSSD model
+- Labels: `labelmap.pbtxt` - Object class labels
+- Target latency: <100ms end-to-end (with 30ms software budget after 70ms servo actuation)
+
+## Logging and Monitoring
+
+- Log files: `/logs/` directory with CSV-formatted logs
+- Real-time monitoring: `Monitor` class with performance metrics
+- Telemetry: ZeroMQ-based data streaming on port 11002
+- RTSP streaming: Available on port 8554 with mount point `/live`

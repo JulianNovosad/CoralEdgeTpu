@@ -3,6 +3,8 @@
 #include <csignal>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <termios.h>  // for terminal settings
+#include <stdlib.h>   // for atexit
 
 // Define the global atomic flag
 std::atomic<bool> shutdown_requested(false);
@@ -10,12 +12,36 @@ std::atomic<bool> shutdown_requested(false);
 // Static member definition
 bool ApplicationSupervisor::shutdown_in_progress_ = false;
 
+// External declaration for terminal settings
+extern struct termios original_termios;
+
+// Flag to track if terminal settings have been restored
+static bool terminal_restored = false;
+
+// Function to restore terminal settings
+void restore_terminal_settings() {
+    if (!terminal_restored) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
+        terminal_restored = true;
+    }
+}
+
 // Static member function to handle signals
 void signal_handler(int signal) {
+    // Restore terminal settings before setting shutdown flag
+    restore_terminal_settings();
+    // Only set the atomic flag - do minimal work in signal handler
     if (signal == SIGINT || signal == SIGTERM || signal == SIGQUIT) {
-        // Only set the atomic flag - do minimal work in signal handler
         shutdown_requested = true;
+    } else if (signal == SIGSEGV || signal == SIGABRT) {
+        // For crash signals, we just restore terminal and exit
+        _exit(128 + signal);
     }
+}
+
+// Exit handler for normal termination
+void exit_handler() {
+    restore_terminal_settings();
 }
 
 ApplicationSupervisor::ApplicationSupervisor() {
@@ -48,6 +74,18 @@ void ApplicationSupervisor::setup_signal_handlers() {
     }
     if (std::signal(SIGQUIT, signal_handler) == SIG_ERR) {
         APP_LOG_ERROR("Failed to register SIGQUIT handler.");
+    }
+    // Register handlers for crash signals as well
+    if (std::signal(SIGSEGV, signal_handler) == SIG_ERR) {
+        APP_LOG_ERROR("Failed to register SIGSEGV handler.");
+    }
+    if (std::signal(SIGABRT, signal_handler) == SIG_ERR) {
+        APP_LOG_ERROR("Failed to register SIGABRT handler.");
+    }
+    
+    // Register exit handler for normal termination
+    if (atexit(exit_handler) != 0) {
+        APP_LOG_ERROR("Failed to register exit handler.");
     }
 }
 

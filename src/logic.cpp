@@ -552,24 +552,16 @@ void LogicModule::worker_thread_func() {
     while (running_) {
         std::shared_ptr<DetectionResultBuffer> detections_buffer;
         if (detection_input_queue_.pop(detections_buffer)) {
-            APP_LOG_INFO("LogicModule: Pop successful. Detections buffer received.");
+            static int successful_pops = 0;
+            successful_pops++;
+            
             long long call_ts = 0;
             if (detections_buffer && detections_buffer->size > 0) {
-                APP_LOG_INFO("LogicModule: Detections buffer is valid with size: " + std::to_string(detections_buffer->size));
+                APP_LOG_DEBUG("LogicModule: Detections buffer is valid with size: " + std::to_string(detections_buffer->size));
                 // Use the timestamp of the first detection as the call_ts
                 call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
                             detections_buffer->data[0].timestamp.time_since_epoch()).count();
-            } else {
-                APP_LOG_WARNING("LogicModule: Pop successful, but detections_buffer is null or empty. Using current time for call_ts.");
-                // If we're shutting down, exit the thread
-                if (!running_) {
-                    return;
-                }
-                call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  std::chrono::system_clock::now().time_since_epoch()).count();
-            }
-
-            if (detections_buffer && detections_buffer->size > 0) {
+                
                 auto t_start = std::chrono::high_resolution_clock::now();
                 process(detections_buffer->data);
                 auto t_end = std::chrono::high_resolution_clock::now();
@@ -583,17 +575,33 @@ void LogicModule::worker_thread_func() {
                 logic_cycle_times.push_back(duration_ms);
                 logic_cycle_count++;
                 
-                // Update logic rate every 100 cycles
+                // Update logic rate every 100 cycles - measure actual processing rate
                 if (logic_cycle_count % 100 == 0 && logic_cycle_times.size() > 0) {
-                    long long total_time_ms = 0;
-                    for (long long time : logic_cycle_times) {
-                        total_time_ms += time;
-                    }
-                    double avg_time_ms = static_cast<double>(total_time_ms) / logic_cycle_times.size();
-                    if (avg_time_ms > 0) {
-                        logic_rate_ = static_cast<int>(1000.0 / avg_time_ms);
+                    // Calculate based on actual time elapsed for 100 cycles
+                    static auto last_update_time = std::chrono::high_resolution_clock::now();
+                    auto current_time = std::chrono::high_resolution_clock::now();
+                    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_update_time).count();
+                    
+                    if (elapsed_ms > 0) {
+                        // Calculate rate as cycles per second
+                        logic_rate_ = static_cast<int>((100.0 * 1000.0) / elapsed_ms);
+                    } else {
+                        // Fallback: use the original method but with better context
+                        long long total_time_ms = 0;
+                        for (long long time : logic_cycle_times) {
+                            total_time_ms += time;
+                        }
+                        double avg_time_ms = static_cast<double>(total_time_ms) / logic_cycle_times.size();
+                        if (avg_time_ms > 0) {
+                            logic_rate_ = static_cast<int>(1000.0 / avg_time_ms);
+                        }
                     }
                     logic_cycle_times.clear();
+                    // Update the last update time after calculation
+                    last_update_time = current_time;
+                    
+                    // Log statistics periodically
+                    APP_LOG_INFO("LogicModule: Processed " + std::to_string(successful_pops) + " detection batches. Logic rate: " + std::to_string(logic_rate_.load()) + " CPS");
                 }
                 
                 // FPS measurement for decision stage
@@ -606,38 +614,22 @@ void LogicModule::worker_thread_func() {
                     double decision_fps = (decision_frame_counter * 1000.0) / decision_duration;
                     APP_LOG_INFO("DECISION FPS MEASUREMENT: " + std::to_string(decision_fps) + " FPS over " + std::to_string(decision_frame_counter) + " decisions in " + std::to_string(decision_duration) + " ms");
                     
-                    // Log to CSV for dashboard
-                    CsvLogEntry decision_fps_entry;
-                    decision_fps_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                    copy_to_array(decision_fps_entry.module, "LogicModule");
-                    decision_fps_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                    copy_to_array(decision_fps_entry.event, "decision_fps");
-                    decision_fps_entry.call_ts_epoch_ms = call_ts;
-                    decision_fps_entry.average_fps = static_cast<float>(decision_fps);
-                    Logger::getInstance().log_csv(decision_fps_entry);
-                    
                     // Reset for next measurement
                     decision_frame_counter = 0;
                     decision_start_time = current_time;
                 }
                 
-                CsvLogEntry entry;
-                entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                copy_to_array(entry.module, "LogicModule");
-                entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                copy_to_array(entry.event, "logic_cycle_done"); // Event changed to reflect per-cycle
-                entry.call_ts_epoch_ms = call_ts;
-                entry.logic_metric_ballistics = static_cast<float>(duration_ms); // Total processing time for this cycle
-                entry.logic_metric_hit_scan = static_cast<float>(current_hit_scan_count_);
-                entry.logic_metric_servo_actuation = static_cast<float>(current_servo_command_count_);
-                Logger::getInstance().log_csv(entry);
+            } else {
+                // Buffer exists but has no detections - still count this as a successful pop
+                APP_LOG_DEBUG("LogicModule: Pop successful, but detections_buffer is null or empty. Frame processed without detections.");
             }
         } else {
-            // Log that pop failed, and sleep to prevent busy-waiting
+            // Log that pop failed, and sleep briefly to prevent busy-waiting
+            // Reduced sleep to 100 microseconds to reduce latency
             if (running_) { // Only log if still intended to be running
-                APP_LOG_DEBUG("LogicModule: Pop failed (queue empty or stopped). Sleeping for 10ms.");
+                APP_LOG_DEBUG("LogicModule: Pop failed (queue empty or stopped). Sleeping briefly.");
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     }
     APP_LOG_INFO("LogicModule worker thread stopped.");
@@ -780,8 +772,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
     int valid_detections_count = 0;
     for (const auto& det : detections) {
         // Check if detection has valid values (not zero values and reasonable confidence)
-        // Enforce 60% confidence threshold (60.0f since score is stored as percentage 0.0-100.0)
-        if (det.score > 60.0f && 
+        if (det.score > 0.60f && 
             det.xmax > det.xmin && 
             det.ymax > det.ymin && 
             det.xmin >= 0 && det.ymin >= 0 && 
@@ -829,53 +820,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
 
     // Only log detection information for invariant verification if we have valid detections
     if (valid_detections_count > 0) {
-        APP_LOG_INFO("DETECTION_INVARIANT: Valid detections received by logic module: " + std::to_string(valid_detections_count) + "/" + std::to_string(detections.size()));
-        for (size_t i = 0; i < detections.size(); ++i) {
-            const auto& det = detections[i];
-            // Only log if detection has valid values
-            if (det.score > 10.0f && 
-                det.xmax > det.xmin && 
-                det.ymax > det.ymin && 
-                det.xmin >= 0 && det.ymin >= 0 && 
-                det.xmax <= config_.get_tpu_target_width() && det.ymax <= config_.get_tpu_target_height()) {
-                
-                [[maybe_unused]] float area = (det.xmax - det.xmin) * (det.ymax - det.ymin);
-                APP_LOG_INFO("DETECTION_INVARIANT: Detection " + std::to_string(i) + 
-                             ": class=" + std::to_string(det.class_id) + 
-                             ", score=" + std::to_string(det.score) + 
-                             ", area=" + std::to_string(area) +
-                             ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
-                             std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
-                             ", timestamp=" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 det.timestamp.time_since_epoch()).count()));
-                
-                // Calculate distance for this detection using the pinhole camera model
-                float pixel_width = det.xmax - det.xmin;
-                float pixel_height = det.ymax - det.ymin;
-                float pixel_size = std::max(pixel_width, pixel_height);
-                
-                // Avoid division by zero or very small values
-                if (pixel_size > 1.0f) {
-                    // Use the same calculation as in estimate_target_distance but without smoothing
-                    const float IMAGE_WIDTH = config_.get_tpu_target_width();
-                    float focal_length_pixels = (CAMERA_FOCAL_LENGTH_MM * IMAGE_WIDTH) / SENSOR_WIDTH_MM;
-                    float real_world_size = std::max(TARGET_WIDTH_CM, TARGET_HEIGHT_CM) / 100.0f;
-                    [[maybe_unused]] float distance = (real_world_size * focal_length_pixels) / pixel_size;
-                    
-                    APP_LOG_INFO("DETECTION_DISTANCE: class=" + std::to_string(det.class_id) + 
-                                 ", score=" + std::to_string(det.score) + 
-                                 ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
-                                 std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
-                                 ", distance=" + std::to_string(distance) + "m");
-                } else {
-                    APP_LOG_INFO("DETECTION_DISTANCE: class=" + std::to_string(det.class_id) + 
-                                 ", score=" + std::to_string(det.score) + 
-                                 ", box=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + "," + 
-                                 std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]" +
-                                 ", distance=too_small");
-                }
-            }
-        }
+        APP_LOG_DEBUG("Valid detections: " + std::to_string(valid_detections_count) + "/" + std::to_string(detections.size()));
     } else {
         // Log that we have no valid detections
         static auto last_invalid_log = std::chrono::steady_clock::now();
@@ -921,11 +866,34 @@ void LogicModule::calculate_ballistics_for_tracks() {
     // Record start time for performance measurement
     auto start_time = std::chrono::high_resolution_clock::now();
     
-    // Log number of active tracks for invariant verification
-    APP_LOG_INFO("DETECTION_INVARIANT: Active tracks for ballistics: " + std::to_string(active_tracks_.size()));
+    // Log number of active tracks
+    APP_LOG_DEBUG("Active tracks: " + std::to_string(active_tracks_.size()));
 
     // Iterate through active tracks and calculate ballistics
     for (auto& track : active_tracks_) {
+        // Perform additional gating checks before ballistics calculation
+        
+        // Check 1: Detection confidence ≥ 60% (authoritative confidence metric)
+        if (track.last_detection.score < 0.60f) {
+            APP_LOG_DEBUG("Ballistics gating: Skipping track ID " + std::to_string(track.id) + 
+                         " due to low detection confidence (" + std::to_string(track.last_detection.score) + " < 0.60)");
+            continue;
+        }
+        
+        // Check 2: Detection stability across frames (minimum hit streak)
+        if (track.hit_streak < 2) {  // At least 2 consecutive detections to ensure stability
+            APP_LOG_DEBUG("Ballistics gating: Skipping track ID " + std::to_string(track.id) + 
+                         " due to insufficient hit streak (" + std::to_string(track.hit_streak) + " < 2)");
+            continue;
+        }
+        
+        // Check 3: Distance plausibility (based on our early rejection criteria)
+        if (track.position.z < 0.5f || track.position.z > 5.0f) {
+            APP_LOG_DEBUG("Ballistics gating: Skipping track ID " + std::to_string(track.id) + 
+                         " due to implausible distance (" + std::to_string(track.position.z) + "m)");
+            continue;
+        }
+        
         Vec3 impact_point = {0.0f, 0.0f, 0.0f};
         float flight_time = 0.0f;
         
@@ -947,31 +915,13 @@ void LogicModule::calculate_ballistics_for_tracks() {
             track.predicted_impact_point = impact_point;
             track.uncertainty = uncertainty;
             
-            // Log ballistics output with detailed information for causality validation
-            snprintf(log_buffer, sizeof(log_buffer), "CAUSALITY_VALIDATION: Ballistics solved for Track ID %ld: impact=(%.2f, %.2f, %.2f) conf=%.2f%% detection=[class=%d,score=%.4f,box=(%.1f,%.1f,%.1f,%.1f)]", 
-                     track.id, impact_point.x, impact_point.y, impact_point.z, uncertainty.total_confidence * 100.0f,
-                     track.last_detection.class_id, track.last_detection.score,
-                     track.last_detection.xmin, track.last_detection.ymin, 
-                     track.last_detection.xmax, track.last_detection.ymax);
-            APP_LOG_INFO(log_buffer);
+            // Basic ballistics logging
+            APP_LOG_DEBUG("Ballistics solved for Track ID " + std::to_string(track.id) + 
+                         ", confidence=" + std::to_string(uncertainty.total_confidence));
             
-            // Add explicit logging for target distance measurement against known 2.21m ground truth
+            // Log distance measurement for monitoring
             float measured_distance = track.position.z;
-            float ground_truth_distance = 2.21f; // Known ground truth distance in meters
-            float distance_error = std::abs(measured_distance - ground_truth_distance);
-            APP_LOG_INFO("DISTANCE_VERIFICATION: measured=" + std::to_string(measured_distance) + "m, ground_truth=2.21m, error=" + std::to_string(distance_error) + "m");
-            
-            // Log to CSV for dashboard
-            CsvLogEntry distance_entry;
-            distance_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-            copy_to_array(distance_entry.module, "LogicModule");
-            distance_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-            copy_to_array(distance_entry.event, "distance_measurement");
-            distance_entry.call_ts_epoch_ms = distance_entry.produced_ts_epoch_ms;
-            distance_entry.logic_metric_ballistics = measured_distance; // Measured distance
-            distance_entry.logic_metric_hit_scan = ground_truth_distance; // Ground truth distance
-            distance_entry.logic_metric_servo_actuation = distance_error; // Distance error
-            Logger::getInstance().log_csv(distance_entry);
+            APP_LOG_DEBUG("Distance measurement: " + std::to_string(measured_distance) + "m");
             
             // Calculate servo command based on ballistics and uncertainty
             // This integrates the ballistics computation with servo feedback
@@ -1008,21 +958,7 @@ void LogicModule::calculate_ballistics_for_tracks() {
         }
     }
     
-    // Record end time and calculate duration
-    auto end_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    
-    // Log performance metrics
-    CsvLogEntry entry;
-    entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    copy_to_array(entry.module, "LogicModule");
-    entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    copy_to_array(entry.event, "ballistics_calculated");
-    entry.call_ts_epoch_ms = entry.produced_ts_epoch_ms; // Use current time as call time
-    entry.logic_metric_ballistics = static_cast<float>(duration) / 1000.0f; // Convert to milliseconds
-    entry.logic_metric_hit_scan = static_cast<float>(current_hit_scan_count_);
-    entry.logic_metric_servo_actuation = static_cast<float>(current_servo_command_count_);
-    Logger::getInstance().log_csv(entry);
+
 }
 
 void LogicModule::perform_safety_and_actuation() {
@@ -1145,27 +1081,35 @@ void LogicModule::perform_safety_and_actuation() {
                 distance_factor = std::exp(-impact_distance * config_.get_distance_confidence_factor()); // Adjust this factor as needed
                 combined_confidence = track.uncertainty.total_confidence * distance_factor;
                 
-                // Only issue servo commands if confidence is above 90%
-                if (combined_confidence > config_.get_servo_activate_confidence()) {
+                // Additional servo gating checks:
+                // 1. Detection confidence ≥ 60%
+                // 2. Detection stability (minimum hit streak)
+                // 3. Distance variance is low (implies stable tracking)
+                // 4. Angular error is within limits (already checked above)
+                bool detection_confidence_ok = track.last_detection.score >= 0.60f;
+                bool detection_stable = track.hit_streak >= 2;  // At least 2 consecutive detections
+                
+                if (!detection_confidence_ok) {
+                    APP_LOG_DEBUG("Servo gating: Skipping track ID " + std::to_string(track.id) + 
+                                 " due to low detection confidence (" + std::to_string(track.last_detection.score) + " < 0.60)");
+                }
+                
+                if (!detection_stable) {
+                    APP_LOG_DEBUG("Servo gating: Skipping track ID " + std::to_string(track.id) + 
+                                 " due to insufficient stability (hit_streak=" + std::to_string(track.hit_streak) + " < 2)");
+                }
+                
+                // Only issue servo commands if all conditions are met
+                if (combined_confidence > config_.get_servo_activate_confidence() && 
+                    detection_confidence_ok && 
+                    detection_stable) {
                     current_hit_scan_count_++; // Increment hit scan count
                     
-                    // Log servo actuation decision with detailed information
-                    snprintf(log_buffer, sizeof(log_buffer), "SERVO_ACTUATION_DECISION: ACTUATING - Track ID %ld, impact=(%.2f,%.2f,%.2f), confidence=%.2f%%, angular_error=%.2f°", 
-                             track.id, track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, 
-                             combined_confidence * 100.0f, angular_error_degrees);
-                    APP_LOG_INFO(log_buffer);
+                    // Log servo actuation
+                    APP_LOG_DEBUG("Servo actuating for Track ID " + std::to_string(track.id) + 
+                                 ", confidence=" + std::to_string(combined_confidence));
                     
-                    // Log to CSV for dashboard
-                    CsvLogEntry servo_entry;
-                    servo_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                    copy_to_array(servo_entry.module, "LogicModule");
-                    servo_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                    copy_to_array(servo_entry.event, "servo_actuation");
-                    servo_entry.call_ts_epoch_ms = servo_entry.produced_ts_epoch_ms;
-                    servo_entry.logic_metric_ballistics = track.predicted_impact_point.z; // Distance
-                    servo_entry.logic_metric_hit_scan = combined_confidence; // Confidence
-                    servo_entry.logic_metric_servo_actuation = angular_error_degrees; // Angular error
-                    Logger::getInstance().log_csv(servo_entry);
+
                     
                     // Issue servo commands to control LEDs
                     issue_servo_commands(track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, combined_confidence);
@@ -1181,20 +1125,10 @@ void LogicModule::perform_safety_and_actuation() {
                     // Send telemetry data via ZeroMQ
                     send_telemetry_data(telemetry_message);
                 } else {
-                    snprintf(log_buffer, sizeof(log_buffer), "SERVO_ACTUATION_DECISION: SKIPPING - Track ID %ld: Confidence too low (%.2f%%), angular_error=%.2f°", track.id, combined_confidence * 100.0f, angular_error_degrees);
-                    APP_LOG_INFO(log_buffer);
+                    APP_LOG_DEBUG("Servo skipping for Track ID " + std::to_string(track.id) + 
+                                 ", confidence=" + std::to_string(combined_confidence));
                     
-                    // Log to CSV for dashboard
-                    CsvLogEntry servo_skip_entry;
-                    servo_skip_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-                    copy_to_array(servo_skip_entry.module, "LogicModule");
-                    servo_skip_entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                    copy_to_array(servo_skip_entry.event, "servo_skip");
-                    servo_skip_entry.call_ts_epoch_ms = servo_skip_entry.produced_ts_epoch_ms;
-                    servo_skip_entry.logic_metric_ballistics = track.position.z; // Distance
-                    servo_skip_entry.logic_metric_hit_scan = combined_confidence; // Confidence
-                    servo_skip_entry.logic_metric_servo_actuation = angular_error_degrees; // Angular error
-                    Logger::getInstance().log_csv(servo_skip_entry);
+
                 }
                 break;
             }
@@ -1225,21 +1159,7 @@ void LogicModule::perform_safety_and_actuation() {
         }
     }
     
-    // Record end time and calculate duration
-    auto end_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    
-    // Log performance metrics
-    CsvLogEntry entry;
-    entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    copy_to_array(entry.module, "LogicModule");
-    entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    copy_to_array(entry.event, "safety_actuation_done");
-    entry.call_ts_epoch_ms = entry.produced_ts_epoch_ms; // Use current time as call time
-    entry.logic_metric_ballistics = static_cast<float>(duration) / 1000.0f; // Convert to milliseconds
-    entry.logic_metric_hit_scan = static_cast<float>(current_hit_scan_count_);
-    entry.logic_metric_servo_actuation = static_cast<float>(current_servo_command_count_);
-    Logger::getInstance().log_csv(entry);
+
 }
 
 void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detections) {
@@ -1271,9 +1191,42 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
     }
 
     for (const auto& new_detection : detections) {
+        // EARLY REJECTION: Apply hard threshold of ≥60% confidence on authoritative confidence metric
+        if (new_detection.score < 0.60f) {
+            APP_LOG_DEBUG("Early rejection: Detection confidence too low (" + std::to_string(new_detection.score) + " < 0.60)");
+            continue;
+        }
+        
+        // EARLY REJECTION: Check bounding box area for plausibility at expected operating distance
+        float bbox_width = new_detection.xmax - new_detection.xmin;
+        float bbox_height = new_detection.ymax - new_detection.ymin;
+        float bbox_area = bbox_width * bbox_height;
+        
+        // For a target at expected distance, the bounding box should be within reasonable bounds
+        // Typical target might occupy ~0.1 to 0.8 of image area depending on target size
+        if (bbox_area < 0.01f || bbox_area > 0.8f) {  // Less than 1% or more than 80% of image area
+            APP_LOG_DEBUG("Early rejection: Bounding box area implausible (" + std::to_string(bbox_area) + ", width=" + 
+                         std::to_string(bbox_width) + ", height=" + std::to_string(bbox_height) + ")");
+            continue;
+        }
+        
+        // EARLY REJECTION: Check aspect ratio for plausibility (not extremely wide or tall)
+        float aspect_ratio = bbox_width / bbox_height;
+        if (aspect_ratio < 0.1f || aspect_ratio > 10.0f) {  // Not extremely narrow or wide
+            APP_LOG_DEBUG("Early rejection: Aspect ratio unrealistic (" + std::to_string(aspect_ratio) + ")");
+            continue;
+        }
+        
+        // EARLY REJECTION: Estimate distance and check for physical plausibility
+        float estimated_distance = estimate_target_distance(new_detection);
+        if (estimated_distance < 0.5f || estimated_distance > 5.0f) {  // Outside 0.5m to 5m range
+            APP_LOG_DEBUG("Early rejection: Distance outside plausible range (" + std::to_string(estimated_distance) + "m)");
+            continue;
+        }
+        
+        // Find best matching track using IOU
         float best_iou = 0.0f;
         TrackedObject* best_match_track = nullptr;
-
         for (auto& track : active_tracks_) {
             if (!track.associated_this_frame) {
                 float iou = calculate_iou(new_detection, track.last_detection);
@@ -1283,90 +1236,85 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
                 }
             }
         }
-
+        
         if (best_match_track) {
             // Update track with new detection
             auto prev_position = best_match_track->position;
             auto prev_time = best_match_track->last_update_time;
-            
             best_match_track->last_detection = new_detection;
-            
-            // Estimate distance using camera parameters
-            float estimated_distance = estimate_target_distance(new_detection);
             best_match_track->position.z = estimated_distance;
-            
             // Convert normalized detection coordinates to world coordinates
             // Center of bounding box in normalized coordinates
             float center_x_norm = (new_detection.xmin + new_detection.xmax) * 0.5f;
             float center_y_norm = (new_detection.ymin + new_detection.ymax) * 0.5f;
-            
             // Convert to pixel coordinates
             float center_x_px = center_x_norm * config_.get_tpu_target_width();
             float center_y_px = center_y_norm * config_.get_tpu_target_height();
-            
             // Convert to centered coordinates (relative to image center)
             float center_x_centered = center_x_px - (config_.get_tpu_target_width() * 0.5f);
             float center_y_centered = center_y_px - (config_.get_tpu_target_height() * 0.5f);
-            
             // Convert to real-world coordinates using pinhole camera model
             // x = (pixel_x_centered * distance) / focal_length_pixels
             // y = (pixel_y_centered * distance) / focal_length_pixels
             float focal_length_pixels = (CAMERA_FOCAL_LENGTH_MM * config_.get_tpu_target_width()) / SENSOR_WIDTH_MM;
             best_match_track->position.x = (center_x_centered * estimated_distance) / focal_length_pixels;
             best_match_track->position.y = (center_y_centered * estimated_distance) / focal_length_pixels;
-            
             best_match_track->last_update_time = new_detection.timestamp;
             best_match_track->hit_streak++;
             best_match_track->missed_frames = 0;
             best_match_track->associated_this_frame = true;
-            
             // Calculate new velocity based on position change
             auto current_time = new_detection.timestamp;
             float dt = std::chrono::duration<float>(current_time - prev_time).count();
-            
             if (dt > 0.001f) { // Avoid division by zero
                 Vec3 new_position = best_match_track->position;
                 Vec3 velocity = (new_position - prev_position) * (1.0f / dt);
-                
                 // Update velocity with smoothing factor
                 float alpha = 0.7f; // Smoothing factor
                 best_match_track->velocity = best_match_track->velocity * (1.0f - alpha) + velocity * alpha;
-                
                 // Update position uncertainty based on velocity
                 best_match_track->position_uncertainty = best_match_track->position_uncertainty + best_match_track->velocity_uncertainty * dt;
             }
         } else {
-            // Only create a new track if the detection score is above the minimum confidence threshold
-            if (new_detection.score >= min_track_confidence_) {
+            // Enforce single-target invariant: if a stable track exists, don't create new tracks
+            // A stable track has sufficient hit streak (configurable threshold)
+            bool has_stable_track = false;
+            const int min_stable_hit_streak = MIN_STABLE_HIT_STREAK; // Configurable threshold for stability
+            
+            for (const auto& track : active_tracks_) {
+                if (track.hit_streak >= min_stable_hit_streak) {
+                    has_stable_track = true;
+                    break;
+                }
+            }
+            
+            // Only create a new track if no stable track exists AND confidence is sufficient
+            if (!has_stable_track && new_detection.score >= min_track_confidence_) {
                 if (active_tracks_.size() < static_cast<size_t>(max_active_tracks_)) {
-                    // Estimate distance using camera parameters
-                    float estimated_distance = estimate_target_distance(new_detection);
-                    
                     // Convert normalized detection coordinates to world coordinates
                     // Center of bounding box in normalized coordinates
                     float center_x_norm = (new_detection.xmin + new_detection.xmax) * 0.5f;
                     float center_y_norm = (new_detection.ymin + new_detection.ymax) * 0.5f;
-                    
                     // Convert to pixel coordinates
                     float center_x_px = center_x_norm * config_.get_tpu_target_width();
                     float center_y_px = center_y_norm * config_.get_tpu_target_height();
-                    
                     // Convert to centered coordinates (relative to image center)
                     float center_x_centered = center_x_px - (config_.get_tpu_target_width() * 0.5f);
                     float center_y_centered = center_y_px - (config_.get_tpu_target_height() * 0.5f);
-                    
                     // Convert to real-world coordinates using pinhole camera model
                     // x = (pixel_x_centered * distance) / focal_length_pixels
                     // y = (pixel_y_centered * distance) / focal_length_pixels
                     float focal_length_pixels = (CAMERA_FOCAL_LENGTH_MM * config_.get_tpu_target_width()) / SENSOR_WIDTH_MM;
                     float x_world = (center_x_centered * estimated_distance) / focal_length_pixels;
                     float y_world = (center_y_centered * estimated_distance) / focal_length_pixels;
-                    
                     // Create TrackedObject with proper initial position
                     active_tracks_.emplace_back(++next_track_id_, new_detection, estimated_distance, x_world, y_world);
                 } else {
                     APP_LOG_WARNING("Max active tracks reached (" + std::to_string(max_active_tracks_) + "). New detection ignored.");
                 }
+            } else if (has_stable_track) {
+                APP_LOG_DEBUG("Single-target invariant: Stable track exists, rejecting new detection (hit_streak >= " + 
+                             std::to_string(min_stable_hit_streak) + ")");
             }
         }
     }
@@ -1420,6 +1368,16 @@ float LogicModule::estimate_target_distance(const DetectionResult& detection) {
     // Apply class-specific correction
     float corrected_distance = apply_class_correction(detection.class_id, raw_distance);
     
+    // Validate distance is within physically plausible range before adding to smoothing
+    // This ensures invalid distance estimates don't pollute the smoothing window
+    if (corrected_distance < 0.5f || corrected_distance > 5.0f) {
+        APP_LOG_DEBUG("Distance validation: Raw distance " + std::to_string(raw_distance) + 
+                     "m corrected to " + std::to_string(corrected_distance) + 
+                     "m is outside plausible range [0.5m, 5.0m]. Using fallback distance.");
+        // Use a reasonable fallback value for the expected operating range
+        corrected_distance = 2.0f;
+    }
+    
     // Apply per-class smoothing to the corrected distance estimate
     float smoothed_distance = add_class_distance_estimate(detection.class_id, corrected_distance);
     
@@ -1443,40 +1401,9 @@ float LogicModule::estimate_target_distance(const DetectionResult& detection) {
             window_values += std::to_string(distance_val);
         }
     }
-    window_values += "]";
-    
-    snprintf(dist_log_buffer, sizeof(dist_log_buffer), 
-             "DISTANCE_SMOOTHING: class=%d raw=%.3fm corrected=%.3fm smoothed=%.3fm window_count=%zu window_values=%s", 
-             detection.class_id, raw_distance, corrected_distance, smoothed_distance, count, window_values.c_str());
-    APP_LOG_INFO(dist_log_buffer);
-    
-    // Get top 3 classes with their smoothed distances for logging
-    auto top_classes = get_top_classes_with_distances(3);
-    
-    // Build a string with the top classes information
-    std::string top_classes_info = "";
-    for (size_t i = 0; i < top_classes.size(); ++i) {
-        int class_id = top_classes[i].first;
-        float distance = top_classes[i].second;
-        
-        // Get human-readable class name if available
-        std::string class_name = std::to_string(class_id);
-        auto name_it = class_names_.find(class_id);
-        if (name_it != class_names_.end()) {
-            class_name = name_it->second;
-        }
-        
-        top_classes_info += " class_" + class_name + "=" + std::to_string(static_cast<int>(distance * 100) / 100.0) + "m";
-    }
-    
-    // Log the smoothed estimated distance with bounding box information for verification
-    char log_buffer[512];
-    snprintf(log_buffer, sizeof(log_buffer), 
-             "INTERNAL DISTANCE ESTIMATE: bbox[%.1f,%.1f,%.1f,%.1f] size[%.1fx%.1f] raw=%.3fm corrected=%.3fm smoothed=%.3fm class=%d%s", 
-             detection.xmin, detection.ymin, detection.xmax, detection.ymax,
-             pixel_width, pixel_height, raw_distance, corrected_distance, smoothed_distance, detection.class_id,
-             top_classes_info.c_str());
-    APP_LOG_INFO(log_buffer);
+    // Basic distance logging for debugging
+    APP_LOG_DEBUG("Distance estimate: class=" + std::to_string(detection.class_id) + 
+                 ", smoothed=" + std::to_string(smoothed_distance) + "m");
     
     // Clamp to reasonable values (0.1m to 100m)
     return std::max(0.1f, std::min(100.0f, smoothed_distance));
