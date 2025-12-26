@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <termios.h>  // for terminal settings
 #include <stdlib.h>   // for atexit
+#include <atomic>     // for memory_order
 
 // Define the global atomic flag
 std::atomic<bool> shutdown_requested(false);
@@ -32,7 +33,7 @@ void signal_handler(int signal) {
     restore_terminal_settings();
     // Only set the atomic flag - do minimal work in signal handler
     if (signal == SIGINT || signal == SIGTERM || signal == SIGQUIT) {
-        shutdown_requested = true;
+        shutdown_requested.store(true, std::memory_order_release);
     } else if (signal == SIGSEGV || signal == SIGABRT) {
         // For crash signals, we just restore terminal and exit
         _exit(128 + signal);
@@ -65,21 +66,28 @@ void ApplicationSupervisor::register_child_process(pid_t pid) {
 }
 
 void ApplicationSupervisor::setup_signal_handlers() {
+    struct sigaction sa;
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0; // No SA_RESTART to allow interruption of blocking calls
+    
     // Register signal handlers for SIGINT (Ctrl+C), SIGTERM, and SIGQUIT
-    if (std::signal(SIGINT, signal_handler) == SIG_ERR) {
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
         APP_LOG_ERROR("Failed to register SIGINT handler.");
     }
-    if (std::signal(SIGTERM, signal_handler) == SIG_ERR) {
+    if (sigaction(SIGTERM, &sa, NULL) == -1) {
         APP_LOG_ERROR("Failed to register SIGTERM handler.");
     }
-    if (std::signal(SIGQUIT, signal_handler) == SIG_ERR) {
+    if (sigaction(SIGQUIT, &sa, NULL) == -1) {
         APP_LOG_ERROR("Failed to register SIGQUIT handler.");
     }
+    
     // Register handlers for crash signals as well
-    if (std::signal(SIGSEGV, signal_handler) == SIG_ERR) {
+    sa.sa_handler = signal_handler; // Reuse same handler
+    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
         APP_LOG_ERROR("Failed to register SIGSEGV handler.");
     }
-    if (std::signal(SIGABRT, signal_handler) == SIG_ERR) {
+    if (sigaction(SIGABRT, &sa, NULL) == -1) {
         APP_LOG_ERROR("Failed to register SIGABRT handler.");
     }
     

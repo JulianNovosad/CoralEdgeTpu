@@ -209,10 +209,24 @@ CMakeFiles/detector.dir/src/monitor.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/monitor.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/monitor.cpp -o CMakeFiles/detector.dir/src/monitor.cpp.s
 
+CMakeFiles/detector.dir/src/global_definitions.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/src/global_definitions.cpp.o: src/global_definitions.cpp
+CMakeFiles/detector.dir/src/global_definitions.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/detector.dir/src/global_definitions.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/global_definitions.cpp.o -MF CMakeFiles/detector.dir/src/global_definitions.cpp.o.d -o CMakeFiles/detector.dir/src/global_definitions.cpp.o -c /home/pi/CoralEdgeTpu/src/global_definitions.cpp
+
+CMakeFiles/detector.dir/src/global_definitions.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/global_definitions.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/global_definitions.cpp > CMakeFiles/detector.dir/src/global_definitions.cpp.i
+
+CMakeFiles/detector.dir/src/global_definitions.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/global_definitions.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/global_definitions.cpp -o CMakeFiles/detector.dir/src/global_definitions.cpp.s
+
 CMakeFiles/detector.dir/src/h264_encoder.cpp.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/src/h264_encoder.cpp.o: src/h264_encoder.cpp
 CMakeFiles/detector.dir/src/h264_encoder.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/detector.dir/src/h264_encoder.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/detector.dir/src/h264_encoder.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/h264_encoder.cpp.o -MF CMakeFiles/detector.dir/src/h264_encoder.cpp.o.d -o CMakeFiles/detector.dir/src/h264_encoder.cpp.o -c /home/pi/CoralEdgeTpu/src/h264_encoder.cpp
 
 CMakeFiles/detector.dir/src/h264_encoder.cpp.i: cmake_force
@@ -226,7 +240,7 @@ CMakeFiles/detector.dir/src/h264_encoder.cpp.s: cmake_force
 CMakeFiles/detector.dir/src/orientation_sensor.cpp.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/src/orientation_sensor.cpp.o: src/orientation_sensor.cpp
 CMakeFiles/detector.dir/src/orientation_sensor.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/detector.dir/src/orientation_sensor.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/detector.dir/src/orientation_sensor.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/orientation_sensor.cpp.o -MF CMakeFiles/detector.dir/src/orientation_sensor.cpp.o.d -o CMakeFiles/detector.dir/src/orientation_sensor.cpp.o -c /home/pi/CoralEdgeTpu/src/orientation_sensor.cpp
 
 CMakeFiles/detector.dir/src/orientation_sensor.cpp.i: cmake_force
@@ -240,7 +254,7 @@ CMakeFiles/detector.dir/src/orientation_sensor.cpp.s: cmake_force
 CMakeFiles/detector.dir/src/application_supervisor.cpp.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/src/application_supervisor.cpp.o: src/application_supervisor.cpp
 CMakeFiles/detector.dir/src/application_supervisor.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/detector.dir/src/application_supervisor.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/detector.dir/src/application_supervisor.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/application_supervisor.cpp.o -MF CMakeFiles/detector.dir/src/application_supervisor.cpp.o.d -o CMakeFiles/detector.dir/src/application_supervisor.cpp.o -c /home/pi/CoralEdgeTpu/src/application_supervisor.cpp
 
 CMakeFiles/detector.dir/src/application_supervisor.cpp.i: cmake_force
@@ -254,7 +268,7 @@ CMakeFiles/detector.dir/src/application_supervisor.cpp.s: cmake_force
 CMakeFiles/detector.dir/src/system_monitor.cpp.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/src/system_monitor.cpp.o: src/system_monitor.cpp
 CMakeFiles/detector.dir/src/system_monitor.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/detector.dir/src/system_monitor.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/detector.dir/src/system_monitor.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/system_monitor.cpp.o -MF CMakeFiles/detector.dir/src/system_monitor.cpp.o.d -o CMakeFiles/detector.dir/src/system_monitor.cpp.o -c /home/pi/CoralEdgeTpu/src/system_monitor.cpp
 
 CMakeFiles/detector.dir/src/system_monitor.cpp.i: cmake_force
@@ -268,7 +282,7 @@ CMakeFiles/detector.dir/src/system_monitor.cpp.s: cmake_force
 CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o: src/keyboard_monitor.cpp
 CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o -MF CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o.d -o CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o -c /home/pi/CoralEdgeTpu/src/keyboard_monitor.cpp
 
 CMakeFiles/detector.dir/src/keyboard_monitor.cpp.i: cmake_force
@@ -279,10 +293,24 @@ CMakeFiles/detector.dir/src/keyboard_monitor.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/keyboard_monitor.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/keyboard_monitor.cpp -o CMakeFiles/detector.dir/src/keyboard_monitor.cpp.s
 
+CMakeFiles/detector.dir/src/http_streamer.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/src/http_streamer.cpp.o: src/http_streamer.cpp
+CMakeFiles/detector.dir/src/http_streamer.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building CXX object CMakeFiles/detector.dir/src/http_streamer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/http_streamer.cpp.o -MF CMakeFiles/detector.dir/src/http_streamer.cpp.o.d -o CMakeFiles/detector.dir/src/http_streamer.cpp.o -c /home/pi/CoralEdgeTpu/src/http_streamer.cpp
+
+CMakeFiles/detector.dir/src/http_streamer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/http_streamer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/http_streamer.cpp > CMakeFiles/detector.dir/src/http_streamer.cpp.i
+
+CMakeFiles/detector.dir/src/http_streamer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/http_streamer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/http_streamer.cpp -o CMakeFiles/detector.dir/src/http_streamer.cpp.s
+
 CMakeFiles/detector.dir/src/rtsp_server.cpp.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/src/rtsp_server.cpp.o: src/rtsp_server.cpp
 CMakeFiles/detector.dir/src/rtsp_server.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/detector.dir/src/rtsp_server.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building CXX object CMakeFiles/detector.dir/src/rtsp_server.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/rtsp_server.cpp.o -MF CMakeFiles/detector.dir/src/rtsp_server.cpp.o.d -o CMakeFiles/detector.dir/src/rtsp_server.cpp.o -c /home/pi/CoralEdgeTpu/src/rtsp_server.cpp
 
 CMakeFiles/detector.dir/src/rtsp_server.cpp.i: cmake_force
@@ -296,16 +324,44 @@ CMakeFiles/detector.dir/src/rtsp_server.cpp.s: cmake_force
 CMakeFiles/detector.dir/civetweb/src/civetweb.c.o: CMakeFiles/detector.dir/flags.make
 CMakeFiles/detector.dir/civetweb/src/civetweb.c.o: civetweb/src/civetweb.c
 CMakeFiles/detector.dir/civetweb/src/civetweb.c.o: CMakeFiles/detector.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building C object CMakeFiles/detector.dir/civetweb/src/civetweb.c.o"
-	/usr/bin/cc $(C_DEFINES) -DUSE_WEBSOCKET $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/detector.dir/civetweb/src/civetweb.c.o -MF CMakeFiles/detector.dir/civetweb/src/civetweb.c.o.d -o CMakeFiles/detector.dir/civetweb/src/civetweb.c.o -c /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building C object CMakeFiles/detector.dir/civetweb/src/civetweb.c.o"
+	/usr/bin/cc $(C_DEFINES) -DCIVETWEB_CGI_EXTENSIONS=\"\" -DNO_CACHING -DUSE_WEBSOCKET $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/detector.dir/civetweb/src/civetweb.c.o -MF CMakeFiles/detector.dir/civetweb/src/civetweb.c.o.d -o CMakeFiles/detector.dir/civetweb/src/civetweb.c.o -c /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c
 
 CMakeFiles/detector.dir/civetweb/src/civetweb.c.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/detector.dir/civetweb/src/civetweb.c.i"
-	/usr/bin/cc $(C_DEFINES) -DUSE_WEBSOCKET $(C_INCLUDES) $(C_FLAGS) -E /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c > CMakeFiles/detector.dir/civetweb/src/civetweb.c.i
+	/usr/bin/cc $(C_DEFINES) -DCIVETWEB_CGI_EXTENSIONS=\"\" -DNO_CACHING -DUSE_WEBSOCKET $(C_INCLUDES) $(C_FLAGS) -E /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c > CMakeFiles/detector.dir/civetweb/src/civetweb.c.i
 
 CMakeFiles/detector.dir/civetweb/src/civetweb.c.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/detector.dir/civetweb/src/civetweb.c.s"
-	/usr/bin/cc $(C_DEFINES) -DUSE_WEBSOCKET $(C_INCLUDES) $(C_FLAGS) -S /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c -o CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
+	/usr/bin/cc $(C_DEFINES) -DCIVETWEB_CGI_EXTENSIONS=\"\" -DNO_CACHING -DUSE_WEBSOCKET $(C_INCLUDES) $(C_FLAGS) -S /home/pi/CoralEdgeTpu/civetweb/src/civetweb.c -o CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
+
+CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o: civetweb_temp/src/CivetServer.cpp
+CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building CXX object CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) -DNO_CACHING -DUSE_WEBSOCKET $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o -MF CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o.d -o CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o -c /home/pi/CoralEdgeTpu/civetweb_temp/src/CivetServer.cpp
+
+CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) -DNO_CACHING -DUSE_WEBSOCKET $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/civetweb_temp/src/CivetServer.cpp > CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.i
+
+CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) -DNO_CACHING -DUSE_WEBSOCKET $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/civetweb_temp/src/CivetServer.cpp -o CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.s
+
+CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o: CMakeFiles/detector.dir/flags.make
+CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o: src/civetweb_wrapper.cpp
+CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o: CMakeFiles/detector.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building CXX object CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) -DNO_CACHING -DUSE_WEBSOCKET $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o -MF CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o.d -o CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o -c /home/pi/CoralEdgeTpu/src/civetweb_wrapper.cpp
+
+CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) -DNO_CACHING -DUSE_WEBSOCKET $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/pi/CoralEdgeTpu/src/civetweb_wrapper.cpp > CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.i
+
+CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) -DNO_CACHING -DUSE_WEBSOCKET $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/pi/CoralEdgeTpu/src/civetweb_wrapper.cpp -o CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.s
 
 # Object files for target detector
 detector_OBJECTS = \
@@ -319,13 +375,17 @@ detector_OBJECTS = \
 "CMakeFiles/detector.dir/src/logic.cpp.o" \
 "CMakeFiles/detector.dir/src/pca9685_controller.cpp.o" \
 "CMakeFiles/detector.dir/src/monitor.cpp.o" \
+"CMakeFiles/detector.dir/src/global_definitions.cpp.o" \
 "CMakeFiles/detector.dir/src/h264_encoder.cpp.o" \
 "CMakeFiles/detector.dir/src/orientation_sensor.cpp.o" \
 "CMakeFiles/detector.dir/src/application_supervisor.cpp.o" \
 "CMakeFiles/detector.dir/src/system_monitor.cpp.o" \
 "CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o" \
+"CMakeFiles/detector.dir/src/http_streamer.cpp.o" \
 "CMakeFiles/detector.dir/src/rtsp_server.cpp.o" \
-"CMakeFiles/detector.dir/civetweb/src/civetweb.c.o"
+"CMakeFiles/detector.dir/civetweb/src/civetweb.c.o" \
+"CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o" \
+"CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o"
 
 # External object files for target detector
 detector_EXTERNAL_OBJECTS =
@@ -340,13 +400,17 @@ detector: CMakeFiles/detector.dir/src/config_loader.cpp.o
 detector: CMakeFiles/detector.dir/src/logic.cpp.o
 detector: CMakeFiles/detector.dir/src/pca9685_controller.cpp.o
 detector: CMakeFiles/detector.dir/src/monitor.cpp.o
+detector: CMakeFiles/detector.dir/src/global_definitions.cpp.o
 detector: CMakeFiles/detector.dir/src/h264_encoder.cpp.o
 detector: CMakeFiles/detector.dir/src/orientation_sensor.cpp.o
 detector: CMakeFiles/detector.dir/src/application_supervisor.cpp.o
 detector: CMakeFiles/detector.dir/src/system_monitor.cpp.o
 detector: CMakeFiles/detector.dir/src/keyboard_monitor.cpp.o
+detector: CMakeFiles/detector.dir/src/http_streamer.cpp.o
 detector: CMakeFiles/detector.dir/src/rtsp_server.cpp.o
 detector: CMakeFiles/detector.dir/civetweb/src/civetweb.c.o
+detector: CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o
+detector: CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o
 detector: CMakeFiles/detector.dir/build.make
 detector: /usr/lib/aarch64-linux-gnu/libopencv_stitching.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_alphamat.so.4.6.0
@@ -384,8 +448,11 @@ detector: /usr/lib/aarch64-linux-gnu/libopencv_viz.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_wechat_qrcode.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_xobjdetect.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_xphoto.so.4.6.0
+detector: /usr/local/lib/aarch64-linux-gnu/libcamera.so
+detector: /usr/local/lib/aarch64-linux-gnu/libcamera-base.so
 detector: /lib/aarch64-linux-gnu/libssl.so.3
 detector: /lib/aarch64-linux-gnu/libcrypto.so.3
+detector: libcivetweb_cpp_wrapper.a
 detector: /usr/lib/aarch64-linux-gnu/libopencv_highgui.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_datasets.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_plot.so.4.6.0
@@ -406,7 +473,7 @@ detector: /usr/lib/aarch64-linux-gnu/libopencv_photo.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_imgproc.so.4.6.0
 detector: /usr/lib/aarch64-linux-gnu/libopencv_core.so.4.6.0
 detector: CMakeFiles/detector.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Linking CXX executable detector"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pi/CoralEdgeTpu/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Linking CXX executable detector"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/detector.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

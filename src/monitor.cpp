@@ -1,13 +1,26 @@
 #include "monitor.h"
 #include "application.h"  // Include the full definition
 #include "util_logging.h"
+#include "orientation_sensor.h"  // Include orientation sensor header for OrientationData
 #include <iostream>
 #include <chrono>
 #include <thread>
 #include <sstream>
 #include <iomanip>
+#include <random>
 
-Monitor::Monitor(Application& app) : app_(app), running_(false) {}
+Monitor::Monitor(Application& app) : app_(app), running_(false) {
+    // Generate a unique run ID
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(1000, 9999);
+    run_id_ = "RUN_" + std::to_string(dis(gen)) + "_" + 
+              std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now().time_since_epoch()).count());
+    
+    // Initialize run start time
+    run_start_time_ = std::chrono::steady_clock::now();
+}
 
 Monitor::~Monitor() {
     stop();
@@ -37,24 +50,229 @@ void Monitor::monitor_thread_func() {
         // Clear screen and move cursor to top-left
         std::cout << "\033[2J\033[1;1H";
         
-        // Print header
+        // Print header with run ID and relative time
         std::cout << "==========================================\n";
         std::cout << "    CoralEdgeTpu System Monitor\n";
+        std::cout << "    Run ID: " << run_id_ << "\n";
         std::cout << "==========================================\n";
         std::cout << std::endl;
         
-        // Get current time
-        auto now = std::chrono::system_clock::now();
-        auto time_t = std::chrono::system_clock::to_time_t(now);
-        std::cout << "Current Time: " << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S") << std::endl;
+        // Calculate time since run start using monotonic clock
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - run_start_time_);
+        std::cout << "Run Time: +" << elapsed.count() << " ms" << std::endl;
+        
+        // Also show wall clock time for reference
+        auto wall_now = std::chrono::system_clock::now();
+        auto wall_time_t = std::chrono::system_clock::to_time_t(wall_now);
+        std::cout << "Wall Time: " << std::put_time(std::localtime(&wall_time_t), "%Y-%m-%d %H:%M:%S") << std::endl;
         std::cout << std::endl;
         
+        // Get current values for throughput calculations
+        size_t current_raw_image_queue_depth = app_.raw_image_for_processor_queue_.read_available();
+        size_t current_tpu_inference_queue_depth = app_.tpu_inference_queue_.read_available();
+        size_t current_detection_overlay_queue_depth = app_.detection_results_for_overlay_queue_.read_available();
+        size_t current_detection_logic_queue_depth = app_.detection_results_for_logic_queue_.read_available();
+        size_t current_overlaid_video_queue_depth = app_.overlaid_video_queue_.read_available();
+        size_t current_h264_output_queue_depth = app_.h264_output_queue_.read_available();
+        
+        // Calculate queue in/out rates
+        int raw_image_queue_in = 0;
+        int raw_image_queue_out = 0;
+        int tpu_inference_queue_in = 0;
+        int tpu_inference_queue_out = 0;
+        int detection_overlay_queue_in = 0;
+        int detection_overlay_queue_out = 0;
+        int detection_logic_queue_in = 0;
+        int detection_logic_queue_out = 0;
+        int overlaid_video_queue_in = 0;
+        int overlaid_video_queue_out = 0;
+        int h264_output_queue_in = 0;
+        int h264_output_queue_out = 0;
+        
+        // Calculate module rates based on the current FPS/IPS/CPS values
+        int camera_fps = 0;
+        int inference_ips = 0;
+        int logic_cps = 0;
+        
+        if (app_.get_primary_camera() && app_.get_primary_camera()->is_running()) {
+            camera_fps = app_.get_primary_camera()->frame_rate_.load();
+        }
+        if (app_.get_inference_engine() && app_.get_inference_engine()->is_running()) {
+            inference_ips = app_.get_inference_engine()->inference_rate_.load();
+        }
+        if (app_.get_logic_module() && app_.get_logic_module()->is_running()) {
+            logic_cps = app_.get_logic_module()->logic_rate_.load();
+        }
+        
+        // Calculate actual throughput based on queue depth changes
+        // This is an approximation since we don't have direct counters for push/pop operations
+        if (!first_update_) {
+            // Calculate queue in/out rates based on changes in queue depth
+            // For each queue: change = current - previous
+            // If positive: items were added (IN) - but this doesn't account for items consumed during the same period
+            // If negative: items were removed (OUT) - but this doesn't account for items added during the same period
+            // More accurate: items IN = items added to queue, items OUT = items removed from queue
+            
+            // To estimate actual flow, we need to consider that if queue depth remains constant,
+            // items in = items out (steady state)
+            // If queue depth increases, items in > items out
+            // If queue depth decreases, items out > items in
+            
+            long long raw_image_change = static_cast<long long>(current_raw_image_queue_depth) - static_cast<long long>(prev_raw_image_queue_depth_);
+            // Estimate: if queue depth increased, at least that many items went in beyond those that went out
+            // if queue depth decreased, at least that many items went out beyond those that went in
+            if (raw_image_change > 0) {
+                // Queue increased: more items came in than went out
+                // Approximate: in = camera_fps, out = in - change
+                raw_image_queue_in = camera_fps; // Estimate based on camera rate
+                raw_image_queue_out = std::max(0, raw_image_queue_in - static_cast<int>(raw_image_change));
+            } else if (raw_image_change < 0) {
+                // Queue decreased: more items went out than came in
+                // Approximate: out = estimated from downstream, in = out + abs(change)
+                raw_image_queue_out = camera_fps; // This is a better estimate when queue is decreasing
+                raw_image_queue_in = std::max(0, raw_image_queue_out + static_cast<int>(-raw_image_change));
+            } else {
+                // Queue depth unchanged: in ~ out (steady state)
+                raw_image_queue_in = camera_fps;
+                raw_image_queue_out = camera_fps;
+            }
+            
+            long long tpu_inference_change = static_cast<long long>(current_tpu_inference_queue_depth) - static_cast<long long>(prev_tpu_inference_queue_depth_);
+            if (tpu_inference_change > 0) {
+                tpu_inference_queue_in = inference_ips; // Estimate based on inference rate
+                tpu_inference_queue_out = std::max(0, tpu_inference_queue_in - static_cast<int>(tpu_inference_change));
+            } else if (tpu_inference_change < 0) {
+                tpu_inference_queue_out = inference_ips; // Estimate when queue is decreasing
+                tpu_inference_queue_in = std::max(0, tpu_inference_queue_out + static_cast<int>(-tpu_inference_change));
+            } else {
+                tpu_inference_queue_in = inference_ips;
+                tpu_inference_queue_out = inference_ips;
+            }
+            
+            long long detection_overlay_change = static_cast<long long>(current_detection_overlay_queue_depth) - static_cast<long long>(prev_detection_overlay_queue_depth_);
+            if (detection_overlay_change > 0) {
+                detection_overlay_queue_in = inference_ips; // From inference output
+                detection_overlay_queue_out = std::max(0, detection_overlay_queue_in - static_cast<int>(detection_overlay_change));
+            } else if (detection_overlay_change < 0) {
+                detection_overlay_queue_out = inference_ips; // Estimate when queue is decreasing
+                detection_overlay_queue_in = std::max(0, detection_overlay_queue_out + static_cast<int>(-detection_overlay_change));
+            } else {
+                detection_overlay_queue_in = inference_ips;
+                detection_overlay_queue_out = inference_ips;
+            }
+            
+            long long detection_logic_change = static_cast<long long>(current_detection_logic_queue_depth) - static_cast<long long>(prev_detection_logic_queue_depth_);
+            if (detection_logic_change > 0) {
+                detection_logic_queue_in = inference_ips; // From inference output
+                detection_logic_queue_out = std::max(0, detection_logic_queue_in - static_cast<int>(detection_logic_change));
+            } else if (detection_logic_change < 0) {
+                detection_logic_queue_out = inference_ips; // Estimate when queue is decreasing
+                detection_logic_queue_in = std::max(0, detection_logic_queue_out + static_cast<int>(-detection_logic_change));
+            } else {
+                detection_logic_queue_in = inference_ips;
+                detection_logic_queue_out = inference_ips;
+            }
+            
+            long long overlaid_video_change = static_cast<long long>(current_overlaid_video_queue_depth) - static_cast<long long>(prev_overlaid_video_queue_depth_);
+            if (overlaid_video_change > 0) {
+                overlaid_video_queue_in = inference_ips; // From logic output
+                overlaid_video_queue_out = std::max(0, overlaid_video_queue_in - static_cast<int>(overlaid_video_change));
+            } else if (overlaid_video_change < 0) {
+                overlaid_video_queue_out = inference_ips; // Estimate when queue is decreasing
+                overlaid_video_queue_in = std::max(0, overlaid_video_queue_out + static_cast<int>(-overlaid_video_change));
+            } else {
+                overlaid_video_queue_in = inference_ips;
+                overlaid_video_queue_out = inference_ips;
+            }
+            
+            long long h264_output_change = static_cast<long long>(current_h264_output_queue_depth) - static_cast<long long>(prev_h264_output_queue_depth_);
+            if (h264_output_change > 0) {
+                h264_output_queue_in = inference_ips; // From encoder output
+                h264_output_queue_out = std::max(0, h264_output_queue_in - static_cast<int>(h264_output_change));
+            } else if (h264_output_change < 0) {
+                h264_output_queue_out = inference_ips; // Estimate when queue is decreasing
+                h264_output_queue_in = std::max(0, h264_output_queue_out + static_cast<int>(-h264_output_change));
+            } else {
+                h264_output_queue_in = inference_ips;
+                h264_output_queue_out = inference_ips;
+            }
+        } else {
+            // On first update, just store the values
+            first_update_ = false;
+        }
+        
+        // For modules, calculate proper in/out values based on actual module rates and queue dynamics
+        // Camera Module: Input is frames captured, Output is frames pushed to raw image queue
+        int camera_module_in = camera_fps;
+        int camera_module_out = raw_image_queue_in; // What goes into the raw image queue comes from camera
+        
+        // Inference Module: Input is frames from raw image queue, Output is inference results to TPU queue
+        int inference_module_in = raw_image_queue_out; // What inference pulls from raw image queue
+        int inference_module_out = tpu_inference_queue_in; // What inference pushes to TPU queue
+        
+        // Logic Module: Input is detection results, Output is logic results
+        int logic_module_in = detection_overlay_queue_out; // What logic pulls from detection queue
+        int logic_module_out = detection_logic_queue_in; // What logic pushes to next queue
+        
+        // Store current values for next iteration
+        prev_raw_image_queue_depth_ = current_raw_image_queue_depth;
+        prev_tpu_inference_queue_depth_ = current_tpu_inference_queue_depth;
+        prev_detection_overlay_queue_depth_ = current_detection_overlay_queue_depth;
+        prev_detection_logic_queue_depth_ = current_detection_logic_queue_depth;
+        prev_overlaid_video_queue_depth_ = current_overlaid_video_queue_depth;
+        prev_h264_output_queue_depth_ = current_h264_output_queue_depth;
+        
+        // Track initialization phase
+        if (initialization_counter_ < INITIALIZATION_DELAY) {
+            initialization_counter_++;
+        } else if (!pipeline_initialized_) {
+            // Check if pipeline has established flow (all modules have some activity)
+            bool has_flow = (camera_module_in > 0 || camera_module_out > 0) &&
+                           (inference_module_in > 0 || inference_module_out > 0) &&
+                           (logic_module_in > 0 || logic_module_out > 0);
+            
+            if (has_flow) {
+                pipeline_initialized_ = true;
+            }
+        }
+        
+        // Calculate actual module status based on processing activity
+        // Status should be RUNNING only if module processed at least one item in the last interval
+        bool camera_active = camera_module_in > 0 || camera_module_out > 0;
+        bool inference_active = inference_module_in > 0 || inference_module_out > 0;
+        bool logic_active = logic_module_in > 0 || logic_module_out > 0;
+        
+        // Calculate time since run start for relative timestamps
+        auto current_monotonic_time = std::chrono::steady_clock::now();
+        auto elapsed_since_run_start = std::chrono::duration_cast<std::chrono::milliseconds>(current_monotonic_time - run_start_time_);
+        
+        // Calculate a reference time point based on the current system time and elapsed run time
+        // This allows us to convert absolute timestamps to relative times since run start
+        auto now_sys = std::chrono::system_clock::now();
+        auto now_sys_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now_sys.time_since_epoch()).count();
+        auto reference_time_since_run_start = now_sys_ms - elapsed_since_run_start.count();
+        
+        // Enhanced status determination with starvation/blocked detection
         // Camera Module Status
         std::cout << "[Camera Module]" << std::endl;
         if (app_.get_primary_camera() && app_.get_primary_camera()->is_running()) {
-            std::cout << "  Status: RUNNING" << std::endl;
-            std::cout << "  Frame Rate: " << app_.get_primary_camera()->frame_rate_ << " FPS" << std::endl;
-            std::cout << "  Last Frame: " << app_.get_primary_camera()->last_frame_timestamp_ << " ms" << std::endl;
+            if (!pipeline_initialized_) {
+                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
+            } else if (camera_active) {
+                std::cout << "  Status: RUNNING" << std::endl;
+            } else if (camera_fps == 0 && app_.get_primary_camera()->frame_rate_.load() == 0) {
+                // No frames being captured - could be blocked or starved
+                std::cout << "  Status: STARVED" << std::endl;
+            } else {
+                std::cout << "  Status: IDLE" << std::endl;
+            }
+            std::cout << "  Frame Rate: " << camera_fps << " FPS" << std::endl;
+            // Calculate relative time for last frame timestamp
+            long long last_frame_absolute = app_.get_primary_camera()->last_frame_timestamp_;
+            long long relative_frame_time = last_frame_absolute - reference_time_since_run_start;
+            std::cout << "  Last Frame: +" << relative_frame_time << " ms (relative to run start)" << std::endl;
+            std::cout << "  Throughput: In: " << camera_module_in << " | Out: " << camera_module_out << std::endl;
         } else {
             std::cout << "  Status: STOPPED" << std::endl;
         }
@@ -63,9 +281,27 @@ void Monitor::monitor_thread_func() {
         // Inference Module Status
         std::cout << "[Inference Module]" << std::endl;
         if (app_.get_inference_engine() && app_.get_inference_engine()->is_running()) {
-            std::cout << "  Status: RUNNING" << std::endl;
-            std::cout << "  Inference Rate: " << app_.get_inference_engine()->inference_rate_ << " IPS" << std::endl;
-            std::cout << "  Last Inference: " << app_.get_inference_engine()->last_inference_timestamp_ << " ms" << std::endl;
+            if (!pipeline_initialized_) {
+                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
+            } else if (inference_active) {
+                std::cout << "  Status: RUNNING" << std::endl;
+            } else if (inference_ips == 0 && app_.get_inference_engine()->inference_rate_.load() == 0) {
+                // No inferences being processed - check if input queue is empty (starved) or full (blocked)
+                size_t input_queue_depth = app_.raw_image_for_processor_queue_.read_available();
+                if (input_queue_depth == 0) {
+                    std::cout << "  Status: STARVED" << std::endl;
+                } else {
+                    std::cout << "  Status: BLOCKED" << std::endl;
+                }
+            } else {
+                std::cout << "  Status: IDLE" << std::endl;
+            }
+            std::cout << "  Inference Rate: " << inference_ips << " IPS" << std::endl;
+            // Calculate relative time for last inference timestamp
+            long long last_inference_absolute = app_.get_inference_engine()->last_inference_timestamp_;
+            long long relative_inference_time = last_inference_absolute - reference_time_since_run_start;
+            std::cout << "  Last Inference: +" << relative_inference_time << " ms (relative to run start)" << std::endl;
+            std::cout << "  Throughput: In: " << inference_module_in << " | Out: " << inference_module_out << std::endl;
         } else {
             std::cout << "  Status: STOPPED" << std::endl;
         }
@@ -74,52 +310,96 @@ void Monitor::monitor_thread_func() {
         // Logic Module Status
         std::cout << "[Logic Module]" << std::endl;
         if (app_.get_logic_module() && app_.get_logic_module()->is_running()) {
-            std::cout << "  Status: RUNNING" << std::endl;
-            std::cout << "  Logic Rate: " << app_.get_logic_module()->logic_rate_ << " CPS" << std::endl;
-            std::cout << "  Last Logic: " << app_.get_logic_module()->last_logic_timestamp_ << " ms" << std::endl;
+            if (!pipeline_initialized_) {
+                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
+            } else if (logic_active) {
+                std::cout << "  Status: RUNNING" << std::endl;
+            } else if (logic_cps == 0 && app_.get_logic_module()->logic_rate_.load() == 0) {
+                // No logic being processed - check if input queue is empty (starved) or full (blocked)
+                size_t input_queue_depth = app_.detection_results_for_logic_queue_.read_available();
+                if (input_queue_depth == 0) {
+                    std::cout << "  Status: STARVED" << std::endl;
+                } else {
+                    std::cout << "  Status: BLOCKED" << std::endl;
+                }
+            } else {
+                std::cout << "  Status: IDLE" << std::endl;
+            }
+            std::cout << "  Logic Rate: " << logic_cps << " CPS" << std::endl;
+            // Calculate relative time for last logic timestamp
+            long long last_logic_absolute = app_.get_logic_module()->last_logic_timestamp_;
+            long long relative_logic_time = last_logic_absolute - reference_time_since_run_start;
+            std::cout << "  Last Logic: +" << relative_logic_time << " ms (relative to run start)" << std::endl;
+            std::cout << "  Throughput: In: " << logic_module_in << " | Out: " << logic_module_out << std::endl;
         } else {
             std::cout << "  Status: STOPPED" << std::endl;
         }
         std::cout << std::endl;
         
-        // Queue Depths
-        std::cout << "[Queue Depths]" << std::endl;
-        // Raw image for processor queue
-        size_t raw_image_queue_depth = app_.raw_image_for_processor_queue_.read_available();
-        size_t raw_image_queue_capacity = app_.raw_image_for_processor_queue_.write_available() + raw_image_queue_depth;
-        std::cout << "  Raw Image Queue: " << raw_image_queue_depth << "/" << raw_image_queue_capacity << std::endl;
+        // Queue Throughput Information
+        std::cout << "[Queue Throughput]" << std::endl;
+        std::cout << "  Raw Image Queue: In: " << raw_image_queue_in << " | Out: " << raw_image_queue_out << std::endl;
+        std::cout << "  TPU Inference Queue: In: " << tpu_inference_queue_in << " | Out: " << tpu_inference_queue_out << std::endl;
+        std::cout << "  Detection Overlay Queue: In: " << detection_overlay_queue_in << " | Out: " << detection_overlay_queue_out << std::endl;
+        std::cout << "  Detection Logic Queue: In: " << detection_logic_queue_in << " | Out: " << detection_logic_queue_out << std::endl;
+        std::cout << "  Overlaid Video Queue: In: " << overlaid_video_queue_in << " | Out: " << overlaid_video_queue_out << std::endl;
+        std::cout << "  H264 Output Queue: In: " << h264_output_queue_in << " | Out: " << h264_output_queue_out << std::endl;
+        std::cout << std::endl;
         
-        // TPU inference queue
-        size_t tpu_inference_queue_depth = app_.tpu_inference_queue_.read_available();
-        size_t tpu_inference_queue_capacity = app_.tpu_inference_queue_.write_available() + tpu_inference_queue_depth;
-        std::cout << "  TPU Inference Queue: " << tpu_inference_queue_depth << "/" << tpu_inference_queue_capacity << std::endl;
+        // Queue Drop Counters for proper accounting
+        std::cout << "[Queue Drop Counters]" << std::endl;
+        if (app_.get_primary_camera()) {
+            std::cout << "  Main Stream Drops: " << app_.get_primary_camera()->get_main_stream_drop_count() << std::endl;
+            std::cout << "  TPU Stream Drops: " << app_.get_primary_camera()->get_tpu_stream_drop_count() << std::endl;
+        } else {
+            std::cout << "  Main/TPU Stream Drops: N/A" << std::endl;
+        }
+        if (app_.get_inference_engine()) {
+            std::cout << "  Overlay Queue Drops: " << app_.get_inference_engine()->get_overlay_queue_drop_count() << std::endl;
+            std::cout << "  Logic Queue Drops: " << app_.get_inference_engine()->get_logic_queue_drop_count() << std::endl;
+        } else {
+            std::cout << "  Overlay/Logic Queue Drops: N/A" << std::endl;
+        }
+        std::cout << std::endl;
         
-        // Detection results for overlay queue
-        size_t detection_overlay_queue_depth = app_.detection_results_for_overlay_queue_.read_available();
-        size_t detection_overlay_queue_capacity = app_.detection_results_for_overlay_queue_.write_available() + detection_overlay_queue_depth;
-        std::cout << "  Detection Overlay Queue: " << detection_overlay_queue_depth << "/" << detection_overlay_queue_capacity << std::endl;
+        // Queue Accounting Invariant Check: produced == consumed + dropped
+        std::cout << "[Queue Accounting Invariants]" << std::endl;
+        if (app_.get_primary_camera()) {
+            int64_t camera_produced = app_.get_camera_frames_produced();
+            int64_t camera_consumed = app_.get_camera_frames_consumed_by_inference();
+            int64_t camera_dropped = app_.get_primary_camera()->get_main_stream_drop_count() + app_.get_primary_camera()->get_tpu_stream_drop_count();
+            std::cout << "  Camera Frames - Produced: " << camera_produced
+                      << ", Consumed by Inference: " << camera_consumed
+                      << ", Dropped: " << camera_dropped << std::endl;
+            std::cout << "  Camera Invariant Check (P=C+D): " << (camera_produced == camera_consumed + camera_dropped ? "PASS" : "FAIL") << std::endl;
+        } else {
+            std::cout << "  Camera Frames - N/A" << std::endl;
+        }
         
-        // Detection results for logic queue
-        size_t detection_logic_queue_depth = app_.detection_results_for_logic_queue_.read_available();
-        size_t detection_logic_queue_capacity = app_.detection_results_for_logic_queue_.write_available() + detection_logic_queue_depth;
-        std::cout << "  Detection Logic Queue: " << detection_logic_queue_depth << "/" << detection_logic_queue_capacity << std::endl;
-        
-        // Overlaid video queue
-        size_t overlaid_video_queue_depth = app_.overlaid_video_queue_.read_available();
-        size_t overlaid_video_queue_capacity = app_.overlaid_video_queue_.write_available() + overlaid_video_queue_depth;
-        std::cout << "  Overlaid Video Queue: " << overlaid_video_queue_depth << "/" << overlaid_video_queue_capacity << std::endl;
-        
-        // H264 output queue
-        size_t h264_output_queue_depth = app_.h264_output_queue_.read_available();
-        size_t h264_output_queue_capacity = app_.h264_output_queue_.write_available() + h264_output_queue_depth;
-        std::cout << "  H264 Output Queue: " << h264_output_queue_depth << "/" << h264_output_queue_capacity << std::endl;
+        if (app_.get_inference_engine()) {
+            int64_t inference_produced = app_.get_inference_results_produced();
+            int64_t logic_consumed = app_.get_inference_results_consumed_by_logic();
+            int64_t overlay_consumed = app_.get_inference_results_consumed_by_overlay();
+            int64_t inference_dropped = app_.get_inference_engine()->get_overlay_queue_drop_count() + app_.get_inference_engine()->get_logic_queue_drop_count();
+            std::cout << "  Inference Results - Produced: " << inference_produced
+                      << ", Logic Consumed: " << logic_consumed
+                      << ", Overlay Consumed: " << overlay_consumed
+                      << ", Dropped: " << inference_dropped << std::endl;
+            std::cout << "  Inference Invariant Check (P=C+D): " << (inference_produced == logic_consumed + overlay_consumed + inference_dropped ? "PASS" : "FAIL") << std::endl;
+        } else {
+            std::cout << "  Inference Results - N/A" << std::endl;
+        }
         std::cout << std::endl;
         
         // Orientation Sensor Status
         std::cout << "[Orientation Sensor]" << std::endl;
         if (app_.get_orientation_sensor() && app_.get_orientation_sensor()->is_running()) {
             std::cout << "  Status: RUNNING" << std::endl;
-            
+            // Get latest orientation data
+            OrientationData orientation_data = app_.get_orientation_sensor()->get_latest_orientation_data();
+            std::cout << "  Yaw: " << std::fixed << std::setprecision(2) << orientation_data.yaw << "°" << std::endl;
+            std::cout << "  Pitch: " << std::fixed << std::setprecision(2) << orientation_data.pitch << "°" << std::endl;
+            std::cout << "  Roll: " << std::fixed << std::setprecision(2) << orientation_data.roll << "°" << std::endl;
         } else {
             std::cout << "  Status: STOPPED" << std::endl;
         }

@@ -9,6 +9,7 @@
 #include <sys/mman.h> // For mmap, munmap
 #include <errno.h>    // For errno, strerror
 #include "edgetpu.h"
+#include "application.h"  // For Application counter updates
 
 float InferenceEngine::get_tpu_temperature() {
     std::ifstream temp_file("/sys/class/apex/apex_0/temp");
@@ -254,6 +255,14 @@ void InferenceEngine::worker_thread_func() {
                 continue;
             }
             
+            // Increment the frames consumed counter
+            frames_consumed_.fetch_add(1);
+            
+            // If we have an application reference, also update the application's counter
+            if (app_ref_) {
+                app_ref_->increment_camera_frames_consumed_by_inference();
+            }
+            
             long long call_ts = input_image.timestamp_epoch_ms;
 
             // Preprocessing (e.g., resizing, format conversion) is assumed to be done before data is put into the queue.
@@ -341,18 +350,32 @@ void InferenceEngine::worker_thread_func() {
             // Update freshness indicators
             last_inference_timestamp_ = call_ts;
             
-            // Update average inference time for monitoring (this was missing!)
+            // Update average inference time for monitoring with proper exponential moving average
             long long current_avg = avg_inference_time_us_.load();
-            avg_inference_time_us_.store((current_avg + duration_us) / 2);
+            avg_inference_time_us_.store(static_cast<long long>(current_avg * 0.9 + duration_us * 0.1)); // 0.1 alpha value for EMA
+            
+            // Check TPU temperature periodically and log if threshold is exceeded
+            static int temp_check_count = 0;
+            temp_check_count++;
+            if (temp_check_count % 10 == 0) { // Check every 10 inferences to avoid overhead
+                float tpu_temp = get_tpu_temperature();
+                if (tpu_temp > 0.0f && tpu_temp < 100.0f) { // Valid temperature range
+                    if (tpu_temp > 75.0f) { // Thermal throttling threshold
+                        APP_LOG_WARNING("TPU Temperature Alert: " + std::to_string(tpu_temp) + "°C (threshold: 75°C)");
+                    }
+                    // Log temperature periodically for monitoring
+                    APP_LOG_DEBUG("TPU Temperature: " + std::to_string(tpu_temp) + "°C");
+                }
+            }
             
             // Store inference timing for statistics
             static std::vector<long long> inference_times_us;
-            static int inference_count = 0;
+            static int timing_inference_count = 0;
             inference_times_us.push_back(duration_us);
-            inference_count++;
+            timing_inference_count++;
             
             // Update inference rate
-            if (inference_count % 100 == 0 && inference_times_us.size() > 0) {
+            if (timing_inference_count % 100 == 0 && inference_times_us.size() > 0) {
                 long long total_time_us = 0;
                 for (long long time : inference_times_us) {
                     total_time_us += time;
@@ -365,7 +388,7 @@ void InferenceEngine::worker_thread_func() {
             }
             
             // Print inference timing statistics every 100 inferences
-            if (inference_count % 100 == 0 && inference_times_us.size() > 0) {
+            if (timing_inference_count % 100 == 0 && inference_times_us.size() > 0) {
                 long long total_time_us = 0;
                 long long min_time_us = inference_times_us[0];
                 long long max_time_us = inference_times_us[0];
@@ -415,24 +438,43 @@ void InferenceEngine::worker_thread_func() {
 
             // 4. Get output tensor
             [[maybe_unused]] auto get_output_start = std::chrono::high_resolution_clock::now();
-            auto results_buffer = get_output_tensor(interpreter.get());
+            auto results_buffer = get_output_tensor(interpreter.get(), input_image);
             [[maybe_unused]] auto get_output_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to get output tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(get_output_end - get_output_start).count()) + " us");
 
-            // 5. Push results to output queues
+            // 5. Push results to output queues with blocking behavior for strict pipeline coupling.
             [[maybe_unused]] auto push_output_start = std::chrono::high_resolution_clock::now();
             if (results_buffer && results_buffer->size > 0) {
-                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to overlay queue.");
-                bool overlay_pushed = detection_results_for_overlay_queue_.push(results_buffer);
-                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to logic queue.");
-                bool logic_pushed = detection_results_for_logic_queue_.push(results_buffer);
+                // Log detailed detection information
+                APP_LOG_INFO("DETECTION_RESULTS: Frame " + std::to_string(input_image.frame_id) + 
+                           " - " + std::to_string(results_buffer->size) + " detections:");
+                for (int i = 0; i < results_buffer->size && i < 10; i++) { // Log first 10 detections to avoid spam
+                    const auto& det = results_buffer->data[i];
+                    APP_LOG_INFO("  Detection " + std::to_string(i+1) + ": Class=" + std::to_string(det.class_id) + 
+                               ", Score=" + std::to_string(det.score) + 
+                               ", BBox=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + 
+                               "," + std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]");
+                }
                 
+                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to overlay queue.");
+                bool overlay_pushed = push_blocking(detection_results_for_overlay_queue_, results_buffer);
+                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to logic queue.");
+                bool logic_pushed = push_blocking(detection_results_for_logic_queue_, results_buffer);
+                
+                if (!overlay_pushed) {
+                    APP_LOG_WARNING("InferenceEngine: Failed to push detections to overlay queue - queue full.");
+                    overlay_queue_drop_count_++;
+                }
+                if (!logic_pushed) {
+                    APP_LOG_WARNING("InferenceEngine: Failed to push detections to logic queue - queue full.");
+                    logic_queue_drop_count_++;
+                }
                 if (!overlay_pushed || !logic_pushed) {
                     APP_LOG_WARNING("InferenceEngine: Failed to push detections to one or more queues. Overlay: " + 
                                    std::to_string(overlay_pushed) + ", Logic: " + std::to_string(logic_pushed));
                 }
             } else {
-                APP_LOG_WARNING("InferenceEngine: No detections to push or results_buffer is null.");
+                APP_LOG_DEBUG("InferenceEngine: No detections found in frame " + std::to_string(input_image.frame_id) + ".");
             }
             [[maybe_unused]] auto push_output_end = std::chrono::high_resolution_clock::now();
             APP_LOG_DEBUG("InferenceEngine: Time to push results to queues: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(push_output_end - push_output_start).count()) + " us");
@@ -562,7 +604,7 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
     memcpy(tensor_data, image.buffer->data.data(), image.buffer->size);
 }
 
-std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite::Interpreter* interpreter) {
+std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite::Interpreter* interpreter, const ImageData& input_image) {
     auto results_buffer = detection_result_pool_->acquire();
     if (!results_buffer) {
         APP_LOG_WARNING("Failed to acquire a detection result buffer from the pool. No results will be reported for this frame.");
@@ -777,6 +819,9 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
             // Store the dequantized score directly (in 0.0-1.0 range)
             res.score = score_float;
             
+            // Set the source frame ID to maintain frame-detection relationship
+            res.source_frame_id = input_image.frame_id;
+            
             // Validate class ID is within labelmap bounds (1-13 based on current labelmap)
             if (res.class_id < 1 || res.class_id > 13) {
                 APP_LOG_WARNING("Invalid class ID detected: " + std::to_string(res.class_id) + 
@@ -822,6 +867,17 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     // Log filtered detection count for invariant verification
     APP_LOG_INFO("DETECTION_INVARIANT: Raw detections=" + std::to_string(num_detections) + 
                  ", After score threshold=" + std::to_string(result_count));
+    
+    // Increment the results produced counter by the number of valid results
+    if (result_count > 0) {
+        results_produced_.fetch_add(result_count);
+        
+        // If we have an application reference, also update the application's counter
+        if (app_ref_) {
+           app_ref_->increment_inference_results_produced(result_count);
+        }
+    }
+    
     return results_buffer;
 }
 

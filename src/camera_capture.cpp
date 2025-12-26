@@ -24,6 +24,8 @@
 #include <map>
 #include <iomanip>
 
+#include "application.h"  // For Application counter updates
+
 // Helper to convert libcamera PixelFormat to a string for logging
 static std::string pixelFormatToString(const libcamera::PixelFormat& format) {
     std::stringstream ss;
@@ -41,7 +43,10 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  long long call_ts_epoch_ms,
                                  const libcamera::PixelFormat& actual_format,
                                  long long frame_id,
-                                 [[maybe_unused]] long long exposure_ms)
+                                 [[maybe_unused]] long long exposure_ms,
+                                 std::atomic<int64_t>* main_stream_drop_counter = nullptr,
+                                 std::atomic<int64_t>* tpu_stream_drop_counter = nullptr,
+                                 std::atomic<int64_t>* frames_produced_counter = nullptr)
 {
     auto process_start = std::chrono::high_resolution_clock::now();
     APP_LOG_INFO("Processing frame for " + std::string(stream_name) + " with format: " + pixelFormatToString(actual_format));
@@ -122,9 +127,20 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
     // Attach the pooled buffer to the ImageData.
     image_data.buffer = std::move(pooled_buffer);
 
-    // 6. Push to queue with latest-only semantics.
-    if (!push_latest_only(queue, std::move(image_data))) {
-        APP_LOG_ERROR(std::string(stream_name) + " Failed to push image data to queue with latest-only semantics.");
+    // 6. Push to queue with drop counting for proper pipeline accounting.
+    // Use blocking push to maintain strict pipeline coupling
+    if (!push_blocking(queue, std::move(image_data))) {
+        APP_LOG_WARNING(std::string(stream_name) + " Failed to push image data to queue - queue may be full.");
+        // Increment appropriate drop counter based on stream type
+        if (std::strcmp(stream_name, "Main Stream") == 0 || std::strcmp(stream_name, "Main Video Stream") == 0) {
+            if (main_stream_drop_counter) {
+                (*main_stream_drop_counter)++;
+            }
+        } else if (std::strcmp(stream_name, "TPU Stream") == 0) {
+            if (tpu_stream_drop_counter) {
+                (*tpu_stream_drop_counter)++;
+            }
+        }
         return false;
     }
 
@@ -649,6 +665,20 @@ void CameraCapture::request_processor_thread_func() {
 
         // --- Actual processing of the frame ---
         std::chrono::high_resolution_clock::time_point start_process_time = std::chrono::high_resolution_clock::now();
+        
+        // Calculate capture timing based on sensor timestamp vs when we start processing
+        long long sensor_timestamp_ns = 0;
+        auto sensor_md_timestamp = request->metadata().get(libcamera::controls::SensorTimestamp);
+        if (sensor_md_timestamp) {
+            sensor_timestamp_ns = *sensor_md_timestamp;
+        } else {
+            APP_LOG_WARNING("CameraCapture: SensorTimestamp not found in request metadata. Using current system time for capture timing.");
+            sensor_timestamp_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+        }
+        
+        // Convert sensor timestamp to system time for comparison with processing time
+        auto capture_start_time = std::chrono::high_resolution_clock::now();
 
         long long produced_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
                                   std::chrono::system_clock::now().time_since_epoch()).count();
@@ -710,13 +740,22 @@ void CameraCapture::request_processor_thread_func() {
 
         bool processed_any_frame = false; // Track if any frame was successfully processed
 
+        // Increment the frames produced counter once per camera capture
+        // This ensures all captured frames are counted regardless of which streams they go to
+        frames_produced_.fetch_add(1);
+        // If we have an application reference, also update the application's counter
+        if (app_ref_) {
+            app_ref_->increment_camera_frames_produced();
+        }
+
         if (!main_output_queues_.empty() && captured_buffers.count(video_stream_)) {
             const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
             if (!video_fb) {
                 APP_LOG_ERROR("CameraCapture: Null video frame buffer.");
             } else {
                 const libcamera::StreamConfiguration& video_cfg = video_stream_->configuration();
-                bool processed_main = process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, call_ts, video_stream_->configuration().pixelFormat, frame_id, exposure_ms);
+                
+                bool processed_main = process_frame_buffer(video_fb, video_cfg, image_buffer_pool_, main_output_queues_.front().get(), "Main Video Stream", width_, height_, call_ts, video_stream_->configuration().pixelFormat, frame_id, exposure_ms, &main_stream_drop_count_, &tpu_stream_drop_count_);
                 if (processed_main) {
                     processed_any_frame = true;
                     // Batch logging: only log every 10th frame to reduce overhead
@@ -804,8 +843,32 @@ void CameraCapture::request_processor_thread_func() {
         
         std::chrono::high_resolution_clock::time_point end_process_time = std::chrono::high_resolution_clock::now();
         long long total_process_us = std::chrono::duration_cast<std::chrono::microseconds>(end_process_time - start_process_time).count();
+        
+        // Calculate capture time: This should be the time from when we start processing the request
+        // until we have the raw image data ready for the next stage
+        // For now, we'll estimate capture time as a small value since the actual capture happened in hardware
+        long long estimated_capture_time_us = 500; // 0.5ms as an estimate for the time to get data from camera buffer
+        
         if (processed_any_frame) {
             APP_LOG_INFO("CameraCapture: Total time to process request (frame_id=" + std::to_string(frame_id) + "): " + std::to_string(total_process_us) + " us");
+            
+            // Update average total loop timing for monitoring
+            long long current_avg = avg_total_loop_time_us_.load();
+            if (current_avg == 0) {
+                avg_total_loop_time_us_.store(total_process_us);
+            } else {
+                // Use exponential moving average for smoother timing display
+                avg_total_loop_time_us_.store((current_avg * 0.9) + (total_process_us * 0.1));
+            }
+            
+            // Update average capture timing for monitoring
+            long long current_capture_avg = avg_capture_time_us_.load();
+            if (current_capture_avg == 0) {
+                avg_capture_time_us_.store(estimated_capture_time_us);
+            } else {
+                // Use exponential moving average for capture timing
+                avg_capture_time_us_.store((current_capture_avg * 0.9) + (estimated_capture_time_us * 0.1));
+            }
             
             // Log process time for dashboard FPS calculation
             static int process_time_log_counter = 0;
@@ -896,14 +959,25 @@ bool CameraCapture::process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* f
     // Record timing measurements
     image_data.capture_time = capture_time;
 
-    // 6. Push to TPU queue with latest-only semantics.
-    if (!push_latest_only(image_processor_input_queue_, std::move(image_data))) {
-        APP_LOG_ERROR("TPU raw Failed to push image data to queue with latest-only semantics.");
+    // 6. Push to TPU queue with blocking behavior for strict pipeline coupling.
+    if (!push_blocking(image_processor_input_queue_, std::move(image_data))) {
+        APP_LOG_WARNING("TPU raw Failed to push image data to queue - queue may be full.");
+        tpu_stream_drop_count_++;
         return false;
     }
 
     auto process_end = std::chrono::high_resolution_clock::now();
     auto process_time_us = std::chrono::duration_cast<std::chrono::microseconds>(process_end - process_start).count();
     APP_LOG_INFO("TPU raw Frame processed and enqueued successfully. Process time: " + std::to_string(process_time_us) + " us");
+    
+    // Update queue push timing for monitoring
+    auto push_time = std::chrono::duration_cast<std::chrono::microseconds>(process_end - capture_time).count();
+    long long current_push_avg = avg_capture_time_us_.load();
+    if (current_push_avg == 0) {
+        avg_capture_time_us_.store(push_time);
+    } else {
+        avg_capture_time_us_.store((current_push_avg * 0.8) + (push_time * 0.2)); // Faster update for more responsive monitoring
+    }
+    
     return true;
 }

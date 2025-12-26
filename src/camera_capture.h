@@ -147,7 +147,33 @@ private:
 public:
     std::atomic<long long> last_frame_timestamp_{0}; ///< Timestamp of the last processed frame
     std::atomic<int> frame_rate_{0}; ///< Current frame rate
+    
+    // Drop counters for proper queue accounting
+    std::atomic<int64_t> main_stream_drop_count_{0}; ///< Count of frames dropped from main stream queue
+    std::atomic<int64_t> tpu_stream_drop_count_{0};  ///< Count of frames dropped from TPU stream queue
+    
+    // Public getters for drop counters to be used by Monitor
+    int64_t get_main_stream_drop_count() const { return main_stream_drop_count_.load(); }
+    int64_t get_tpu_stream_drop_count() const { return tpu_stream_drop_count_.load(); }
+    
+    // Method to allow application to increment drop counters when draining queues
+    void increment_main_stream_drop_count() { main_stream_drop_count_.fetch_add(1); }
+    void increment_tpu_stream_drop_count() { tpu_stream_drop_count_.fetch_add(1); }
+    
+    // Public getters for frame accounting counters
+    int64_t get_frames_produced() const { return frames_produced_.load(); }
+    int64_t get_frames_consumed_by_inference() const { return frames_consumed_by_inference_.load(); }
+    
+    // Method to set application reference for updating counters
+    void set_application_ref(class Application* app) { app_ref_ = app; }
 private:
+    
+    // Frame accounting counters
+    std::atomic<int64_t> frames_produced_{0};
+    std::atomic<int64_t> frames_consumed_by_inference_{0};
+    
+    // Application reference for updating counters
+    class Application* app_ref_ = nullptr;
 
     std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_; ///< Tijdstip van het laatst verwerkte frame.
     int frame_count_ = 0; ///< Teller voor het aantal verwerkte frames.

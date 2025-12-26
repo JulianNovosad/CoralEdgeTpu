@@ -2,6 +2,7 @@
 #include "logic.h"
 #include "util_logging.h"
 #include "orientation_sensor.h"
+#include "application.h"  // For Application counter updates
 #include <algorithm>
 #include <cmath>
 #include <chrono>
@@ -18,6 +19,9 @@ constexpr float TARGET_WIDTH_CM = 50.0f;          // Preset target width in cm
 constexpr float TARGET_HEIGHT_CM = 50.0f;         // Preset target height in cm
 constexpr float SENSOR_WIDTH_MM = 6.45f;          // Raspberry Pi Camera Module 3 sensor width in mm
 constexpr float SENSOR_HEIGHT_MM = 3.63f;         // Raspberry Pi Camera Module 3 sensor height in mm
+
+// --- Tracking Parameters ---
+constexpr int MIN_STABLE_HIT_STREAK = 5;          // Minimum hit streak for a track to be considered stable
 
 
 // Initializeer de statische leden
@@ -549,12 +553,21 @@ void LogicModule::send_telemetry_data(const std::string& telemetry_message) {
 
 void LogicModule::worker_thread_func() {
     APP_LOG_INFO("LogicModule worker thread started.");
+    
+    // Initialize timing variables for logic rate calculation
+    int logic_cycle_count = 0;
+    std::vector<long long> logic_cycle_times;
+    auto last_update_time = std::chrono::high_resolution_clock::now();
+    int successful_pops = 0;
+    
+    // Track rate calculation for idle periods too
+    auto last_activity_time = std::chrono::high_resolution_clock::now();
+    
     while (running_) {
         std::shared_ptr<DetectionResultBuffer> detections_buffer;
+        // Use blocking pop with timeout to ensure every inference result is processed
         if (detection_input_queue_.pop(detections_buffer)) {
-            static int successful_pops = 0;
             successful_pops++;
-            
             long long call_ts = 0;
             if (detections_buffer && detections_buffer->size > 0) {
                 APP_LOG_DEBUG("LogicModule: Detections buffer is valid with size: " + std::to_string(detections_buffer->size));
@@ -562,31 +575,34 @@ void LogicModule::worker_thread_func() {
                 call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
                             detections_buffer->data[0].timestamp.time_since_epoch()).count();
                 
+                // If we have an application reference, update the consumed counter
+                if (app_ref_) {
+                    app_ref_->increment_inference_results_consumed_by_logic();
+                }
+                
                 auto t_start = std::chrono::high_resolution_clock::now();
                 process(detections_buffer->data);
                 auto t_end = std::chrono::high_resolution_clock::now();
-                
                 long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
-                
                 // Update freshness indicators
                 last_logic_timestamp_ = call_ts;
-                static int logic_cycle_count = 0;
-                static std::vector<long long> logic_cycle_times;
+                
+                // Track processing time for rate calculation
                 logic_cycle_times.push_back(duration_ms);
                 logic_cycle_count++;
                 
-                // Update logic rate every 100 cycles - measure actual processing rate
-                if (logic_cycle_count % 100 == 0 && logic_cycle_times.size() > 0) {
-                    // Calculate based on actual time elapsed for 100 cycles
-                    static auto last_update_time = std::chrono::high_resolution_clock::now();
+                // Update the last activity time for rate calculation
+                last_activity_time = std::chrono::high_resolution_clock::now();
+                
+                // Update logic rate every 50 cycles instead of 100 to be more responsive
+                if (logic_cycle_count % 25 == 0 && logic_cycle_times.size() > 0) {  // Reduced from 50 to 25 for more responsive updates
                     auto current_time = std::chrono::high_resolution_clock::now();
                     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_update_time).count();
-                    
                     if (elapsed_ms > 0) {
                         // Calculate rate as cycles per second
-                        logic_rate_ = static_cast<int>((100.0 * 1000.0) / elapsed_ms);
+                        logic_rate_ = static_cast<int>((25.0 * 1000.0) / elapsed_ms);
                     } else {
-                        // Fallback: use the original method but with better context
+                        // Fallback: use the average processing time
                         long long total_time_ms = 0;
                         for (long long time : logic_cycle_times) {
                             total_time_ms += time;
@@ -599,11 +615,9 @@ void LogicModule::worker_thread_func() {
                     logic_cycle_times.clear();
                     // Update the last update time after calculation
                     last_update_time = current_time;
-                    
                     // Log statistics periodically
                     APP_LOG_INFO("LogicModule: Processed " + std::to_string(successful_pops) + " detection batches. Logic rate: " + std::to_string(logic_rate_.load()) + " CPS");
                 }
-                
                 // FPS measurement for decision stage
                 static int decision_frame_counter = 0;
                 static auto decision_start_time = std::chrono::high_resolution_clock::now();
@@ -613,23 +627,42 @@ void LogicModule::worker_thread_func() {
                 if (decision_duration >= 1000) { // Log every second
                     double decision_fps = (decision_frame_counter * 1000.0) / decision_duration;
                     APP_LOG_INFO("DECISION FPS MEASUREMENT: " + std::to_string(decision_fps) + " FPS over " + std::to_string(decision_frame_counter) + " decisions in " + std::to_string(decision_duration) + " ms");
-                    
                     // Reset for next measurement
                     decision_frame_counter = 0;
                     decision_start_time = current_time;
                 }
-                
             } else {
                 // Buffer exists but has no detections - still count this as a successful pop
                 APP_LOG_DEBUG("LogicModule: Pop successful, but detections_buffer is null or empty. Frame processed without detections.");
+                // Update the last logic timestamp even for empty frames to maintain timing
+                last_logic_timestamp_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                            std::chrono::system_clock::now().time_since_epoch()).count();
+                logic_cycle_count++;
+                
+                // Update the last activity time for rate calculation
+                last_activity_time = std::chrono::high_resolution_clock::now();
             }
         } else {
+            // Check if we should update the rate even when idle to prevent it from showing 0 for too long
+            auto current_time = std::chrono::high_resolution_clock::now();
+            auto idle_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_activity_time).count();
+            
+            // If we've been idle for more than 200ms, update the rate to reflect current state
+            if (idle_duration > 200) {
+                // Calculate effective rate based on the idle period
+                auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_update_time).count();
+                if (elapsed_ms > 1000) {  // If more than 1 second has passed since last rate update
+                    logic_rate_ = 0;  // Set to 0 if truly idle
+                    last_update_time = current_time;  // Update last update time to prevent constant 0 reporting
+                }
+            }
+            
             // Log that pop failed, and sleep briefly to prevent busy-waiting
-            // Reduced sleep to 100 microseconds to reduce latency
+            // Reduced sleep to 50 microseconds to reduce latency
             if (running_) { // Only log if still intended to be running
                 APP_LOG_DEBUG("LogicModule: Pop failed (queue empty or stopped). Sleeping briefly.");
             }
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
     }
     APP_LOG_INFO("LogicModule worker thread stopped.");

@@ -111,13 +111,11 @@ void H264Encoder::worker_thread_func() {
 
     param_.b_repeat_headers = 1; // Repeat SPS/PPS before IDR frames
 
-    param_.b_annexb = 1; // Annex B byte stream format
+    param_.b_annexb = 1; // Annex B format (start codes) for better compatibility
     
-    // Keyframe and IDR frame settings for proper decoding
-    param_.i_keyint_max = static_cast<int>(fps_); // Keyframe every second (was 1) - better for performance
+    // Keyframe and IDR frame settings for proper decoding (already set earlier)
     param_.i_keyint_min = 1; // Minimum keyframe interval
     param_.i_bframe = 0; // No B-frames for simpler decoding and lower latency
-    param_.b_intra_refresh = 1; // Use intra refresh instead of full keyframes for lower latency
 
     
 
@@ -246,6 +244,21 @@ void H264Encoder::worker_thread_func() {
         if (!image_data.buffer) {
             APP_LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
             continue;
+        }
+
+        // Log input frame information before processing
+        static int input_frame_counter = 0;
+        if (input_frame_counter < 5) {  // Log first 5 input frames
+            auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            APP_LOG_INFO("INPUT FRAME #" + std::to_string(input_frame_counter) + 
+                        ": Width=" + std::to_string(image_data.width) + 
+                        ", Height=" + std::to_string(image_data.height) +
+                        ", Buffer Size=" + std::to_string(image_data.buffer ? image_data.buffer->data.size() : 0) +
+                        ", Format=" + std::to_string(image_data.format.fourcc()) +  // This will show the libcamera format
+                        ", Timestamp=" + std::to_string(timestamp) + "ms" +
+                        ", Frame ID=" + std::to_string(image_data.frame_id));
+            input_frame_counter++;
         }
 
         // 2. Color conversion (Ensure proper format for x264 encoding)
@@ -389,8 +402,52 @@ void H264Encoder::worker_thread_func() {
             // 5. NAL unit handling and queue push
             [[maybe_unused]] auto nal_handling_start = std::chrono::high_resolution_clock::now();
             int pushed_count = 0;
+            // Track first few frames for debugging
+            static int frame_dump_counter = 0;
+            
             for (int i = 0; i < i_nal; ++i) {
-                APP_LOG_DEBUG("H264Encoder: Processing NAL unit " + std::to_string(i) + " with payload size: " + std::to_string(nal[i].i_payload));
+                // Log NAL unit type for debugging
+                uint8_t nal_type = nal[i].p_payload[0] & 0x1F;  // Get lower 5 bits for NAL unit type
+                const char* nal_type_str = "Unknown";
+                switch (nal_type) {
+                    case 1: nal_type_str = "P-Slice"; break;
+                    case 5: nal_type_str = "IDR-Slice"; break;  // Keyframe
+                    case 7: nal_type_str = "SPS"; break;        // Sequence Parameter Set
+                    case 8: nal_type_str = "PPS"; break;        // Picture Parameter Set
+                    case 6: nal_type_str = "SEI"; break;
+                    default: break;
+                }
+                
+                APP_LOG_DEBUG("H264Encoder: Processing NAL unit " + std::to_string(i) + 
+                             " type: " + std::string(nal_type_str) + 
+                             " (" + std::to_string(nal_type) + ")" +
+                             " with payload size: " + std::to_string(nal[i].i_payload));
+                
+                // Dump first few frames with detailed information
+                if (frame_dump_counter < 10) {  // Only dump first 10 frames
+                    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+                    
+                    APP_LOG_INFO("FRAME DUMP #" + std::to_string(frame_dump_counter) + 
+                                ": NAL Type=" + std::string(nal_type_str) + 
+                                " (" + std::to_string(nal_type) + ")" +
+                                ", Size=" + std::to_string(nal[i].i_payload) + 
+                                ", Timestamp=" + std::to_string(timestamp) + "ms");
+                    
+                    // Log first few bytes of the NAL unit for inspection
+                    if (nal[i].i_payload >= 4) {
+                        std::string hex_dump = "";
+                        for (int b = 0; b < std::min(8, nal[i].i_payload); b++) {
+                            char byte_str[4];
+                            snprintf(byte_str, sizeof(byte_str), "%02X ", static_cast<unsigned char>(nal[i].p_payload[b]));
+                            hex_dump += byte_str;
+                        }
+                        APP_LOG_DEBUG("  First 8 bytes: " + hex_dump);
+                    }
+                    
+                    frame_dump_counter++;
+                }
+                
                 auto h264_buffer = h264_buffer_pool_->acquire();
                 if (h264_buffer) {
                     if (static_cast<size_t>(nal[i].i_payload) > h264_buffer->data.capacity()) {
@@ -399,14 +456,18 @@ void H264Encoder::worker_thread_func() {
                     }
                      memcpy(h264_buffer->data.data(), nal[i].p_payload, nal[i].i_payload);
                      h264_buffer->size = nal[i].i_payload;
-                     if (push_latest_only(output_queue_, std::move(h264_buffer))) {
+                     // Use blocking push to ensure every encoded frame is pushed to the output queue
+                     if (output_queue_.push(std::move(h264_buffer))) {
                          pushed_count++;
-                         // Only log every 10th NAL unit to reduce logging overhead
-                         if (pushed_count % 10 == 1) {
+                         // Log keyframes and SPS/PPS for debugging
+                         if (nal_type == 5 || nal_type == 7 || nal_type == 8) {  // IDR, SPS, PPS
+                             APP_LOG_INFO("H264Encoder: Pushed " + std::string(nal_type_str) + 
+                                         " to output queue. Size: " + std::to_string(nal[i].i_payload));
+                         } else if (pushed_count % 30 == 1) {  // Log every 30th frame to reduce overhead
                              APP_LOG_DEBUG("H264Encoder: Successfully pushed H264 buffer to output queue. Payload size: " + std::to_string(nal[i].i_payload));
                          }
                      } else {
-                         APP_LOG_WARNING("H264Encoder: Failed to push H264 buffer with latest-only semantics. Payload size: " + std::to_string(nal[i].i_payload));
+                         APP_LOG_WARNING("H264Encoder: Failed to push H264 buffer to output queue. Payload size: " + std::to_string(nal[i].i_payload));
                      }
                 } else {
                     APP_LOG_WARNING("H264Encoder: Failed to acquire buffer for NAL unit. Dropping.");

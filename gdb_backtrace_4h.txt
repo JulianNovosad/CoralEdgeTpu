@@ -1,6 +1,0 @@
-
-Thread 45 (Thread 0x7faadcc340 (LWP 5610) "detector"):
-Unable to fetch general registers: No such process.
-Warning: 'set logging off', an alias for the command 'set logging enabled', is deprecated.
-Use 'set logging enabled off'.
-

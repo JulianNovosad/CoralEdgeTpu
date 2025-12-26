@@ -1,1 +1,0 @@
-/usr/bin/c++  -Wall -Wextra -Werror -g CMakeFiles/minimal_model_test.dir/minimal_model_test.cpp.o -o minimal_model_test  -Wl,-rpath,/home/pi/CoralEdgeTpu/lib lib/libtensorflowlite.so -ledgetpu 

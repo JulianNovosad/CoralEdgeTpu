@@ -113,7 +113,7 @@ private:
     void worker_thread_func();
     std::unique_ptr<tflite::Interpreter> create_interpreter();
     void set_input_tensor(tflite::Interpreter* interpreter, const ImageData& image);
-    std::shared_ptr<DetectionResultBuffer> get_output_tensor(tflite::Interpreter* interpreter);
+    std::shared_ptr<DetectionResultBuffer> get_output_tensor(tflite::Interpreter* interpreter, const ImageData& input_image);
     float get_tpu_temperature();
 
     std::string model_path_; ///< Path to the TensorFlow Lite model file.
@@ -141,7 +141,37 @@ public:
     // Timing statistics
     mutable std::atomic<long long> avg_inference_time_us_{0}; ///< Average inference time in microseconds
     
+    // Public getters for drop counters to be used by Monitor
+    int64_t get_overlay_queue_drop_count() const { return overlay_queue_drop_count_.load(); }
+    int64_t get_logic_queue_drop_count() const { return logic_queue_drop_count_.load(); }
+    
+    // Public increment methods for drop counters to be used when draining queues
+    void increment_logic_queue_drop_count() { logic_queue_drop_count_.fetch_add(1); }
+    void increment_overlay_queue_drop_count() { overlay_queue_drop_count_.fetch_add(1); }
+    
+    // Public getters for frame accounting counters
+    int64_t get_frames_consumed() const { return frames_consumed_.load(); }
+    int64_t get_results_produced() const { return results_produced_.load(); }
+    int64_t get_results_consumed_by_logic() const { return results_consumed_by_logic_.load(); }
+    int64_t get_results_consumed_by_overlay() const { return results_consumed_by_overlay_.load(); }
+    
+    // Method to set application reference for updating counters
+    void set_application_ref(class Application* app) { app_ref_ = app; }
+    
 private:
+    // Drop counters for proper queue accounting
+    std::atomic<int64_t> overlay_queue_drop_count_{0}; ///< Count of detection results dropped from overlay queue
+    std::atomic<int64_t> logic_queue_drop_count_{0};   ///< Count of detection results dropped from logic queue
+    
+    // Frame accounting counters
+    std::atomic<int64_t> frames_consumed_{0};           ///< Count of frames consumed from input queue
+    std::atomic<int64_t> results_produced_{0};          ///< Count of detection results produced
+    std::atomic<int64_t> results_consumed_by_logic_{0};  ///< Count of results consumed by logic module
+    std::atomic<int64_t> results_consumed_by_overlay_{0}; ///< Count of results consumed by overlay module
+    
+    // Application reference for updating counters
+    class Application* app_ref_ = nullptr;
+    
     TfLiteDelegate* edgetpu_delegate_ = nullptr; ///< The single Edge TPU delegate.
 };
 

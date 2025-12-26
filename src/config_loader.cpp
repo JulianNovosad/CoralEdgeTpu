@@ -257,6 +257,23 @@ libcamera::PixelFormat ConfigLoader::get_tpu_stream_pixel_format() const {
     return libcamera::formats::BGR888; // Default
 }
 
+// --- RTSP Configuration Getters ---
+int ConfigLoader::get_rtsp_port() const {
+    return config_data_.value("/application/video_stream/rtsp_port"_json_pointer, 8554);
+}
+
+std::string ConfigLoader::get_rtsp_mount_point() const {
+    return config_data_.value("/application/video_stream/rtsp_mount_point"_json_pointer, "/live");
+}
+
+std::string ConfigLoader::get_rtsp_username() const {
+    return config_data_.value("/application/video_stream/rtsp_username"_json_pointer, "");
+}
+
+std::string ConfigLoader::get_rtsp_password() const {
+    return config_data_.value("/application/video_stream/rtsp_password"_json_pointer, "");
+}
+
 
 const nlohmann::json& ConfigLoader::get_json_config() const {
     return config_data_;

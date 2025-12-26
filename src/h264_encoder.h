@@ -50,6 +50,14 @@ private:
     // Timing statistics
     mutable std::atomic<long long> avg_encode_time_us_{0};
     mutable std::atomic<long long> avg_nal_time_us_{0};
+    
+    // Display starvation detection
+    mutable std::atomic<bool> first_frame_sent_{false};
+    mutable std::chrono::high_resolution_clock::time_point last_frame_processed_time_;
+    mutable int last_frame_id_{-1};
+    
+    // Method for checking display starvation
+    bool is_display_starving() const;
 };
 
 #endif // H264_ENCODER_H

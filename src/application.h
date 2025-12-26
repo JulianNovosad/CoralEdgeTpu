@@ -13,6 +13,7 @@
 #include "image_processor.h" // New include
 #include "keyboard_monitor.h"
 #include "http_streamer.h"
+#include "rtsp_server.h"
 #include "monitor.h"
 
 #include "buffer_pool.h"
@@ -28,6 +29,10 @@
 
 // Include EdgeTPU headers for TPU occupancy management
 #include "edgetpu_c.h"
+
+// Include signal handling headers
+#include <signal.h>
+#include <pthread.h>
 
 /**
  * @brief Een applicatieklasse die de volledige CoralEdgeTpu-pijplijn beheert.
@@ -59,11 +64,15 @@ public:
     // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
     std::unique_ptr<H264Encoder> h264_encoder_;
     std::unique_ptr<HttpStreamer> http_streamer_;
+    std::unique_ptr<RTSPServerWrapper> rtsp_server_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;
     std::unique_ptr<SystemMonitor> system_monitor_;
     std::unique_ptr<KeyboardMonitor> keyboard_monitor_;
     std::unique_ptr<Monitor> monitor_;
+    std::unique_ptr<ImageProcessor> visualization_processor_; // Added for visualization
+    ImageQueue main_video_queue_; // Added queue
+    bool use_reduced_resolution_ = false; // Added flag
     
     // Queues (moved to public for monitor access)
     ImageQueue raw_image_for_processor_queue_; // New queue
@@ -104,6 +113,16 @@ private:
     void register_shutdown_handlers();
     void main_loop();
     
+    // Additional monitoring functions
+    void check_display_starvation();
+    void monitor_queue_depths();
+    void enforce_max_latency();
+    void check_thread_stalls();
+    void drain_queues();
+    void debug_queue_monitoring();
+    void debug_buffer_pool_monitoring();
+    void run_debugging_pipeline();
+    
     // Recovery mechanisms
     void recovery_thread_func();
     bool restart_camera_subsystem();
@@ -112,6 +131,7 @@ private:
     bool restart_image_processor_subsystem();
     bool restart_encoder_subsystem();
     bool restart_orientation_subsystem();
+    bool restart_visualization_subsystem(); // Added method
     
     int argc_;
     char** argv_;
@@ -146,10 +166,21 @@ private:
     const int max_recovery_attempts_ = 5; // Maximum attempts per second
 
     std::vector<std::string> labels_;
+    
+    // Queue accounting counters to enforce: produced == consumed + dropped invariant
+    std::atomic<int64_t> camera_frames_produced_{0};
+    std::atomic<int64_t> camera_frames_dropped_{0};
+    std::atomic<int64_t> camera_frames_consumed_by_inference_{0};
+    
+    std::atomic<int64_t> inference_results_produced_{0};
+    std::atomic<int64_t> inference_results_dropped_{0};
+    std::atomic<int64_t> inference_results_consumed_by_logic_{0};
+    std::atomic<int64_t> inference_results_consumed_by_overlay_{0};
 
 public:
     // Getter methods for Monitor class
     const std::unique_ptr<ImageProcessor>& get_image_processor() const { return image_processor_; }
+    const std::unique_ptr<ImageProcessor>& get_visualization_processor() const { return visualization_processor_; }
     const std::unique_ptr<InferenceEngine>& get_inference_engine() const { return inference_engine_; }
     const std::unique_ptr<CameraCapture>& get_primary_camera() const { return primary_camera_; }
     const std::unique_ptr<H264Encoder>& get_h264_encoder() const { return h264_encoder_; }
@@ -157,6 +188,24 @@ public:
     const std::unique_ptr<LogicModule>& get_logic_module() const { return logic_module_; }
     const std::unique_ptr<SystemMonitor>& get_system_monitor() const { return system_monitor_; }
     const std::unique_ptr<KeyboardMonitor>& get_keyboard_monitor() const { return keyboard_monitor_; }
+    
+    // Queue accounting methods for Monitor
+    int64_t get_camera_frames_produced() const { return camera_frames_produced_.load(); }
+    int64_t get_camera_frames_dropped() const { return camera_frames_dropped_.load(); }
+    int64_t get_camera_frames_consumed_by_inference() const { return camera_frames_consumed_by_inference_.load(); }
+    int64_t get_inference_results_produced() const { return inference_results_produced_.load(); }
+    int64_t get_inference_results_dropped() const { return inference_results_dropped_.load(); }
+    int64_t get_inference_results_consumed_by_logic() const { return inference_results_consumed_by_logic_.load(); }
+    int64_t get_inference_results_consumed_by_overlay() const { return inference_results_consumed_by_overlay_.load(); }
+    
+    // Methods to update counters from modules
+    void increment_camera_frames_produced() { camera_frames_produced_.fetch_add(1); }
+    void increment_camera_frames_dropped() { camera_frames_dropped_.fetch_add(1); }
+    void increment_camera_frames_consumed_by_inference() { camera_frames_consumed_by_inference_.fetch_add(1); }
+    void increment_inference_results_produced(int count) { inference_results_produced_.fetch_add(count); }
+    void increment_inference_results_dropped() { inference_results_dropped_.fetch_add(1); }
+    void increment_inference_results_consumed_by_logic() { inference_results_consumed_by_logic_.fetch_add(1); }
+    void increment_inference_results_consumed_by_overlay() { inference_results_consumed_by_overlay_.fetch_add(1); }
 
 private:
 };

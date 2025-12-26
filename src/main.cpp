@@ -32,7 +32,7 @@ std::vector<std::string> load_labels(const std::string& path) {
 }
 
 int main(int argc, char** argv) {
-    // Ensure signals are not blocked
+    // Ensure signals are not blocked in the main thread
     sigset_t set;
     sigemptyset(&set);
     sigprocmask(SIG_SETMASK, &set, NULL);

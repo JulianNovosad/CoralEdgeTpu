@@ -229,7 +229,7 @@ private:
     float track_iou_threshold_;
     int track_missed_frames_threshold_;
     float min_track_confidence_;
-
+    
     FallbackMode current_fallback_mode_ = NORMAL_OPERATION;
     long current_hit_scan_count_ = 0;
     long current_servo_command_count_ = 0;
@@ -240,6 +240,14 @@ private:
     
     // PCA9685 LED controller
     std::unique_ptr<PCA9685Controller> led_controller_;
+    
+public:
+    // Method to set application reference for updating counters
+    void set_application_ref(class Application* app) { app_ref_ = app; }
+    
+private:
+    // Application reference for updating counters
+    class Application* app_ref_ = nullptr;
     
     // Servo control variables for thread safety
     float servo_position_ = 0.0f;

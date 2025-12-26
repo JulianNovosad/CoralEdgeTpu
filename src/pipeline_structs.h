@@ -32,6 +32,19 @@ bool push_latest_only(QueueType& queue, DataType&& data) {
     return queue.push(std::forward<DataType>(data));
 }
 
+// Utility function for blocking push - waits until queue has space then pushes
+template<typename QueueType, typename DataType>
+bool push_blocking(QueueType& queue, DataType&& data) {
+    // Wait until there is space in the queue
+    while (queue.write_available() == 0) {
+        // Small delay to prevent busy waiting
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+    }
+    
+    // Now push the data
+    return queue.push(std::forward<DataType>(data));
+}
+
 // --- Generic Data Structures ---
 
 /**
@@ -73,6 +86,9 @@ struct ImageData {
     std::chrono::high_resolution_clock::time_point display_start_time;    ///< Time when frame display started
     std::chrono::high_resolution_clock::time_point display_end_time;      ///< Time when frame display ended
 
+    // Static member for global frame counter
+    static std::atomic<int> global_frame_counter;
+
     // Constructor to initialize timestamp and frame_id
     ImageData(long long ts_epoch_ms = 0, int f_id = -1)
         : timestamp_epoch_ms(ts_epoch_ms), frame_id(f_id) {}
@@ -106,6 +122,7 @@ struct DetectionResult {
     float raw_score; ///< Raw dequantized model output for debugging.
     float xmin, ymin, xmax, ymax; ///< Bounding box coordinates (normalized 0.0 - 1.0 or pixel values).
     std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of when the detection was made.
+    int source_frame_id = -1; ///< ID of the source frame that generated this detection.
 };
 
 /**

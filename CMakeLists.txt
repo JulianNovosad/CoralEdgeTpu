@@ -35,15 +35,13 @@ else()
     message(WARNING "x264 not found. H.264 encoding via libx264 may not work.")
 endif()
 
-# Attempt to find Live555
-pkg_check_modules(LIVE555 QUIET live555)
-if (LIVE555_FOUND)
-    message(STATUS "Found Live555: ${LIVE555_LIBRARIES}")
-    include_directories(${LIVE555_INCLUDE_DIRS})
-    # Add specific Live555 include directory
-    include_directories(/usr/include/liveMedia /usr/include/BasicUsageEnvironment /usr/include/UsageEnvironment /usr/include/groupsock)
+# Attempt to find GStreamer RTSP Server
+pkg_check_modules(GSTREAMER_RTSP_SERVER QUIET gstreamer-rtsp-server-1.0 gstreamer-1.0)
+if (GSTREAMER_RTSP_SERVER_FOUND)
+    message(STATUS "Found GStreamer RTSP Server: ${GSTREAMER_RTSP_SERVER_LIBRARIES}")
+    include_directories(${GSTREAMER_RTSP_SERVER_INCLUDE_DIRS})
 else()
-    message(WARNING "Live555 not found. RTSP streaming may not work.")
+    message(WARNING "GStreamer RTSP Server not found. RTSP streaming may not work.")
 endif()
 
 # --- Find Local/Custom Dependencies ---
@@ -70,6 +68,7 @@ add_executable(detector
     src/logic.cpp
     src/pca9685_controller.cpp
     src/monitor.cpp
+    src/global_definitions.cpp
 
     src/h264_encoder.cpp
     src/orientation_sensor.cpp
@@ -77,7 +76,10 @@ add_executable(detector
     src/system_monitor.cpp
     src/keyboard_monitor.cpp
     src/http_streamer.cpp
+    src/rtsp_server.cpp
     civetweb/src/civetweb.c
+    civetweb_temp/src/CivetServer.cpp
+    src/civetweb_wrapper.cpp
 )
 add_executable(camera_isolation_test
     src/camera_isolation_test.cpp
@@ -98,21 +100,36 @@ add_executable(raw_tpu_test
 )
 
 add_executable(tpu_diagnostic
-    tpu_diagnostic.cpp
+    tests/tpu_diagnostic.cpp
 )
 
 add_executable(list_tpu_devices
-    list_tpu_devices.cpp
+    tests/list_tpu_devices.cpp
 )
 
 add_executable(check_edgetpu_version
-    check_edgetpu_version.cpp
+    tests/check_edgetpu_version.cpp
 )
-set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS USE_WEBSOCKET)
+# Compile civetweb.c as C with proper defines for C++ wrapper
+set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS "CIVETWEB_CGI_EXTENSIONS=\"\";USE_WEBSOCKET;NO_CACHING")
+
+# Add C++ wrapper files to ensure C++ wrapper functions are compiled
+set(CIVETWEB_CPP_WRAPPER 
+    civetweb_temp/src/CivetServer.cpp
+    src/civetweb_wrapper.cpp
+)
+add_library(civetweb_cpp_wrapper ${CIVETWEB_CPP_WRAPPER})
+target_include_directories(civetweb_cpp_wrapper PRIVATE civetweb/include civetweb/src)
+set_source_files_properties(${CIVETWEB_CPP_WRAPPER} PROPERTIES COMPILE_DEFINITIONS "USE_WEBSOCKET;NO_CACHING")
+target_compile_options(civetweb_cpp_wrapper PRIVATE -Wno-error=missing-field-initializers)
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})
 
 add_definitions(-DOPENSSL_API_3_0)
+option(DEBUG_MODE "Enable debug logging" OFF)
+if(DEBUG_MODE)
+    add_definitions(-DDEBUG_MODE)
+endif()
 target_link_libraries(detector PRIVATE
     ${OpenCV_LIBS}
     # Explicitly link required libraries
@@ -125,14 +142,24 @@ target_link_libraries(detector PRIVATE
     ${ZEROMQ_LIBRARIES} # For ZeroMQ library
     /lib/aarch64-linux-gnu/libssl.so.3
     /lib/aarch64-linux-gnu/libcrypto.so.3
+    m # Math library
+    civetweb_cpp_wrapper
 )
 
 if (X264_FOUND)
     target_link_libraries(detector PRIVATE ${X264_LIBRARIES})
 endif()
 
-if (LIVE555_FOUND)
-    target_link_libraries(detector PRIVATE ${LIVE555_LIBRARIES})
+if (GSTREAMER_RTSP_SERVER_FOUND)
+    target_link_libraries(detector PRIVATE ${GSTREAMER_RTSP_SERVER_LIBRARIES})
+endif()
+
+# Check for and link GStreamer app library (needed for gst_app_src_push_buffer)
+pkg_check_modules(GSTREAMER_APP QUIET gstreamer-app-1.0)
+if (GSTREAMER_APP_FOUND)
+    message(STATUS "Found GStreamer App: ${GSTREAMER_APP_LIBRARIES}")
+    target_link_libraries(detector PRIVATE ${GSTREAMER_APP_LIBRARIES})
+    target_include_directories(detector PRIVATE ${GSTREAMER_APP_INCLUDE_DIRS})
 endif()
 
 target_link_libraries(camera_isolation_test PRIVATE
@@ -143,7 +170,7 @@ target_link_libraries(camera_isolation_test PRIVATE
 
 # Add dashboard executable
 add_executable(dashboard
-    dashboard_fixed.cpp
+    tests/dashboard_fixed.cpp
 )
 
 target_link_libraries(dashboard PRIVATE
@@ -253,10 +280,7 @@ target_include_directories(detector PRIVATE
     ${JPEG_INCLUDE_DIRS}
     ${ZEROMQ_INCLUDE_DIRS}
     ${LIBCAMERA_INCLUDE_DIRS} # Use pkg-config defined include directories for libcamera
-    /usr/include/liveMedia
-    /usr/include/BasicUsageEnvironment
-    /usr/include/UsageEnvironment
-    /usr/include/groupsock
+    ${GSTREAMER_RTSP_SERVER_INCLUDE_DIRS}
     civetweb/include
     src # Include the src directory for h264_encoder.h, etc.
     SYSTEM ${TFLITE_INCLUDE_DIR}
@@ -301,7 +325,7 @@ target_link_libraries(dlopen_test PRIVATE dl)
 
 # Add TPU performance test executable
 add_executable(tpu_performance_test
-    tpu_performance_test.cpp
+    tests/tpu_performance_test.cpp
 )
 target_link_libraries(tpu_performance_test PRIVATE
     ${TFLITE_LIB_DIR}/libtensorflowlite.so

@@ -1,5 +1,6 @@
 #include "image_processor.h"
 #include "util_logging.h" // For logging macros
+#include "application.h"  // For Application counter updates
 #include <chrono> // For std::chrono::high_resolution_clock
 #include <libcamera/formats.h> // For libcamera::formats and to_string()
 
@@ -105,7 +106,20 @@ void ImageProcessor::worker_thread_func() {
     ImageData input_image;
     while (running_.load()) {
         // Use non-blocking pop to allow checking running flag
+        auto pop_start_time = std::chrono::high_resolution_clock::now();
         if (input_queue_.pop(input_image)) {
+            auto pop_end_time = std::chrono::high_resolution_clock::now();
+            auto pop_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(pop_end_time - pop_start_time).count();
+            
+            // Update average queue pop timing for monitoring
+            long long current_avg = avg_queue_pop_time_us_.load();
+            if (current_avg == 0) {
+                avg_queue_pop_time_us_.store(pop_duration_us);
+            } else {
+                // Use exponential moving average for smoother timing display
+                avg_queue_pop_time_us_.store((current_avg * 0.9) + (pop_duration_us * 0.1));
+            }
+            
             auto process_start_time = std::chrono::high_resolution_clock::now();
             
             // Record queue pop time
@@ -177,8 +191,8 @@ void ImageProcessor::worker_thread_func() {
             // Calculate and store average conversion time
             auto conversion_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(conversion_end - conversion_start).count();
             // Use atomic operation for thread safety
-            long long current_avg = avg_conversion_time_us_.load();
-            avg_conversion_time_us_.store((current_avg + conversion_duration_us) / 2);
+            long long current_conversion_avg = avg_conversion_time_us_.load();
+            avg_conversion_time_us_.store((current_conversion_avg + conversion_duration_us) / 2);
 
             cv::Mat processed_mat;
             APP_LOG_DEBUG("ImageProcessor: Comparing input size " + std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + 
@@ -200,6 +214,10 @@ void ImageProcessor::worker_thread_func() {
                 std::shared_ptr<DetectionResultBuffer> detection_buffer;
                 // Attempt to pop detection results, but don't block if none are available
                 if (detection_queue_ptr_->pop(detection_buffer)) {
+                    // If we have an application reference, update the consumed counter
+                    if (app_ref_) {
+                        app_ref_->increment_inference_results_consumed_by_overlay();
+                    }
                     // Apply detection overlays to the processed frame
                     apply_detections_to_frame(processed_mat, detection_buffer);
                     APP_LOG_DEBUG("ImageProcessor: Applied " + std::to_string(detection_buffer->size) + " detections to frame " + std::to_string(input_image.frame_id));
@@ -293,8 +311,9 @@ void ImageProcessor::worker_thread_func() {
                 APP_LOG_WARNING("ImageProcessor: Processed frame buffer is null or empty");
             }
             
-            if (!push_latest_only(output_queue_, std::move(output_image_data))) {
-                APP_LOG_WARNING("ImageProcessor failed to push processed frame with latest-only semantics.");
+            // Use blocking push to ensure every processed frame is pushed to the output queue
+            if (!output_queue_.push(std::move(output_image_data))) {
+                APP_LOG_WARNING("ImageProcessor failed to push processed frame to output queue.");
                 // output_image_data.buffer will be destructed here, returning its buffer to the pool.
             } else {
                 APP_LOG_DEBUG("ImageProcessor: Successfully pushed processed frame to output queue. Frame ID: " + std::to_string(output_image_data.frame_id));
@@ -305,7 +324,9 @@ void ImageProcessor::worker_thread_func() {
             
             // Calculate detailed timing breakdown
             auto preprocess_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(process_end_time - input_image.queue_pop_time).count();
-            avg_preprocess_time_us_ = (avg_preprocess_time_us_.load() + preprocess_duration_us) / 2; // Running average
+            // Update average preprocessing time with proper exponential moving average
+            long long current_preprocess_avg = avg_preprocess_time_us_.load();
+            avg_preprocess_time_us_ = static_cast<long long>(current_preprocess_avg * 0.9 + preprocess_duration_us * 0.1); // 0.1 alpha value for EMA
             
             APP_LOG_DEBUG("ImageProcessor processed frame with overlays in " + std::to_string(duration_ms) + " ms. Input size " +
                           std::to_string(input_image.width) + "x" + std::to_string(input_image.height) + ", Output size " +
@@ -326,6 +347,19 @@ void ImageProcessor::worker_thread_func() {
                 APP_LOG_DEBUG("ImageProcessor timing breakdown - Visualization: " + std::to_string(visualization_time_us) + " us");
             }
         } else {
+            // Update queue pop timing even when pop fails to prevent 0 timing
+            auto pop_end_time = std::chrono::high_resolution_clock::now();
+            auto pop_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(pop_end_time - pop_start_time).count();
+            
+            // Update average queue pop timing for monitoring - use the time it took to fail to pop
+            long long current_avg = avg_queue_pop_time_us_.load();
+            if (current_avg == 0) {
+                avg_queue_pop_time_us_.store(pop_duration_us);
+            } else {
+                // Use exponential moving average for smoother timing display
+                avg_queue_pop_time_us_.store((current_avg * 0.9) + (pop_duration_us * 0.1));
+            }
+            
             // Minimal sleep to prevent busy-waiting when no input is available
             std::this_thread::sleep_for(std::chrono::microseconds(100)); // Reduced from 1ms to 100us to reduce latency
         }

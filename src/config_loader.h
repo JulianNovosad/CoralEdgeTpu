@@ -32,6 +32,8 @@ public:
     std::string get_labels_path() const;
     unsigned int get_high_res_width() const;
     unsigned int get_high_res_height() const;
+    unsigned int get_reduced_res_width() const;
+    unsigned int get_reduced_res_height() const;
     std::chrono::seconds get_camera_watchdog_timeout() const;
     int get_inference_worker_threads() const;
     int get_jpeg_quality() const;
