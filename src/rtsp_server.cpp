@@ -916,9 +916,9 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
     // Extract and store SPS/PPS headers if present
     extract_and_store_headers(buffer);
     
+    int nal_type = -1; // Initialize nal_type to -1
     // Log NAL unit information
     if (buffer->size >= 5) {  // Need at least 5 bytes to check NAL header
-        uint8_t nal_type = 0;
         // Look for start code (0x00000001 or 0x000001)
         size_t start_offset = 0;
         if (buffer->size >= 4 && 
@@ -1079,6 +1079,12 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
             }
             
             // Push the buffer to appsrc
+            // Add a log line here to confirm that buffers are actually being pushed to appsrc.
+            if (nal_type != -1) { // Only log NAL type if it was successfully determined
+                APP_LOG_INFO("RTSP: Pushing H264 buffer to appsrc. Size: " + std::to_string(pushed_size) + ", NAL Type: " + std::to_string(nal_type));
+            } else {
+                APP_LOG_INFO("RTSP: Pushing H264 buffer to appsrc. Size: " + std::to_string(pushed_size) + ", NAL Type: Unknown");
+            }
             GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), gst_buffer);
             if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
                 APP_LOG_ERROR("Failed to push buffer to appsrc: " + std::to_string(ret) + state_info);
