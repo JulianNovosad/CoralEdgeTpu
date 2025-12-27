@@ -105,10 +105,35 @@ static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, g
             "profile", G_TYPE_STRING, "constrained-baseline",
             "width", G_TYPE_INT, 1536,
             "height", G_TYPE_INT, 864,
-            "framerate", GST_TYPE_FRACTION, 40, 1,
+            "framerate", GST_TYPE_FRACTION, 120, 1,
             NULL);
         gst_app_src_set_caps(GST_APP_SRC(appsrc), caps);
         gst_caps_unref(caps);
+        
+        // Sync appsrc state with parent pipeline to ensure proper state transitions
+        GstObject *parent = gst_element_get_parent(appsrc);
+        if (parent) {
+            GstState parent_state;
+            GstState pending_state;
+            GstStateChangeReturn ret = gst_element_get_state(GST_ELEMENT_CAST(parent), &parent_state, &pending_state, GST_CLOCK_TIME_NONE);
+            if (ret != GST_STATE_CHANGE_FAILURE) {
+                APP_LOG_INFO("RTSP: Syncing appsrc state with parent pipeline state: " + 
+                           std::string(gst_element_state_get_name(parent_state)));
+                
+                // Explicitly set appsrc to PLAYING state to ensure it's ready for buffer pushes
+                GstStateChangeReturn appsrc_ret = gst_element_set_state(appsrc, GST_STATE_PLAYING);
+                if (appsrc_ret == GST_STATE_CHANGE_FAILURE) {
+                    APP_LOG_ERROR("RTSP: Failed to set appsrc to PLAYING state");
+                } else if (appsrc_ret == GST_STATE_CHANGE_ASYNC) {
+                    APP_LOG_INFO("RTSP: Appsrc state change to PLAYING is async, waiting...");
+                    GstState appsrc_state;
+                    appsrc_ret = gst_element_get_state(appsrc, &appsrc_state, &pending_state, GST_CLOCK_TIME_NONE);
+                } else {
+                    APP_LOG_INFO("RTSP: Appsrc successfully set to PLAYING state");
+                }
+            }
+            gst_object_unref(parent);
+        }
         
         // Flush any pending buffers that accumulated before the appsrc was ready
         server_wrapper->flush_pending_buffers();
@@ -145,14 +170,28 @@ static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, g
             APP_LOG_WARNING("RTSP: Could not find h264parse element to configure for SPS/PPS delivery");
         }
         
+        // Wait a brief moment to ensure the appsrc state has fully transitioned
+        g_usleep(100000); // 100ms delay to allow state to settle
+        
         // Process any pending clients now that appsrc is ready
         std::vector<GstRTSPClient*> pending_clients = server_wrapper->take_pending_clients();
         for (GstRTSPClient* client : pending_clients) {
             APP_LOG_INFO("Processing pending client after appsrc is ready");
-            // Send SPS/PPS headers to the new client
-            server_wrapper->send_sps_pps_headers();
-            // Send the latest keyframe to allow immediate video playback
-            server_wrapper->send_latest_keyframe();
+            
+            // First check that appsrc is in PLAYING state before sending headers
+            GstState check_state, pending_state;
+            GstStateChangeReturn state_ret = gst_element_get_state(appsrc, &check_state, &pending_state, GST_CLOCK_TIME_NONE);
+            if (state_ret == GST_STATE_CHANGE_SUCCESS && check_state == GST_STATE_PLAYING) {
+                // Send SPS/PPS headers to the new client - critical for H.264 playback
+                server_wrapper->send_sps_pps_headers();
+                // Send the latest keyframe to allow immediate video playback
+                server_wrapper->send_latest_keyframe();
+                APP_LOG_INFO("Successfully sent SPS/PPS headers and keyframe to new client");
+            } else {
+                APP_LOG_WARNING("Appsrc not in PLAYING state when sending headers to new client. State: " + 
+                              std::string(gst_element_state_get_name(check_state)));
+            }
+            
             // Unref the client since we took ownership from the queue
             gst_object_unref(client);
         }
@@ -712,9 +751,27 @@ void RTSPServerWrapper::send_sps_pps_headers() {
         return;
     }
     
+    // Check appsrc state before sending headers
+    GstState appsrc_state, pending_state;
+    GstStateChangeReturn state_ret = gst_element_get_state(current_appsrc, &appsrc_state, &pending_state, GST_CLOCK_TIME_NONE);
+    if (state_ret != GST_STATE_CHANGE_SUCCESS || appsrc_state != GST_STATE_PLAYING) {
+        APP_LOG_WARNING("Appsrc not in PLAYING state when sending SPS/PPS headers. State: " + 
+                      std::string(gst_element_state_get_name(appsrc_state)));
+        
+        // Wait briefly and check again before giving up
+        g_usleep(50000); // 50ms delay
+        state_ret = gst_element_get_state(current_appsrc, &appsrc_state, &pending_state, GST_CLOCK_TIME_NONE);
+        if (state_ret != GST_STATE_CHANGE_SUCCESS || appsrc_state != GST_STATE_PLAYING) {
+            APP_LOG_ERROR("Appsrc still not in PLAYING state for SPS/PPS headers. Skipping header push.");
+            gst_object_unref(current_appsrc);
+            return;
+        }
+    }
+    
     std::lock_guard<std::mutex> lock(sps_pps_mutex_);
     
-    APP_LOG_INFO("Sending SPS/PPS headers to new client...");
+    APP_LOG_INFO("Sending SPS/PPS headers to new client (appsrc state: " + 
+                 std::string(gst_element_state_get_name(appsrc_state)) + ")...");
     
     // Track the sequence of RTP packets for the new client
     static int packet_sequence_counter = 0;
@@ -729,9 +786,7 @@ void RTSPServerWrapper::send_sps_pps_headers() {
             gst_buffer_unmap(sps_buffer, &map);
             
             GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), sps_buffer);
-            if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
-                APP_LOG_ERROR("Failed to push SPS header to appsrc: " + std::to_string(ret));
-            } else {
+            if (ret == GST_FLOW_OK) {
                 APP_LOG_INFO("RTP PACKET #" + std::to_string(packet_sequence_counter) + 
                            ": Successfully pushed SPS header of size " + std::to_string(sps_buffer_.size()) + " to new client");
                 packet_sequence_counter++;
@@ -756,6 +811,10 @@ void RTSPServerWrapper::send_sps_pps_headers() {
                     }
                     APP_LOG_INFO("SPS header has valid start code: " + std::string(has_start_code ? "YES" : "NO"));
                 }
+            } else if (ret == GST_FLOW_FLUSHING) {
+                APP_LOG_WARNING("Appsrc flushing during SPS header push, may be during state transition");
+            } else {
+                APP_LOG_ERROR("Failed to push SPS header to appsrc: " + std::to_string(ret));
             }
         } else {
             APP_LOG_ERROR("Failed to allocate GstBuffer for SPS header");
@@ -774,9 +833,7 @@ void RTSPServerWrapper::send_sps_pps_headers() {
             gst_buffer_unmap(pps_buffer, &map);
             
             GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), pps_buffer);
-            if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
-                APP_LOG_ERROR("Failed to push PPS header to appsrc: " + std::to_string(ret));
-            } else {
+            if (ret == GST_FLOW_OK) {
                 APP_LOG_INFO("RTP PACKET #" + std::to_string(packet_sequence_counter) + 
                            ": Successfully pushed PPS header of size " + std::to_string(pps_buffer_.size()) + " to new client");
                 packet_sequence_counter++;
@@ -801,6 +858,10 @@ void RTSPServerWrapper::send_sps_pps_headers() {
                     }
                     APP_LOG_INFO("PPS header has valid start code: " + std::string(has_start_code ? "YES" : "NO"));
                 }
+            } else if (ret == GST_FLOW_FLUSHING) {
+                APP_LOG_WARNING("Appsrc flushing during PPS header push, may be during state transition");
+            } else {
+                APP_LOG_ERROR("Failed to push PPS header to appsrc: " + std::to_string(ret));
             }
         } else {
             APP_LOG_ERROR("Failed to allocate GstBuffer for PPS header");
@@ -1070,31 +1131,59 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
                 APP_LOG_DEBUG("APP SRC CAPS: None");
             }
             
-            // Check the current state of the appsrc for logging purposes
+            // Check the current state of the appsrc and only push if it's in PLAYING state
             GstState appsrc_state, pending_state;
             GstStateChangeReturn state_ret = gst_element_get_state(current_appsrc, &appsrc_state, &pending_state, GST_CLOCK_TIME_NONE);
             std::string state_info = "";
+            bool can_push = false;
+            
             if (state_ret == GST_STATE_CHANGE_SUCCESS) {
                 state_info = " (appsrc state: " + std::string(gst_element_state_get_name(appsrc_state)) + ")";
+                can_push = (appsrc_state == GST_STATE_PLAYING);
+            } else {
+                APP_LOG_WARNING("Could not get appsrc state, assuming not ready for pushing");
+                can_push = false;
             }
             
-            // Push the buffer to appsrc
-            // Add a log line here to confirm that buffers are actually being pushed to appsrc.
-            if (nal_type != -1) { // Only log NAL type if it was successfully determined
-                APP_LOG_INFO("RTSP: Pushing H264 buffer to appsrc. Size: " + std::to_string(pushed_size) + ", NAL Type: " + std::to_string(nal_type));
+            // Only push if appsrc is in PLAYING state
+            if (can_push) {
+                // Add a log line here to confirm that buffers are actually being pushed to appsrc.
+                if (nal_type != -1) { // Only log NAL type if it was successfully determined
+                    APP_LOG_INFO("RTSP: Pushing H264 buffer to appsrc. Size: " + std::to_string(pushed_size) + ", NAL Type: " + std::to_string(nal_type));
+                } else {
+                    APP_LOG_INFO("RTSP: Pushing H264 buffer to appsrc. Size: " + std::to_string(pushed_size) + ", NAL Type: Unknown");
+                }
+                GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), gst_buffer);
+                switch (ret) {
+                    case GST_FLOW_OK:
+                        // Update OUT counters
+                        frames_out_++;
+                        bytes_out_ += pushed_size;
+                        
+                        APP_LOG_INFO("SUCCESS: Pushed buffer of size " + std::to_string(pushed_size) + 
+                                   " bytes to appsrc, return: " + std::to_string(ret) + state_info);
+                        break;
+                    case GST_FLOW_FLUSHING:
+                        APP_LOG_WARNING("Appsrc is flushing, buffer not pushed (appsrc state: " + 
+                                      std::string(gst_element_state_get_name(appsrc_state)) + "). This is normal during state transitions.");
+                        break;
+                    case GST_FLOW_EOS:
+                        APP_LOG_ERROR("Appsrc reached end-of-stream, buffer not pushed: " + std::to_string(ret) + state_info);
+                        break;
+                    case GST_FLOW_NOT_LINKED:
+                        APP_LOG_ERROR("Appsrc is not linked properly, buffer not pushed: " + std::to_string(ret) + state_info);
+                        break;
+                    case GST_FLOW_NOT_NEGOTIATED:
+                        APP_LOG_ERROR("Appsrc caps not negotiated, buffer not pushed: " + std::to_string(ret) + state_info);
+                        break;
+                    default:
+                        APP_LOG_ERROR("Unexpected return code from gst_app_src_push_buffer: " + std::to_string(ret) + state_info);
+                        break;
+                }
             } else {
-                APP_LOG_INFO("RTSP: Pushing H264 buffer to appsrc. Size: " + std::to_string(pushed_size) + ", NAL Type: Unknown");
-            }
-            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), gst_buffer);
-            if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
-                APP_LOG_ERROR("Failed to push buffer to appsrc: " + std::to_string(ret) + state_info);
-            } else {
-                // Update OUT counters
-                frames_out_++;
-                bytes_out_ += pushed_size;
-                
-                APP_LOG_INFO("SUCCESS: Pushed buffer of size " + std::to_string(pushed_size) + 
-                           " bytes to appsrc, return: " + std::to_string(ret) + state_info);
+                APP_LOG_WARNING("Skipping buffer push: appsrc not in PLAYING state" + state_info);
+                // Don't forget to unref the gst_buffer if we're not pushing it
+                gst_buffer_unref(gst_buffer);
             }
         } else {
             APP_LOG_ERROR("Failed to create GstBuffer for RTSP push");
