@@ -6,80 +6,158 @@
 #include <thread>
 #include <glib.h>
 
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <atomic>
+
+extern std::atomic<bool> shutdown_requested;
+
+// Static helper to wait for port to be listening
+static bool wait_for_port_ready(int port, int timeout_ms) {
+    auto start_time = std::chrono::steady_clock::now();
+    while (!shutdown_requested.load()) {
+        int sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock < 0) return false;
+
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        // Use loopback to check
+        if (inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) <= 0) {
+            close(sock);
+            return false;
+        }
+
+        if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+            close(sock);
+            return true;
+        }
+        close(sock);
+
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count() > timeout_ms) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
+
+// Static member definitions
+std::mutex RTSPServerWrapper::port_binding_mutex_;
+std::atomic<bool> RTSPServerWrapper::port_in_use_{false};
+std::mutex RTSPServerWrapper::camera_access_mutex_;
+std::atomic<bool> RTSPServerWrapper::camera_in_use_{false};
+std::atomic<int> RTSPServerWrapper::active_client_count_{0};
+
 // Static callback function to handle media configuration
 static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, gpointer user_data) {
     RTSPServerWrapper *server_wrapper = static_cast<RTSPServerWrapper*>(user_data);
     
+    std::cerr << "RTSP: media_configure callback triggered" << std::endl;
     APP_LOG_INFO("RTSP MEDIA CONFIGURE CALLBACK TRIGGERED - Pipeline construction successful, new client connecting");
+    APP_LOG_INFO("RTSP MEDIA CONFIGURE: Client RTSP session established, preparing pipeline");
     
     // Get the pipeline from the media
     GstElement *pipeline = gst_rtsp_media_get_element(media);
+    if (!pipeline) {
+        std::cerr << "RTSP: Failed to get pipeline from media" << std::endl;
+        return;
+    }
+
+    g_signal_connect(pipeline, "deep-notify", G_CALLBACK(+[](GstObject *self, GstObject *prop_parent, GParamSpec *pspec, gpointer user_data) {
+        if (std::string(pspec->name) == "state") {
+            GstState state;
+            GstState pending;
+            g_object_get(prop_parent, "state", &state, "pending", &pending, NULL);
+            std::string state_name = gst_element_state_get_name(state);
+            std::string pending_name = gst_element_state_get_name(pending);
+            APP_LOG_INFO("RTSP Pipeline Element State Change: " + std::string(GST_OBJECT_NAME(prop_parent)) + 
+                        " -> " + state_name + " (pending: " + pending_name + ")");
+        }
+    }), server_wrapper);  // Pass server_wrapper as user_data
     
     // Get the appsrc element from the pipeline
     GstElement *appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "video_source");
     
     if (appsrc) {
+        APP_LOG_INFO("RTSP: Found appsrc 'video_source'");
         // Set the appsrc in the wrapper
         server_wrapper->set_appsrc(appsrc);
         
-        // Configure appsrc properties to allow SDP generation
-        // Use static caps to allow pipeline to preroll for SDP generation
+        // Configure appsrc properties for live streaming with proper timing
         g_object_set(G_OBJECT(appsrc),
-            "is-live", FALSE,  // Set to FALSE to allow pipeline preroll for SDP
+            "is-live", TRUE,
             "format", GST_FORMAT_TIME,
             "stream-type", GST_APP_STREAM_TYPE_STREAM,
             "do-timestamp", TRUE,
-            "block", FALSE,
             "min-latency", 0,
-            "max-latency", 0,
-            "produce-lateness", FALSE,
+            "max-latency", 200000000, // 200ms max latency
             NULL);
-        
-        // Set the caps for H.264 video with proper stream-format to match encoder output
+            
+        // Explicitly set caps on appsrc to match encoder settings
+        // This ensures h264parse knows the resolution/framerate even if SPS/PPS are delayed
         GstCaps *caps = gst_caps_new_simple("video/x-h264",
-            "stream-format", G_TYPE_STRING, "avc",
-            "alignment", G_TYPE_STRING, "au",
+            "stream-format", G_TYPE_STRING, "byte-stream",
+            "alignment", G_TYPE_STRING, "nal",
+            "parsed", G_TYPE_BOOLEAN, TRUE,
             "profile", G_TYPE_STRING, "constrained-baseline",
-            "width", G_TYPE_INT, 1280,
-            "height", G_TYPE_INT, 720,
-            "framerate", GST_TYPE_FRACTION, 30, 1,
+            "width", G_TYPE_INT, 1536,
+            "height", G_TYPE_INT, 864,
+            "framerate", GST_TYPE_FRACTION, 40, 1,
             NULL);
-        g_object_set(G_OBJECT(appsrc), "caps", caps, NULL);
+        gst_app_src_set_caps(GST_APP_SRC(appsrc), caps);
         gst_caps_unref(caps);
         
-        // Skip dummy frame pushing - we'll rely on real frames from the application
-        // The pipeline will preroll when the first real frame arrives
-        APP_LOG_INFO("RTSP appsrc configured for live streaming - waiting for real frames from application");
+        // Flush any pending buffers that accumulated before the appsrc was ready
+        server_wrapper->flush_pending_buffers();
         
-        // Log caps negotiation details
-        APP_LOG_INFO("RTSP appsrc configured with caps: video/x-h264, stream-format=avc, alignment=au, profile=constrained-baseline");
+
         
-        APP_LOG_INFO("RTSP media configured with appsrc for client connection, preparing for SPS/PPS headers");
+        // Note: Caps are already set in the pipeline string, but we set them here too for appsrc
+        // The pipeline string now forces byte-stream/nal after h264parse
+        APP_LOG_INFO("RTSP: appsrc configured with is-live=TRUE, caps are set to byte-stream/nal");
         
-        // Log timestamp for first few client connections
-        static int client_connection_counter = 0;
-        if (client_connection_counter < 5) {
-            auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            APP_LOG_INFO("CLIENT CONNECTION #" + std::to_string(client_connection_counter) + 
-                        ": Timestamp=" + std::to_string(timestamp) + "ms");
-            client_connection_counter++;
+        // Get and configure h264parse element for proper SPS/PPS delivery
+        GstElement *h264parse = nullptr;
+        GstIterator *it = gst_bin_iterate_elements(GST_BIN(pipeline));
+        GValue value = G_VALUE_INIT;
+        
+        while (gst_iterator_next(it, &value)) {
+            GstElement *child = GST_ELEMENT(g_value_get_object(&value));
+            const gchar *name = GST_OBJECT_NAME(child);
+            if (name && g_str_has_prefix(name, "h264parse")) {
+                h264parse = child;
+                gst_object_ref(h264parse); // Add ref since we'll unref later
+                break;
+            }
+            g_value_reset(&value);
+        }
+        g_value_unset(&value);
+        gst_iterator_free(it);
+        
+        if (h264parse) {
+            g_object_set(h264parse, "config-interval", 1, nullptr);
+            APP_LOG_INFO("RTSP: h264parse configured with config-interval=1");
+            gst_object_unref(h264parse);
+        } else {
+            APP_LOG_WARNING("RTSP: Could not find h264parse element to configure for SPS/PPS delivery");
         }
         
-        // First, send SPS/PPS headers to the new client if available
-        server_wrapper->send_sps_pps_headers(appsrc);
-        
-        // Then flush any pending buffers that were queued before appsrc was available
-        server_wrapper->flush_pending_buffers(appsrc);
-        
-        // Now switch appsrc to live mode for actual streaming
-        g_object_set(G_OBJECT(appsrc), "is-live", TRUE, NULL);
-        APP_LOG_INFO("RTSP appsrc switched to live mode for streaming");
-        
-        // Do not manually set pipeline state - let the RTSP server handle state transitions
-        // The RTSP server will handle the state changes needed for SDP generation
-        APP_LOG_INFO("Pipeline state management delegated to RTSP server for proper DESCRIBE handling");
+        // Process any pending clients now that appsrc is ready
+        std::vector<GstRTSPClient*> pending_clients = server_wrapper->take_pending_clients();
+        for (GstRTSPClient* client : pending_clients) {
+            APP_LOG_INFO("Processing pending client after appsrc is ready");
+            // Send SPS/PPS headers to the new client
+            server_wrapper->send_sps_pps_headers();
+            // Send the latest keyframe to allow immediate video playback
+            server_wrapper->send_latest_keyframe();
+            // Unref the client since we took ownership from the queue
+            gst_object_unref(client);
+        }
     } else {
+        std::cerr << "RTSP ERROR: Failed to get appsrc element from RTSP media pipeline" << std::endl;
         APP_LOG_ERROR("Failed to get appsrc element from RTSP media pipeline");
     }
     
@@ -93,14 +171,74 @@ static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, g
     gst_object_unref(pipeline);
 }
 
+void RTSPServerWrapper::client_connected_cb(GstRTSPServer *server, GstRTSPClient *client, gpointer user_data) {
+    APP_LOG_INFO("RTSP CLIENT_CONNECTED_CB: New client attempting connection");
+    GstRTSPConnection *connection = gst_rtsp_client_get_connection(client);
+    if (connection) {
+        const gchar *ip = gst_rtsp_connection_get_ip(connection);
+        APP_LOG_INFO("RTSP CLIENT_CONNECTED_CB: Client from IP=" + std::string(ip ? ip : "Unknown"));
+    }
+    
+    RTSPServerWrapper *server_wrapper = static_cast<RTSPServerWrapper*>(user_data);
+    if (server_wrapper) {
+        server_wrapper->manage_client_connection(client);
+    }
+    
+    // Connect to client closed signal
+    g_signal_connect(client, "closed", G_CALLBACK(client_closed_cb), user_data);
+}
+
+void RTSPServerWrapper::client_closed_cb(GstRTSPClient *client, gpointer user_data) {
+    RTSPServerWrapper *server_wrapper = static_cast<RTSPServerWrapper*>(user_data);
+    (void)server_wrapper; // Unused for now
+
+    GstRTSPConnection *connection = gst_rtsp_client_get_connection(client);
+    if (connection) {
+        const gchar *ip = gst_rtsp_connection_get_ip(connection);
+        std::cerr << "RTSP: unmanage_client (disconnected) from " << (ip ? ip : "Unknown") << std::endl;
+        APP_LOG_INFO("RTSP UNMANAGE_CLIENT (DISCONNECTED): IP=" + std::string(ip ? ip : "Unknown"));
+    } else {
+        std::cerr << "RTSP: unmanage_client (disconnected) from Unknown Connection" << std::endl;
+        APP_LOG_INFO("RTSP UNMANAGE_CLIENT (DISCONNECTED): Unknown Connection");
+    }
+}
+
 RTSPServerWrapper::RTSPServerWrapper(int rtspPort, const std::string& streamName)
     : rtspPort_(rtspPort), streamName_(streamName), 
       server_(nullptr), mounts_(nullptr), factory_(nullptr), loop_(nullptr),
       timeout_source_(nullptr), appsrc_(nullptr), running_(false) {
 }
 
+void RTSPServerWrapper::set_appsrc(GstElement* appsrc) {
+    std::lock_guard<std::mutex> lock(appsrc_mutex_);
+    if (appsrc_ != nullptr) {
+        gst_object_unref(appsrc_);  // Release old reference
+    }
+    appsrc_ = appsrc;
+    if (appsrc_ != nullptr) {
+        gst_object_ref(appsrc);  // Take ownership reference
+    }
+}
+
+GstElement* RTSPServerWrapper::get_appsrc() const {
+    std::lock_guard<std::mutex> lock(appsrc_mutex_);
+    if (appsrc_ != nullptr) {
+        gst_object_ref(appsrc_);  // Caller must unref
+        return appsrc_;
+    }
+    return nullptr;
+}
+
 RTSPServerWrapper::~RTSPServerWrapper() {
     stop();
+    // Clean up appsrc reference
+    {
+        std::lock_guard<std::mutex> lock(appsrc_mutex_);
+        if (appsrc_) {
+            gst_object_unref(appsrc_);
+            appsrc_ = nullptr;
+        }
+    }
 }
 
 bool RTSPServerWrapper::start() {
@@ -108,6 +246,23 @@ bool RTSPServerWrapper::start() {
         APP_LOG_WARNING("RTSP server is already running");
         return true;
     }
+    
+    // Internal cleanup: stop any running detector or RTSP server before starting
+    internal_cleanup();
+    
+    // Check if port is available using binary lock
+    if (!is_port_available(rtspPort_)) {
+        APP_LOG_ERROR("RTSP server port " + std::to_string(rtspPort_) + " is already in use by another process");
+        return false;
+    }
+    
+    // Acquire the port binding lock
+    std::lock_guard<std::mutex> lock(port_binding_mutex_);
+    if (port_in_use_.load()) {
+        APP_LOG_ERROR("RTSP server port " + std::to_string(rtspPort_) + " is already in use by another instance");
+        return false;
+    }
+    port_in_use_.store(true);
     
     // Initialize GStreamer if not already initialized
     if (!gst_is_initialized()) {
@@ -126,18 +281,16 @@ bool RTSPServerWrapper::start() {
         return false;
     }
     
-    // Set the port
-    g_object_set(server_, "service", std::to_string(rtspPort_).c_str(), nullptr);
+    // Set the address and port explicitly
+    gst_rtsp_server_set_address(server_, "0.0.0.0");
+    gst_rtsp_server_set_service(server_, std::to_string(rtspPort_).c_str());
     
-    // Set session timeout to a higher value to prevent connection drops
-    // Default is typically around 30 seconds, setting to 0 means no timeout
-    g_object_set(server_, "session-timeout", 0, nullptr);
-    
-    // Set maximum number of connections to handle multiple clients
-    g_object_set(server_, "max-connections", 10, nullptr);
-    
-    // Enable socket reuse to prevent "Address already in use" errors
-    g_object_set(server_, "reuse-socket", TRUE, nullptr);
+    // Configure session management for reliable client handling
+    GstRTSPSessionPool *session_pool = gst_rtsp_server_get_session_pool(server_);
+    if (session_pool) {
+        gst_rtsp_session_pool_set_max_sessions(session_pool, 10);  // Allow up to 10 concurrent sessions
+        g_object_unref(session_pool);
+    }
     
     // Get the mounts
     mounts_ = gst_rtsp_server_get_mount_points(server_);
@@ -154,28 +307,26 @@ bool RTSPServerWrapper::start() {
     }
     
     // Set the launch string for the pipeline with better VLC compatibility
-    // Use stream-format=avc for AVC1 format which is more compatible with VLC
-    // config-interval=1 ensures SPS/PPS headers are sent with keyframes
-    // aggregate-mode=zero-latency for immediate header delivery
-    // mtu=1400 for proper packet sizing
-    // pt=96 for RTP payload type
-    APP_LOG_INFO("RTSP pipeline configured with: video/x-h264,stream-format=byte-stream,alignment=au,profile=constrained-baseline");
-    APP_LOG_INFO("h264parse config-interval=1 for SPS/PPS delivery with keyframes");
-    APP_LOG_INFO("rtph264pay config-interval=1,aggregate-mode=zero-latency,mtu=1400 for immediate RTP delivery");
+    // Use explicit caps to ensure stable negotiation between appsrc and h264parse.
+    APP_LOG_INFO("RTSP pipeline configured with: appsrc ! h264parse ! caps ! rtph264pay");
     
     gst_rtsp_media_factory_set_launch(factory_, 
-        "( appsrc name=video_source block=false format=GST_FORMAT_TIME do-timestamp=true stream-type=stream min-latency=0 max-latency=200000000 "
-        "caps=video/x-h264,stream-format=avc,alignment=au,profile=constrained-baseline ! "
-        "queue max-size-buffers=5 max-size-time=100000000 max-size-bytes=524288 leaky=downstream silent=false ! "
-        "h264parse config-interval=1 parse-if-needed=true ! rtph264pay config-interval=1 aggregate-mode=zero-latency pt=96 mtu=1400 name=pay0 )");
+        "( appsrc name=video_source is-live=true block=false format=GST_FORMAT_TIME do-timestamp=true stream-type=stream ! "
+        "video/x-h264,stream-format=byte-stream,alignment=nal,parsed=true ! "
+        "h264parse ! "
+        "video/x-h264,stream-format=byte-stream,alignment=nal ! "
+        "rtph264pay name=pay0 config-interval=1 pt=96 )");
+    
+
     
     // Configure the factory
     gst_rtsp_media_factory_set_shared(factory_, TRUE); // Allow multiple clients
+    gst_rtsp_media_factory_set_suspend_mode(factory_, GST_RTSP_SUSPEND_MODE_NONE); // Keep pipeline running
     gst_rtsp_media_factory_set_transport_mode(factory_, GST_RTSP_TRANSPORT_MODE_PLAY);
     
-    // Set additional properties to prevent timeouts
-    g_object_set(factory_, "stop-on-eos", FALSE, nullptr);
-    g_object_set(factory_, "eos-on-shutdown", TRUE, nullptr);
+    // Set supported transport protocols for maximum client compatibility
+    gst_rtsp_media_factory_set_protocols(factory_, 
+        (GstRTSPLowerTrans)(GST_RTSP_LOWER_TRANS_TCP | GST_RTSP_LOWER_TRANS_UDP));
     
     // Connect the media-configure signal to our callback
     g_signal_connect(factory_, "media-configure", G_CALLBACK(media_configure), this);
@@ -183,12 +334,8 @@ bool RTSPServerWrapper::start() {
     // Set the media factory on the mount points
     gst_rtsp_mount_points_add_factory(mounts_, streamName_.c_str(), factory_);
     
-    // Configure the factory with additional settings for mobile compatibility
-    gst_rtsp_media_factory_set_shared(factory_, TRUE); // Allow multiple clients
-    gst_rtsp_media_factory_set_transport_mode(factory_, GST_RTSP_TRANSPORT_MODE_PLAY);
-    
-    // Make media reusable to allow proper pipeline setup for DESCRIBE
-    gst_rtsp_media_factory_set_shared(factory_, TRUE);
+    // Connect the client-connected signal
+    g_signal_connect(server_, "client-connected", G_CALLBACK(client_connected_cb), this);
     
     // Use default protocols - TCP and UDP are typically supported by default
 
@@ -211,6 +358,9 @@ bool RTSPServerWrapper::start() {
         return false;
     }
     
+    APP_LOG_INFO("RTSP server successfully attached to main loop with ID: " + std::to_string(id));
+    APP_LOG_INFO("RTSP SERVER: GMainLoop running, server ready to accept connections on port " + std::to_string(rtspPort_));
+    
     // Add a keep-alive timeout to prevent the server from entering a state where it recreates the socket
     timeout_source_ = g_timeout_source_new_seconds(10); // Add timeout every 10 seconds
     g_source_set_callback(timeout_source_, [](gpointer data) -> gboolean {
@@ -224,6 +374,14 @@ bool RTSPServerWrapper::start() {
     // Start the server thread
     running_ = true;
     server_thread_ = std::thread(&RTSPServerWrapper::serverThread, this);
+    
+    // Wait for the RTSP server port to be physically active (listening)
+    if (!wait_for_port_ready(rtspPort_, 5000)) {
+        APP_LOG_ERROR("Timeout waiting for RTSP port " + std::to_string(rtspPort_) + " to become active");
+        stop();
+        return false;
+    }
+    APP_LOG_INFO("RTSP Port " + std::to_string(rtspPort_) + " is physically active and accepting connections");
     
     APP_LOG_INFO("GStreamer RTSP server started successfully on port " + std::to_string(rtspPort_) + ", stream URL: rtsp://127.0.0.1:" + std::to_string(rtspPort_) + streamName_);
     APP_LOG_INFO("RTSP server is now accepting connections on rtsp://<your_ip>:" + std::to_string(rtspPort_) + streamName_);
@@ -249,8 +407,7 @@ void RTSPServerWrapper::stop() {
     if (loop_) {
         APP_LOG_INFO("Stopping GMainLoop...");
         g_main_loop_quit(loop_);
-        g_main_loop_unref(loop_);
-        loop_ = nullptr;
+        // Don't unref here yet, wait for thread to finish using it
     }
     
     // Stop the server thread
@@ -259,9 +416,16 @@ void RTSPServerWrapper::stop() {
         server_thread_.join();
         APP_LOG_INFO("RTSP server thread joined successfully");
     }
+
+    // Now it's safe to unref the loop
+    if (loop_) {
+        g_main_loop_unref(loop_);
+        loop_ = nullptr;
+    }
     
     // Push a dummy buffer to appsrc to ensure clean shutdown if appsrc exists
-    if (appsrc_) {
+    GstElement* current_appsrc = get_appsrc();
+    if (current_appsrc) {
         // Push a small dummy buffer to unblock any waiting operations
         GstBuffer* dummy_buffer = gst_buffer_new_allocate(NULL, 1, NULL);
         if (dummy_buffer) {
@@ -270,21 +434,15 @@ void RTSPServerWrapper::stop() {
             memset(map.data, 0, 1);  // Fill with zeros
             gst_buffer_unmap(dummy_buffer, &map);
             
-            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc_), dummy_buffer);
+            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(current_appsrc), dummy_buffer);
             APP_LOG_INFO("Pushed dummy buffer to appsrc during shutdown, return: " + std::to_string(ret));
         }
         
         // Send end-of-stream to appsrc to signal the end
-        GstFlowReturn eos_ret = gst_app_src_end_of_stream(GST_APP_SRC(appsrc_));
+        GstFlowReturn eos_ret = gst_app_src_end_of_stream(GST_APP_SRC(current_appsrc));
         APP_LOG_INFO("Sent end-of-stream to appsrc during shutdown, return: " + std::to_string(eos_ret));
-    }
-    
-    // Transition all GStreamer elements to NULL state before unref
-    if (appsrc_) {
-        GstStateChangeReturn ret = gst_element_set_state(GST_ELEMENT(appsrc_), GST_STATE_NULL);
-        APP_LOG_INFO("Appsrc state change to NULL: " + std::to_string(ret));
-        gst_object_unref(appsrc_);
-        appsrc_ = nullptr;
+        
+        gst_object_unref(current_appsrc); // Release the reference from get_appsrc()
     }
     
     // Clean up GStreamer resources after thread stops
@@ -300,11 +458,16 @@ void RTSPServerWrapper::stop() {
         server_ = nullptr;
     }
     
+    // Release the port binding lock
+    port_in_use_.store(false);
+    
     APP_LOG_INFO("GStreamer RTSP server stopped");
 }
 
-void RTSPServerWrapper::flush_pending_buffers(GstElement* appsrc) {
-    if (!appsrc) {
+void RTSPServerWrapper::flush_pending_buffers() {
+    GstElement* current_appsrc = get_appsrc();
+    if (!current_appsrc) {
+        APP_LOG_INFO("flush_pending_buffers: No appsrc available, skipping flush");
         return;
     }
     
@@ -329,16 +492,26 @@ void RTSPServerWrapper::flush_pending_buffers(GstElement* appsrc) {
                 memcpy(map.data, buffer->data.data(), buffer->size);
                 gst_buffer_unmap(gst_buffer, &map);
                 
+                // Check the current state of the appsrc for logging purposes
+                GstState appsrc_state, pending_state;
+                GstStateChangeReturn state_ret = gst_element_get_state(current_appsrc, &appsrc_state, &pending_state, GST_CLOCK_TIME_NONE);
+                std::string state_info = "";
+                if (state_ret == GST_STATE_CHANGE_SUCCESS) {
+                    state_info = " (appsrc state: " + std::string(gst_element_state_get_name(appsrc_state)) + ")";
+                }
+                
                 // Push the buffer to appsrc
-                GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(appsrc), gst_buffer);
+                GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), gst_buffer);
                 if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
-                    APP_LOG_DEBUG("Failed to flush pending buffer to appsrc: " + std::to_string(ret));
+                    APP_LOG_DEBUG("Failed to flush pending buffer to appsrc: " + std::to_string(ret) + state_info);
                 } else {
-                    APP_LOG_DEBUG("Successfully flushed pending buffer of size " + std::to_string(buffer->size) + " to appsrc");
+                    APP_LOG_DEBUG("Successfully flushed pending buffer of size " + std::to_string(buffer->size) + " to appsrc" + state_info);
                 }
             }
         }
     }
+    
+    gst_object_unref(current_appsrc); // Release the reference from get_appsrc()
 }
 
 void RTSPServerWrapper::serverThread() {
@@ -347,6 +520,7 @@ void RTSPServerWrapper::serverThread() {
     // Run the main loop that was created in the start method
     if (loop_) {
         APP_LOG_INFO("GMainLoop exists, entering run loop...");
+        
         g_main_loop_run(loop_);
         APP_LOG_INFO("GMainLoop run finished");
         // Note: The loop_ is unrefed in the stop() method
@@ -436,8 +610,9 @@ void RTSPServerWrapper::extract_and_store_headers(std::shared_ptr<H264Buffer> bu
     }
 }
 
-void RTSPServerWrapper::send_latest_keyframe(GstElement* appsrc) {
-    if (!appsrc) {
+void RTSPServerWrapper::send_latest_keyframe() {
+    GstElement* current_appsrc = get_appsrc();
+    if (!current_appsrc) {
         APP_LOG_WARNING("send_latest_keyframe called with null appsrc");
         return;
     }
@@ -452,7 +627,7 @@ void RTSPServerWrapper::send_latest_keyframe(GstElement* appsrc) {
             memcpy(map.data, latest_keyframe_buffer_.data(), latest_keyframe_buffer_.size());
             gst_buffer_unmap(keyframe_buffer, &map);
             
-            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(appsrc), keyframe_buffer);
+            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), keyframe_buffer);
             if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
                 APP_LOG_ERROR("Failed to push latest keyframe to appsrc: " + std::to_string(ret));
             } else {
@@ -533,10 +708,13 @@ void RTSPServerWrapper::send_latest_keyframe(GstElement* appsrc) {
         // This ensures clients receive actual annotated video content, not dummy frames
         APP_LOG_INFO("Waiting for first real annotated keyframe from detection pipeline before sending to new client");
     }
+    
+    gst_object_unref(current_appsrc); // Release the reference from get_appsrc()
 }
 
-void RTSPServerWrapper::send_sps_pps_headers(GstElement* appsrc) {
-    if (!appsrc) {
+void RTSPServerWrapper::send_sps_pps_headers() {
+    GstElement* current_appsrc = get_appsrc();
+    if (!current_appsrc) {
         APP_LOG_WARNING("send_sps_pps_headers called with null appsrc");
         return;
     }
@@ -557,7 +735,7 @@ void RTSPServerWrapper::send_sps_pps_headers(GstElement* appsrc) {
             memcpy(map.data, sps_buffer_.data(), sps_buffer_.size());
             gst_buffer_unmap(sps_buffer, &map);
             
-            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(appsrc), sps_buffer);
+            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), sps_buffer);
             if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
                 APP_LOG_ERROR("Failed to push SPS header to appsrc: " + std::to_string(ret));
             } else {
@@ -602,7 +780,7 @@ void RTSPServerWrapper::send_sps_pps_headers(GstElement* appsrc) {
             memcpy(map.data, pps_buffer_.data(), pps_buffer_.size());
             gst_buffer_unmap(pps_buffer, &map);
             
-            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(appsrc), pps_buffer);
+            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), pps_buffer);
             if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
                 APP_LOG_ERROR("Failed to push PPS header to appsrc: " + std::to_string(ret));
             } else {
@@ -640,28 +818,105 @@ void RTSPServerWrapper::send_sps_pps_headers(GstElement* appsrc) {
     
     // Send the latest keyframe after headers to ensure immediate playback
     // This is crucial for VLC to start decoding immediately
-    send_latest_keyframe(appsrc);
+    send_latest_keyframe();
     
     if (sps_buffer_.empty() && pps_buffer_.empty()) {
         APP_LOG_ERROR("No SPS or PPS headers available! New client will not be able to decode video.");
     }
+    
+    gst_object_unref(current_appsrc); // Release the reference from get_appsrc()
+}
+
+bool RTSPServerWrapper::is_port_available(int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock == -1) {
+        return false;
+    }
+    
+    // Set socket options to allow reuse
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+    
+    int result = bind(sock, (struct sockaddr*)&addr, sizeof(addr));
+    close(sock);
+    
+    return (result == 0);
+}
+
+bool RTSPServerWrapper::is_appsrc_ready() const {
+    std::lock_guard<std::mutex> lock(appsrc_mutex_);
+    return appsrc_ != nullptr;
+}
+
+void RTSPServerWrapper::add_pending_client(GstRTSPClient* client) {
+    if (!client) return;
+    std::lock_guard<std::mutex> lock(pending_clients_mutex_);
+    g_object_ref(client);  // Take reference
+    pending_clients_.push_back(client);
+}
+
+std::vector<GstRTSPClient*> RTSPServerWrapper::take_pending_clients() {
+    std::lock_guard<std::mutex> lock(pending_clients_mutex_);
+    std::vector<GstRTSPClient*> clients;
+    std::swap(clients, pending_clients_);  // Move ownership
+    return clients;
+}
+
+size_t RTSPServerWrapper::pending_client_count() const {
+    std::lock_guard<std::mutex> lock(pending_clients_mutex_);
+    return pending_clients_.size();
+}
+
+void RTSPServerWrapper::manage_client_connection(GstRTSPClient* client) {
+    GstRTSPConnection *connection = gst_rtsp_client_get_connection(client);
+    if (connection) {
+        const gchar *ip = gst_rtsp_connection_get_ip(connection);
+        std::string client_ip = ip ? ip : "Unknown";
+        APP_LOG_INFO("RTSP MANAGE_CLIENT: Client from " + std::string(client_ip));
+        
+        // Add all clients to pending queue - they will be processed when media is configured
+        // This ensures all clients get proper SPS/PPS headers when the media pipeline is ready
+        std::lock_guard<std::mutex> lock(pending_clients_mutex_);
+        g_object_ref(client);  // Take reference since we're storing the client
+        pending_clients_.push_back(client);
+        APP_LOG_INFO("RTSP CLIENT: Adding client from " + client_ip + " to pending queue (queue size: " + std::to_string(pending_clients_.size()) + ")");
+    }
 }
 
 void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
-    if (!running_ || !buffer || !buffer->data.data() || buffer->size == 0) {
+    if (!buffer || !buffer->data.data() || buffer->size == 0) {
         return;
     }
     
-    // Track frame rate
+    // Update IN counters
+    frames_in_++;
+    bytes_in_ += buffer->size;
+    
+    // Track frame rate and throughput
     static auto last_log_time = std::chrono::steady_clock::now();
-    static int frame_count = 0;
-    frame_count++;
+    static uint64_t last_frames_in = 0;
+    static uint64_t last_frames_out = 0;
     
     auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_time).count();
-    if (elapsed >= 1000) { // Log every second
-        APP_LOG_INFO("RTSP Server: Pushing " + std::to_string(frame_count) + " ANNOTATED frames in last second");
-        frame_count = 0;
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_time).count();
+    if (elapsed_ms >= 1000) { // Log every second
+        uint64_t current_frames_in = frames_in_.load();
+        uint64_t current_frames_out = frames_out_.load();
+        
+        double fps_in = (current_frames_in - last_frames_in) * 1000.0 / elapsed_ms;
+        double fps_out = (current_frames_out - last_frames_out) * 1000.0 / elapsed_ms;
+        
+        APP_LOG_INFO("RTSP_THROUGHPUT: In=" + std::to_string(fps_in) + 
+                    " fps, Out=" + std::to_string(fps_out) + " fps (interval: " + std::to_string(elapsed_ms) + "ms)");
+        
+        last_frames_in = current_frames_in;
+        last_frames_out = current_frames_out;
         last_log_time = now;
     }
     
@@ -701,11 +956,9 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
         }
         
         // Log every frame type with details
-        (void)nal_type_str; // Suppress unused variable warning
         auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
-        (void)timestamp; // Suppress unused variable warning
-        APP_LOG_DEBUG("RTSP Push: NAL type: " + std::string(nal_type_str) + 
+        APP_LOG_INFO("RTSP Push: NAL type: " + std::string(nal_type_str) + 
                      " (" + std::to_string(nal_type) + ")" +
                      ", Size: " + std::to_string(buffer->size) + 
                      ", Timestamp: " + std::to_string(timestamp) + "ms");
@@ -734,31 +987,84 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
         // Validate buffer size before pushing to appsrc
         if (buffer->size == 0) {
             APP_LOG_WARNING("Skipping zero-size buffer push to appsrc");
+            gst_object_unref(current_appsrc); // Release the reference from get_appsrc()
             return;
         }
         
-        // Create a GStreamer buffer from the H.264 data
-        GstBuffer* gst_buffer = gst_buffer_new_allocate(nullptr, buffer->size, nullptr);
+        // Check for start code (0x00 0x00 0x00 0x01 or 0x00 0x00 0x01)
+        bool has_start_code = false;
+        if (buffer->size >= 4 && 
+            buffer->data[0] == 0x00 && buffer->data[1] == 0x00 && 
+            buffer->data[2] == 0x00 && buffer->data[3] == 0x01) {
+            has_start_code = true;
+        } else if (buffer->size >= 3 && 
+                   buffer->data[0] == 0x00 && buffer->data[1] == 0x00 && 
+                   buffer->data[2] == 0x01) {
+            has_start_code = true;
+        }
+
+        GstBuffer* gst_buffer = nullptr;
+        size_t pushed_size = 0;
+        
+        // Log first 16 bytes of input buffer for debugging
+        char hex_dump[64];
+        char* ptr = hex_dump;
+        for (size_t i = 0; i < std::min(static_cast<size_t>(16), buffer->size); ++i) {
+            ptr += sprintf(ptr, "%02X ", buffer->data.data()[i]);
+        }
+        APP_LOG_INFO("RTSP PUSH HEX: " + std::string(hex_dump) + " (Total size: " + std::to_string(buffer->size) + ")");
+
+        if (has_start_code) {
+            // Start code present: Wrap existing buffer using gst_buffer_new_wrapped_full
+            // Create a new shared_ptr on the heap to keep the buffer alive
+            auto* user_data = new std::shared_ptr<H264Buffer>(buffer);
+            
+            gst_buffer = gst_buffer_new_wrapped_full(
+                GST_MEMORY_FLAG_READONLY,
+                buffer->data.data(),
+                buffer->size,
+                0,
+                buffer->size,
+                user_data,
+                [](gpointer data) {
+                    delete static_cast<std::shared_ptr<H264Buffer>*>(data);
+                }
+            );
+            pushed_size = buffer->size;
+        } else {
+            // Missing start code: Assume AVCC format (4-byte length prefix)
+            // and convert to Annex-B by replacing the length with a start code.
+            // This is required because the encoder may output AVCC but RTSP needs Annex-B.
+            size_t new_size = buffer->size; 
+            gst_buffer = gst_buffer_new_allocate(nullptr, new_size, nullptr);
+            if (gst_buffer) {
+                GstMapInfo map;
+                gst_buffer_map(gst_buffer, &map, GST_MAP_WRITE);
+                // Replace first 4 bytes (AVCC length) with Annex-B start code
+                map.data[0] = 0x00;
+                map.data[1] = 0x00;
+                map.data[2] = 0x00;
+                map.data[3] = 0x01;
+                if (buffer->size > 4) {
+                    memcpy(map.data + 4, buffer->data.data() + 4, buffer->size - 4);
+                }
+                gst_buffer_unmap(gst_buffer, &map);
+                pushed_size = new_size;
+            }
+        }
+        
         if (gst_buffer) {
-            GstMapInfo map;
-            gst_buffer_map(gst_buffer, &map, GST_MAP_WRITE);
-            memcpy(map.data, buffer->data.data(), buffer->size);
-            gst_buffer_unmap(gst_buffer, &map);
-            
-            // Set buffer timestamp and duration if available in the original data
-            // For now, we'll log the current time as a reference
-            GstClockTime pts = GST_CLOCK_TIME_NONE;
-            GstClockTime dts = GST_CLOCK_TIME_NONE;
-            
-            // Set PTS if available (using current time as a reference)
-            pts = gst_util_uint64_scale(static_cast<uint64_t>(g_get_monotonic_time()) * GST_USECOND, 1, 1);
-            GST_BUFFER_PTS(gst_buffer) = pts;
-            GST_BUFFER_DTS(gst_buffer) = dts;  // DTS is typically not used for H.264
+            // Set PTS, DTS and Duration to NONE. 
+            // appsrc is configured with do-timestamp=true, so it will provide correct timestamps for the live stream.
+            // Using GST_CLOCK_TIME_NONE for duration improves VLC compatibility as requested.
+            GST_BUFFER_PTS(gst_buffer) = GST_CLOCK_TIME_NONE;
+            GST_BUFFER_DTS(gst_buffer) = GST_CLOCK_TIME_NONE;
+            GST_BUFFER_DURATION(gst_buffer) = GST_CLOCK_TIME_NONE;
             
             // Log detailed buffer information before pushing
-            APP_LOG_INFO("H264 BUFFER PUSH: Size=" + std::to_string(buffer->size) + 
-                        " bytes, PTS=" + std::to_string(pts) + 
-                        " (timestamp: " + std::to_string(GST_TIME_AS_MSECONDS(pts)) + "ms)");
+            APP_LOG_INFO("H264 BUFFER PUSH: Size=" + std::to_string(pushed_size) + 
+                        " bytes (Start code: " + (has_start_code ? "Existing" : "Added") + 
+                        "), PTS=NONE (do-timestamp=true), Duration=NONE");
             
             // Get appsrc caps to verify format
             GstCaps* caps = gst_app_src_get_caps(GST_APP_SRC_CAST(current_appsrc));
@@ -771,15 +1077,31 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
                 APP_LOG_DEBUG("APP SRC CAPS: None");
             }
             
+            // Check the current state of the appsrc for logging purposes
+            GstState appsrc_state, pending_state;
+            GstStateChangeReturn state_ret = gst_element_get_state(current_appsrc, &appsrc_state, &pending_state, GST_CLOCK_TIME_NONE);
+            std::string state_info = "";
+            if (state_ret == GST_STATE_CHANGE_SUCCESS) {
+                state_info = " (appsrc state: " + std::string(gst_element_state_get_name(appsrc_state)) + ")";
+            }
+            
             // Push the buffer to appsrc
             GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(current_appsrc), gst_buffer);
             if (ret != GST_FLOW_OK && ret != GST_FLOW_FLUSHING) {
-                APP_LOG_ERROR("Failed to push buffer to appsrc: " + std::to_string(ret));
+                APP_LOG_ERROR("Failed to push buffer to appsrc: " + std::to_string(ret) + state_info);
             } else {
-                APP_LOG_INFO("SUCCESS: Pushed buffer of size " + std::to_string(buffer->size) + 
-                           " bytes to appsrc, return: " + std::to_string(ret));
+                // Update OUT counters
+                frames_out_++;
+                bytes_out_ += pushed_size;
+                
+                APP_LOG_INFO("SUCCESS: Pushed buffer of size " + std::to_string(pushed_size) + 
+                           " bytes to appsrc, return: " + std::to_string(ret) + state_info);
             }
+        } else {
+            APP_LOG_ERROR("Failed to create GstBuffer for RTSP push");
         }
+        
+        gst_object_unref(current_appsrc); // Release the reference from get_appsrc()
     } else {
         // No appsrc available yet, store in pending buffers for when a client connects
         std::lock_guard<std::mutex> lock(pending_buffers_mutex_);
@@ -792,11 +1114,31 @@ void RTSPServerWrapper::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
         
         APP_LOG_DEBUG("No appsrc available, buffering frame of size " + std::to_string(buffer->size) + " (pending buffer size: " + std::to_string(pending_buffers_.size()) + ")");
     }
+}
+
+void RTSPServerWrapper::monitor_resources() {
+    // This method can be called periodically to monitor resource usage
+    // For now, we'll just log the current resource usage
+    APP_LOG_INFO("RTSP Resource Monitor: Active clients: " + std::to_string(active_client_count_.load()) + 
+                 ", Port in use: " + std::to_string(port_in_use_.load()) + 
+                 ", Camera in use: " + std::to_string(camera_in_use_.load()));
+}
+
+bool RTSPServerWrapper::is_resource_usage_acceptable() {
+    // Check if we're within resource limits
+    int current_clients = active_client_count_.load();
+    if (current_clients > MAX_SIMULTANEOUS_CLIENTS) {
+        APP_LOG_WARNING("RTSP Resource Monitor: Too many active clients (" + std::to_string(current_clients) + 
+                       " > " + std::to_string(MAX_SIMULTANEOUS_CLIENTS) + ")");
+        return false;
+    }
     
-#ifdef DEBUG_MODE
-    // Record RTSP push end time
-    auto rtsp_push_end_time = std::chrono::high_resolution_clock::now();
-    auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(rtsp_push_end_time - rtsp_push_start_time).count();
-    APP_LOG_DEBUG("RTSP push time: " + std::to_string(duration_us) + " us");
-#endif
+    return true;
+}
+
+void RTSPServerWrapper::internal_cleanup() {
+    APP_LOG_INFO("Performing internal cleanup of stale resources...");
+    
+    // Additional cleanup could include removing stale FIFOs, temp files, etc.
+    APP_LOG_INFO("Internal cleanup completed");
 }

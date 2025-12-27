@@ -6,6 +6,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <set>
 #include <stdexcept>
 #include <functional> // For std::function
 
@@ -94,7 +95,9 @@ public:
         lock.unlock();
 
         // Create a shared_ptr with a custom deleter that returns the raw pointer to the pool
-        return std::shared_ptr<PooledBuffer<T>>(buffer_ptr, [this, buffer_ptr, acquire_end](PooledBuffer<T>* b) {
+        // Use an atomic flag to ensure the buffer is only returned once
+        auto return_flag = std::make_shared<std::atomic<bool>>(false);
+        return std::shared_ptr<PooledBuffer<T>>(buffer_ptr, [this, return_flag, acquire_end](PooledBuffer<T>* b) {
             auto release_start = std::chrono::high_resolution_clock::now();
             auto hold_time_us = std::chrono::duration_cast<std::chrono::microseconds>(release_start - acquire_end).count();
             
@@ -102,14 +105,24 @@ public:
             APP_LOG_INFO(this->name_ + ": Releasing buffer " + std::to_string(reinterpret_cast<uintptr_t>(b)) + 
                         ", Hold time: " + std::to_string(hold_time_us) + " us");
             
-            std::unique_lock<std::mutex> local_lock(this->mutex_);
-            this->available_buffers_.push(b); // Push the raw pointer back to the queue
-            
-            // Update usage tracking on release
-            this->current_in_use_ = this->total_buffers_ - this->available_buffers_.size();
-            
-            local_lock.unlock();
-            this->cond_.notify_one();
+            // Use atomic compare-and-swap to ensure buffer is only returned once
+            bool expected = false;
+            if (return_flag->compare_exchange_strong(expected, true)) {
+                // Only return the buffer if we're the first to mark it as returned
+                std::unique_lock<std::mutex> local_lock(this->mutex_);
+                this->available_buffers_.push(b); // Push the raw pointer back to the queue
+                
+                // Update usage tracking on release
+                this->current_in_use_ = this->total_buffers_ - this->available_buffers_.size();
+                
+                local_lock.unlock();
+                this->cond_.notify_one();
+            } else {
+                // Buffer was already returned by another shared_ptr instance
+                APP_LOG_ERROR(this->name_ + ": Attempted to return buffer " + 
+                            std::to_string(reinterpret_cast<uintptr_t>(b)) + 
+                            " that was already returned by another shared_ptr. Preventing double-free.");
+            }
         });
     }
 

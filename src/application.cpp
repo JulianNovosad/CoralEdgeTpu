@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/wait.h>  // for waitpid
 #include <cstring>
 #include <termios.h>  // for terminal settings
 
@@ -82,12 +83,12 @@ void Application::setup_pools_and_queues() {
     
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
     // For now, let's keep it at 80 as it's what's been tested, but log the memory usage.
-    size_t image_pool_count = 20; // Increased to handle both TPU inference and visualization processing
+    size_t image_pool_count = 5; // Reduced to save memory for RTSP-only operation
 
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
     APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
-    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(200, 200, "DetectionPool"); // Increased for better detection handling
-    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(300, 1024 * 1024, "H264Pool"); // Increased for better H264 encoding
+    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(50, 200, "DetectionPool"); // Reduced for memory saving
+    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(30, 1024 * 1024, "H264Pool"); // Reduced significantly for RTSP-only operation
 }
 
 bool Application::initialize_modules(const std::string& model_path, const std::string& labels_path) {
@@ -198,10 +199,10 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         APP_LOG_INFO("KeyboardMonitor created.");
         
         // DEBUGGING: Added std::cout to trace HttpStreamer creation
-        std::cout << "DEBUG: Creating HttpStreamer..." << std::endl;
-        std::vector<std::string> options = {"listening_ports", "8080"};
-        http_streamer_ = std::make_unique<HttpStreamer>(options);
-        std::cout << "DEBUG: HttpStreamer created." << std::endl;
+        // std::cout << "DEBUG: Creating HttpStreamer..." << std::endl;
+        // std::vector<std::string> options = {"listening_ports", "8080"};
+        // http_streamer_ = std::make_unique<HttpStreamer>(options);
+        // std::cout << "DEBUG: HttpStreamer created." << std::endl;
         // END DEBUGGING
 
         // Create RTSP server
@@ -241,7 +242,7 @@ bool Application::start_modules() {
         APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
         // Stop all modules that were successfully started
         if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
-        http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
+        // http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
         if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
         if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
         if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
@@ -271,13 +272,19 @@ bool Application::start_modules() {
     start_ok &= logic_module_->start();
     
     // 4. Start camera (this may fail if camera is not available)
-    if (!primary_camera_->start()) {
-        APP_LOG_WARNING("Camera module failed to start. This may be due to camera hardware not being connected or IPA module issues.");
-        start_ok = false;
+    bool camera_ok = primary_camera_->start();
+    if (!camera_ok) {
+        APP_LOG_WARNING("Camera module failed to start. This may be due to camera hardware not being connected or IPA module issues. RTSP server will start with dummy frames.");
+    } else {
+        APP_LOG_INFO("Camera module started successfully.");
     }
     
     // 5. Start encoder and streaming modules
-    start_ok &= h264_encoder_->start();
+    // Only fail if encoder fails, not if camera fails
+    if (!h264_encoder_->start()) {
+        APP_LOG_ERROR("H264 encoder failed to start. This is critical for RTSP streaming.");
+        start_ok = false;
+    }
 
     // Start the H264 consumer thread before HTTP streamer to avoid latency
     h264_consumer_running_ = true;
@@ -288,7 +295,7 @@ bool Application::start_modules() {
     overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
 
     // Start HTTP streamer after consumer threads are running
-    http_streamer_->start(); // HttpStreamer start() returns void, so no &= assignment
+    // http_streamer_->start(); // HttpStreamer start() returns void, so no &= assignment
     
     // Start RTSP server
     if (rtsp_server_) {
@@ -300,8 +307,12 @@ bool Application::start_modules() {
         }
     }
     
-    // 6. Start input monitoring
-    start_ok &= keyboard_monitor_->start();
+    // 6. Start input monitoring (non-critical)
+    if (!keyboard_monitor_->start()) {
+        APP_LOG_WARNING("Keyboard monitor failed to start. This is non-critical for RTSP streaming.");
+    } else {
+        APP_LOG_INFO("Keyboard monitor started successfully.");
+    }
     
     // 7. Start monitor
     monitor_->start();
@@ -313,7 +324,7 @@ bool Application::start_modules() {
         APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
         // Stop all modules that were successfully started
         if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
-        http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
+        // http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
         if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
         if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
         if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
@@ -352,7 +363,7 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("VisualizationProcessor", [&]() { visualization_processor_->stop(); }); // Register VisualizationProcessor for shutdown
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
     supervisor_.register_module_stop("KeyboardMonitor", [&]() { keyboard_monitor_->stop(); });
-    supervisor_.register_module_stop("HttpStreamer", [&]() { http_streamer_->stop(); }); // Register HTTP streamer for shutdown
+    // supervisor_.register_module_stop("HttpStreamer", [&]() { http_streamer_->stop(); }); // Register HTTP streamer for shutdown
     supervisor_.register_module_stop("RTSPServer", [&]() { 
         if (rtsp_server_) {
             rtsp_server_->stop();
@@ -906,6 +917,31 @@ void Application::h264_queue_consumer_thread_func() {
             // If no data was available, sleep briefly to avoid busy-waiting
             // Reduced sleep to 25 microseconds to reduce latency and improve responsiveness
             std::this_thread::sleep_for(std::chrono::microseconds(25));
+            
+            // Check if RTSP server needs dummy frames to keep alive
+            // Send a minimal dummy frame every 100ms if RTSP server is running but no frames available
+            static auto last_dummy_frame_time = std::chrono::steady_clock::now();
+            auto current_time = std::chrono::steady_clock::now();
+            if (rtsp_server_ && (current_time - last_dummy_frame_time) > std::chrono::milliseconds(100)) {
+                // Create a minimal dummy H.264 frame (SPS/PPS header only) to keep RTSP alive
+                // This is a minimal H.264 header that indicates a basic stream
+                std::vector<uint8_t> dummy_frame = {
+                    0x00, 0x00, 0x00, 0x01,  // Start code
+                    0x67, 0x42, 0xc0, 0x1e,  // SPS header (example for constrained baseline)
+                    0xdd, 0x80, 0x50, 0x1e,  // More SPS data
+                    0x07, 0xe2, 0x00, 0x00,  // More SPS data
+                    0x00, 0x00, 0x00, 0x01,  // Start code
+                    0x68, 0xce, 0x3c, 0x80   // PPS header
+                };
+                
+                auto rtsp_buffer = std::make_shared<H264Buffer>();
+                rtsp_buffer->data = dummy_frame;
+                rtsp_buffer->size = dummy_frame.size();
+                rtsp_server_->pushH264Data(rtsp_buffer);
+                
+                last_dummy_frame_time = current_time;
+                APP_LOG_DEBUG("RTSP: Sent dummy frame to keep stream alive");
+            }
         }
     }
     APP_LOG_INFO("H264 queue consumer thread stopped. Total frames processed: " + std::to_string(frame_counter));
@@ -913,6 +949,28 @@ void Application::h264_queue_consumer_thread_func() {
 
 int Application::run() {
     APP_LOG_INFO("Application starting...");
+    
+    // Start a shutdown watchdog thread to force exit if stuck during startup/shutdown
+    // This ensures that commands like 'timeout' work even if the main thread is blocked
+    std::thread shutdown_watchdog([]() {
+        // Wait for shutdown signal
+        while (!shutdown_requested.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        
+        // Signal received, waiting for graceful shutdown
+        // Use raw cout/cerr to avoid Logger dependency issues during shutdown
+        std::cout << "Watchdog: Shutdown signal received. Waiting 5s for graceful shutdown..." << std::endl;
+        
+        // Wait 5 seconds for graceful shutdown
+        for (int i = 0; i < 50; i++) { 
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        
+        std::cerr << "Watchdog: Shutdown timed out (blocked main thread). Forcing exit." << std::endl;
+        _exit(1);
+    });
+    shutdown_watchdog.detach();
     
     // Set up signal handlers to restore terminal settings on exit
     supervisor_.setup_signal_handlers();
@@ -1467,4 +1525,114 @@ void Application::run_debugging_pipeline() {
     if (pool_monitor_thread.joinable()) {
         pool_monitor_thread.join();
     }
+}
+
+// Detector supervision implementation
+bool Application::start_detector_process() {
+    APP_LOG_INFO("Starting detector process supervision...");
+    
+    // Check if detector is already running
+    if (is_detector_running()) {
+        APP_LOG_INFO("Detector process is already running");
+        return true;
+    }
+    
+    // Fork to create child process for detector
+    pid_t pid = fork();
+    
+    if (pid == -1) {
+        APP_LOG_ERROR("Failed to fork detector process");
+        perror("fork");
+        return false;
+    }
+    
+    if (pid == 0) {
+        // Child process - run detector
+        // Change working directory to build directory
+        if (chdir("/home/pi/CoralEdgeTpu/build") == -1) {
+            APP_LOG_ERROR("Failed to change directory to build");
+            perror("chdir to build directory");
+            exit(1);
+        }
+        
+        // Execute detector binary
+        execl("./detector", "./detector", (char*)NULL);
+        
+        // If execl returns, it failed
+        APP_LOG_ERROR("Failed to execute detector binary");
+        perror("execl detector");
+        exit(1);
+    } else {
+        // Parent process - store the PID
+        detector_pid_.store(pid);
+        APP_LOG_INFO("Started detector process with PID " + std::to_string(pid));
+        supervisor_.register_child_process(pid);
+        return true;
+    }
+}
+
+void Application::stop_detector_process() {
+    pid_t current_pid = detector_pid_.load();
+    if (current_pid > 0) {
+        APP_LOG_INFO("Terminating detector process with PID " + std::to_string(current_pid));
+        
+        // Try graceful termination first
+        if (kill(current_pid, SIGTERM) == 0) {
+            // Wait briefly for graceful shutdown (non-blocking)
+            int status;
+            pid_t result = waitpid(current_pid, &status, WNOHANG);
+            if (result == 0) {
+                // Process didn't exit immediately, wait a bit more
+                usleep(500000); // 500ms
+                
+                // Check again
+                result = waitpid(current_pid, &status, WNOHANG);
+                if (result == 0) {
+                    // Process still hasn't exited, force kill
+                    APP_LOG_INFO("Detector process not responding to SIGTERM, sending SIGKILL...");
+                    kill(current_pid, SIGKILL);
+                    
+                    // Wait for the process to be killed
+                    waitpid(current_pid, &status, 0);
+                }
+            }
+        }
+        
+        detector_pid_.store(-1);
+        APP_LOG_INFO("Detector process terminated");
+    }
+}
+
+bool Application::is_detector_running() {
+    pid_t current_pid = detector_pid_.load();
+    if (current_pid <= 0) {
+        return false;
+    }
+    
+    // Check if process is still alive by sending signal 0 (doesn't actually send a signal)
+    return (kill(current_pid, 0) == 0);
+}
+
+void Application::detector_supervisor_thread_func() {
+    APP_LOG_INFO("Detector supervisory thread started");
+    
+    while (detector_supervisor_running_.load()) {
+        // Check if detector process is running
+        if (!is_detector_running()) {
+            APP_LOG_WARNING("Detector process is not running, attempting to restart...");
+            
+            // Try to restart the detector process
+            if (start_detector_process()) {
+                APP_LOG_INFO("Successfully restarted detector process");
+            } else {
+                APP_LOG_ERROR("Failed to restart detector process, retrying in 5 seconds...");
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+            }
+        }
+        
+        // Check every 2 seconds
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+    
+    APP_LOG_INFO("Detector supervisory thread stopped");
 }

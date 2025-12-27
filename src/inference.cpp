@@ -103,6 +103,7 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
         std::vector<edgetpu_option> options;
         options.push_back({"verbose", "1"});
         
+        // Use a shorter timeout or fewer retries to avoid blocking startup
         edgetpu_delegate_ = edgetpu_create_delegate(
             device.type, 
             device.path,
@@ -110,36 +111,12 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
             options.size());
         
         if (!edgetpu_delegate_) {
-            APP_LOG_ERROR("Edge TPU delegate creation failed with options.");
-            // Try without options
-            APP_LOG_INFO("Trying to create Edge TPU delegate without options...");
-            edgetpu_delegate_ = edgetpu_create_delegate(
-                device.type, 
-                device.path,
-                nullptr, 
-                0);
-                
-            if (!edgetpu_delegate_) {
-                APP_LOG_ERROR("Edge TPU delegate creation failed even without options.");
-                // Try with USB device type explicitly
-                APP_LOG_INFO("Trying to create Edge TPU delegate with USB device type...");
-                edgetpu_delegate_ = edgetpu_create_delegate(
-                    EDGETPU_APEX_USB, 
-                    device.path,
-                    nullptr, 
-                    0);
-                    
-                if (!edgetpu_delegate_) {
-                    APP_LOG_ERROR("Edge TPU delegate creation failed with USB device type.");
-                    APP_LOG_WARNING("Continuing without Edge TPU delegate. Inference will run on CPU.");
-                } else {
-                    APP_LOG_INFO("Edge TPU delegate created successfully with USB device type.");
-                }
-            } else {
-                APP_LOG_INFO("Edge TPU delegate created successfully without options.");
-            }
+            APP_LOG_ERROR("Edge TPU delegate creation failed with options. Falling back to CPU to avoid blocking startup.");
+            // We skip further retries (like without options or USB type) because they often 
+            // trigger the same kernel timeout (12s) which blocks the main thread.
+            APP_LOG_WARNING("Continuing without Edge TPU delegate. Inference will run on CPU.");
         } else {
-            APP_LOG_INFO("Edge TPU delegate created successfully with options.");
+            APP_LOG_INFO("Edge TPU delegate created successfully.");
         }
     } else {
         APP_LOG_WARNING("No Edge TPU devices found. Inference will run on CPU.");
@@ -225,8 +202,7 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
 void InferenceEngine::worker_thread_func() {
     std::unique_ptr<tflite::Interpreter> interpreter = create_interpreter();
     if (!interpreter) {
-        APP_LOG_ERROR("Worker thread failed to create interpreter. Exiting thread.");
-        return;
+        APP_LOG_ERROR("Worker thread failed to create interpreter initially. Will continue to consume and release buffers to avoid pipeline stall.");
     }
     
     // Counter for periodic delegate recreation
@@ -244,14 +220,16 @@ void InferenceEngine::worker_thread_func() {
         [[maybe_unused]] auto pop_start = std::chrono::high_resolution_clock::now();
         if (input_queue_.pop(input_image)) {
             [[maybe_unused]] auto pop_end = std::chrono::high_resolution_clock::now();
-            APP_LOG_DEBUG("InferenceEngine: Time to pop from queue: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(pop_end - pop_start).count()) + " us");
-
+            
+            // CRITICAL: Always ensure buffer is released if it's a dummy or if interpreter is null
             if (!input_image.buffer) {
-                APP_LOG_ERROR("InferenceEngine received an image with no buffer. Skipping.");
-                // If we're shutting down, exit the thread
-                if (!running_) {
-                    return;
-                }
+                if (!running_) return;
+                continue;
+            }
+
+            if (!interpreter) {
+                // No interpreter available, just release the buffer and continue
+                input_image.buffer.reset();
                 continue;
             }
             

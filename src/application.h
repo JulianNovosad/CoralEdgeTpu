@@ -161,6 +161,15 @@ private:
     std::thread recovery_thread_;
     std::mutex recovery_mutex_;
     
+    // Detector supervision
+    std::thread detector_supervisor_thread_;
+    std::atomic<bool> detector_supervisor_running_{false};
+    std::atomic<pid_t> detector_pid_{-1};
+    void detector_supervisor_thread_func();
+    bool start_detector_process();
+    void stop_detector_process();
+    bool is_detector_running();
+    
     // Recovery counters for each subsystem
     std::map<std::string, int> recovery_attempts_;
     const int max_recovery_attempts_ = 5; // Maximum attempts per second

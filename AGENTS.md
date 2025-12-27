@@ -1,0 +1,1 @@
+- Whenever there is an issue with the Edge TPU, always first investigate if there is already an instance of detector running, using `pgrep detector`. If such an instance is found, do pkill -9 detector

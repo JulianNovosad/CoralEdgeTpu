@@ -5,13 +5,13 @@
 # compile CXX with /usr/bin/c++
 C_DEFINES = -DOPENSSL_API_3_0
 
-C_INCLUDES = -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/aarch64-linux-gnu/glib-2.0/include -I/usr/include/orc-0.4 -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/gio-unix-2.0 -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/include/mit-krb5 -I/usr/local/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
+C_INCLUDES = -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/aarch64-linux-gnu/glib-2.0/include -I/usr/include/orc-0.4 -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/gio-unix-2.0 -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/local/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
 
 C_FLAGS =  -Wall -Wextra -O3 -DNDEBUG -Wno-error
 
 CXX_DEFINES = -DOPENSSL_API_3_0
 
-CXX_INCLUDES = -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/aarch64-linux-gnu/glib-2.0/include -I/usr/include/orc-0.4 -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/gio-unix-2.0 -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/include/mit-krb5 -I/usr/local/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
+CXX_INCLUDES = -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/aarch64-linux-gnu/glib-2.0/include -I/usr/include/orc-0.4 -I/usr/include/libmount -I/usr/include/blkid -I/usr/include/gio-unix-2.0 -I/usr/include/pgm-5.3 -I/usr/include/libxml2 -I/usr/local/include/libcamera -I/home/pi/CoralEdgeTpu/civetweb/include -I/home/pi/CoralEdgeTpu/src -I/home/pi/CoralEdgeTpu/SYSTEM -I/home/pi/CoralEdgeTpu/include -I/home/pi/CoralEdgeTpu/flatbuffers/include -I/home/pi/CoralEdgeTpu/tensorflow_2.5.0 -isystem /usr/include/opencv4
 
 CXX_FLAGS =  -Wall -Wextra -O3 -DNDEBUG -Wno-error -Wno-unused-parameter -Wno-error=unused-parameter -std=gnu++17
 

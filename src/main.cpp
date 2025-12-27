@@ -32,6 +32,17 @@ std::vector<std::string> load_labels(const std::string& path) {
 }
 
 int main(int argc, char** argv) {
+    // Initialize Logger
+    std::vector<SubsystemLogConfig> log_configs;
+    log_configs.push_back({"CameraCapture", "camera", 3});
+    log_configs.push_back({"InferenceEngine", "tpu", 3});
+    log_configs.push_back({"LogicModule", "logic", 3});
+    log_configs.push_back({"SystemMonitor", "system_monitor", 3});
+    log_configs.push_back({"H264Encoder", "h264_encoder", 3});
+    
+    Logger::init("run", "logs", log_configs);
+    Logger::getInstance().start_writer_thread();
+
     // Ensure signals are not blocked in the main thread
     sigset_t set;
     sigemptyset(&set);
@@ -39,9 +50,7 @@ int main(int argc, char** argv) {
     
     // Also unblock in the main thread specifically
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
-    
-    std::cout << "STARTUP: Starting application..." << std::endl;
+
     Application app(argc, argv);
-    std::cout << "STARTUP: Running application..." << std::endl;
     return app.run();
 }

@@ -399,8 +399,7 @@ void Logger::writer_thread_func() {
     while (running_.load(std::memory_order_acquire)) { // Loop while running_ is true
         // Try to pop an entry from the queue
         if (log_queue_.pop(entry)) { // Use non-blocking pop
-            // Write to console (standard output).
-            std::cout << "[" << entry.level.data() << "] " << entry.message.data() << std::endl;
+std::cerr << "[" << entry.level.data() << "] " << entry.message.data() << std::endl;
 
             // Write to file in JSON format.
             if (standard_log_file_.is_open()) {

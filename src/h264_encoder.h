@@ -56,6 +56,9 @@ private:
     mutable std::chrono::high_resolution_clock::time_point last_frame_processed_time_;
     mutable int last_frame_id_{-1};
     
+    // Throttling logic
+    uint64_t frame_counter_{0};
+    
     // Method for checking display starvation
     bool is_display_starving() const;
 };

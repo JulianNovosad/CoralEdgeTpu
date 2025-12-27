@@ -36,7 +36,7 @@ else()
 endif()
 
 # Attempt to find GStreamer RTSP Server
-pkg_check_modules(GSTREAMER_RTSP_SERVER QUIET gstreamer-rtsp-server-1.0 gstreamer-1.0)
+pkg_check_modules(GSTREAMER_RTSP_SERVER QUIET gstreamer-rtsp-server-1.0 gstreamer-rtsp-1.0 gstreamer-1.0)
 if (GSTREAMER_RTSP_SERVER_FOUND)
     message(STATUS "Found GStreamer RTSP Server: ${GSTREAMER_RTSP_SERVER_LIBRARIES}")
     include_directories(${GSTREAMER_RTSP_SERVER_INCLUDE_DIRS})
