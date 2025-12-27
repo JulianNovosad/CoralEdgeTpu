@@ -12,7 +12,7 @@
 #include "system_monitor.h"
 #include "image_processor.h" // New include
 #include "keyboard_monitor.h"
-#include "http_streamer.h"
+
 #include "rtsp_server.h"
 #include "monitor.h"
 
@@ -63,7 +63,7 @@ public:
     std::unique_ptr<CameraCapture> primary_camera_;
     // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
     std::unique_ptr<H264Encoder> h264_encoder_;
-    std::unique_ptr<HttpStreamer> http_streamer_;
+
     std::unique_ptr<RTSPServerWrapper> rtsp_server_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;

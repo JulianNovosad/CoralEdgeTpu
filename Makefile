@@ -208,19 +208,6 @@ check_edgetpu_version/fast:
 .PHONY : check_edgetpu_version/fast
 
 #=============================================================================
-# Target rules for targets named civetweb_cpp_wrapper
-
-# Build rule for target.
-civetweb_cpp_wrapper: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 civetweb_cpp_wrapper
-.PHONY : civetweb_cpp_wrapper
-
-# fast build rule for target.
-civetweb_cpp_wrapper/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/civetweb_cpp_wrapper.dir/build.make CMakeFiles/civetweb_cpp_wrapper.dir/build
-.PHONY : civetweb_cpp_wrapper/fast
-
-#=============================================================================
 # Target rules for targets named dashboard
 
 # Build rule for target.
@@ -297,57 +284,6 @@ tpu_performance_test: cmake_check_build_system
 tpu_performance_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tpu_performance_test.dir/build.make CMakeFiles/tpu_performance_test.dir/build
 .PHONY : tpu_performance_test/fast
-
-civetweb/src/civetweb.o: civetweb/src/civetweb.c.o
-.PHONY : civetweb/src/civetweb.o
-
-# target to build an object file
-civetweb/src/civetweb.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.o
-.PHONY : civetweb/src/civetweb.c.o
-
-civetweb/src/civetweb.i: civetweb/src/civetweb.c.i
-.PHONY : civetweb/src/civetweb.i
-
-# target to preprocess a source file
-civetweb/src/civetweb.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.i
-.PHONY : civetweb/src/civetweb.c.i
-
-civetweb/src/civetweb.s: civetweb/src/civetweb.c.s
-.PHONY : civetweb/src/civetweb.s
-
-# target to generate assembly for a file
-civetweb/src/civetweb.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb/src/civetweb.c.s
-.PHONY : civetweb/src/civetweb.c.s
-
-civetweb_temp/src/CivetServer.o: civetweb_temp/src/CivetServer.cpp.o
-.PHONY : civetweb_temp/src/CivetServer.o
-
-# target to build an object file
-civetweb_temp/src/CivetServer.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/civetweb_cpp_wrapper.dir/build.make CMakeFiles/civetweb_cpp_wrapper.dir/civetweb_temp/src/CivetServer.cpp.o
-.PHONY : civetweb_temp/src/CivetServer.cpp.o
-
-civetweb_temp/src/CivetServer.i: civetweb_temp/src/CivetServer.cpp.i
-.PHONY : civetweb_temp/src/CivetServer.i
-
-# target to preprocess a source file
-civetweb_temp/src/CivetServer.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/civetweb_cpp_wrapper.dir/build.make CMakeFiles/civetweb_cpp_wrapper.dir/civetweb_temp/src/CivetServer.cpp.i
-.PHONY : civetweb_temp/src/CivetServer.cpp.i
-
-civetweb_temp/src/CivetServer.s: civetweb_temp/src/CivetServer.cpp.s
-.PHONY : civetweb_temp/src/CivetServer.s
-
-# target to generate assembly for a file
-civetweb_temp/src/CivetServer.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/civetweb_cpp_wrapper.dir/build.make CMakeFiles/civetweb_cpp_wrapper.dir/civetweb_temp/src/CivetServer.cpp.s
-.PHONY : civetweb_temp/src/CivetServer.cpp.s
 
 src/application.o: src/application.cpp.o
 .PHONY : src/application.o
@@ -445,33 +381,6 @@ src/camera_isolation_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/camera_isolation_test.dir/build.make CMakeFiles/camera_isolation_test.dir/src/camera_isolation_test.cpp.s
 .PHONY : src/camera_isolation_test.cpp.s
 
-src/civetweb_wrapper.o: src/civetweb_wrapper.cpp.o
-.PHONY : src/civetweb_wrapper.o
-
-# target to build an object file
-src/civetweb_wrapper.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/civetweb_cpp_wrapper.dir/build.make CMakeFiles/civetweb_cpp_wrapper.dir/src/civetweb_wrapper.cpp.o
-.PHONY : src/civetweb_wrapper.cpp.o
-
-src/civetweb_wrapper.i: src/civetweb_wrapper.cpp.i
-.PHONY : src/civetweb_wrapper.i
-
-# target to preprocess a source file
-src/civetweb_wrapper.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/civetweb_cpp_wrapper.dir/build.make CMakeFiles/civetweb_cpp_wrapper.dir/src/civetweb_wrapper.cpp.i
-.PHONY : src/civetweb_wrapper.cpp.i
-
-src/civetweb_wrapper.s: src/civetweb_wrapper.cpp.s
-.PHONY : src/civetweb_wrapper.s
-
-# target to generate assembly for a file
-src/civetweb_wrapper.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/civetweb_cpp_wrapper.dir/build.make CMakeFiles/civetweb_cpp_wrapper.dir/src/civetweb_wrapper.cpp.s
-.PHONY : src/civetweb_wrapper.cpp.s
-
 src/config_loader.o: src/config_loader.cpp.o
 .PHONY : src/config_loader.o
 
@@ -552,30 +461,6 @@ src/h264_encoder.s: src/h264_encoder.cpp.s
 src/h264_encoder.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/h264_encoder.cpp.s
 .PHONY : src/h264_encoder.cpp.s
-
-src/http_streamer.o: src/http_streamer.cpp.o
-.PHONY : src/http_streamer.o
-
-# target to build an object file
-src/http_streamer.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_streamer.cpp.o
-.PHONY : src/http_streamer.cpp.o
-
-src/http_streamer.i: src/http_streamer.cpp.i
-.PHONY : src/http_streamer.i
-
-# target to preprocess a source file
-src/http_streamer.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_streamer.cpp.i
-.PHONY : src/http_streamer.cpp.i
-
-src/http_streamer.s: src/http_streamer.cpp.s
-.PHONY : src/http_streamer.s
-
-# target to generate assembly for a file
-src/http_streamer.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/detector.dir/build.make CMakeFiles/detector.dir/src/http_streamer.cpp.s
-.PHONY : src/http_streamer.cpp.s
 
 src/image_processor.o: src/image_processor.cpp.o
 .PHONY : src/image_processor.o
@@ -1136,7 +1021,6 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... camera_isolation_test"
 	@echo "... check_edgetpu_version"
-	@echo "... civetweb_cpp_wrapper"
 	@echo "... config_loader_test"
 	@echo "... dashboard"
 	@echo "... detector"
@@ -1148,12 +1032,6 @@ help:
 	@echo "... servo_test"
 	@echo "... tpu_diagnostic"
 	@echo "... tpu_performance_test"
-	@echo "... civetweb/src/civetweb.o"
-	@echo "... civetweb/src/civetweb.i"
-	@echo "... civetweb/src/civetweb.s"
-	@echo "... civetweb_temp/src/CivetServer.o"
-	@echo "... civetweb_temp/src/CivetServer.i"
-	@echo "... civetweb_temp/src/CivetServer.s"
 	@echo "... src/application.o"
 	@echo "... src/application.i"
 	@echo "... src/application.s"
@@ -1166,9 +1044,6 @@ help:
 	@echo "... src/camera_isolation_test.o"
 	@echo "... src/camera_isolation_test.i"
 	@echo "... src/camera_isolation_test.s"
-	@echo "... src/civetweb_wrapper.o"
-	@echo "... src/civetweb_wrapper.i"
-	@echo "... src/civetweb_wrapper.s"
 	@echo "... src/config_loader.o"
 	@echo "... src/config_loader.i"
 	@echo "... src/config_loader.s"
@@ -1178,9 +1053,6 @@ help:
 	@echo "... src/h264_encoder.o"
 	@echo "... src/h264_encoder.i"
 	@echo "... src/h264_encoder.s"
-	@echo "... src/http_streamer.o"
-	@echo "... src/http_streamer.i"
-	@echo "... src/http_streamer.s"
 	@echo "... src/image_processor.o"
 	@echo "... src/image_processor.i"
 	@echo "... src/image_processor.s"

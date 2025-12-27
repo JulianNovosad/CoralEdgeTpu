@@ -75,11 +75,7 @@ add_executable(detector
     src/application_supervisor.cpp
     src/system_monitor.cpp
     src/keyboard_monitor.cpp
-    src/http_streamer.cpp
     src/rtsp_server.cpp
-    civetweb/src/civetweb.c
-    civetweb_temp/src/CivetServer.cpp
-    src/civetweb_wrapper.cpp
 )
 add_executable(camera_isolation_test
     src/camera_isolation_test.cpp
@@ -110,18 +106,7 @@ add_executable(list_tpu_devices
 add_executable(check_edgetpu_version
     tests/check_edgetpu_version.cpp
 )
-# Compile civetweb.c as C with proper defines for C++ wrapper
-set_source_files_properties(civetweb/src/civetweb.c PROPERTIES LANGUAGE C COMPILE_DEFINITIONS "CIVETWEB_CGI_EXTENSIONS=\"\";USE_WEBSOCKET;NO_CACHING")
 
-# Add C++ wrapper files to ensure C++ wrapper functions are compiled
-set(CIVETWEB_CPP_WRAPPER 
-    civetweb_temp/src/CivetServer.cpp
-    src/civetweb_wrapper.cpp
-)
-add_library(civetweb_cpp_wrapper ${CIVETWEB_CPP_WRAPPER})
-target_include_directories(civetweb_cpp_wrapper PRIVATE civetweb/include civetweb/src)
-set_source_files_properties(${CIVETWEB_CPP_WRAPPER} PROPERTIES COMPILE_DEFINITIONS "USE_WEBSOCKET;NO_CACHING")
-target_compile_options(civetweb_cpp_wrapper PRIVATE -Wno-error=missing-field-initializers)
 
 target_link_directories(detector PRIVATE ${TFLITE_LIB_DIR})
 
@@ -143,7 +128,7 @@ target_link_libraries(detector PRIVATE
     /lib/aarch64-linux-gnu/libssl.so.3
     /lib/aarch64-linux-gnu/libcrypto.so.3
     m # Math library
-    civetweb_cpp_wrapper
+
 )
 
 if (X264_FOUND)

@@ -375,14 +375,6 @@ bool RTSPServerWrapper::start() {
     running_ = true;
     server_thread_ = std::thread(&RTSPServerWrapper::serverThread, this);
     
-    // Wait for the RTSP server port to be physically active (listening)
-    if (!wait_for_port_ready(rtspPort_, 5000)) {
-        APP_LOG_ERROR("Timeout waiting for RTSP port " + std::to_string(rtspPort_) + " to become active");
-        stop();
-        return false;
-    }
-    APP_LOG_INFO("RTSP Port " + std::to_string(rtspPort_) + " is physically active and accepting connections");
-    
     APP_LOG_INFO("GStreamer RTSP server started successfully on port " + std::to_string(rtspPort_) + ", stream URL: rtsp://127.0.0.1:" + std::to_string(rtspPort_) + streamName_);
     APP_LOG_INFO("RTSP server is now accepting connections on rtsp://<your_ip>:" + std::to_string(rtspPort_) + streamName_);
     return true;
@@ -520,6 +512,7 @@ void RTSPServerWrapper::serverThread() {
     // Run the main loop that was created in the start method
     if (loop_) {
         APP_LOG_INFO("GMainLoop exists, entering run loop...");
+        APP_LOG_INFO("CRITICAL: GMainLoop is now RUNNING.");
         
         g_main_loop_run(loop_);
         APP_LOG_INFO("GMainLoop run finished");

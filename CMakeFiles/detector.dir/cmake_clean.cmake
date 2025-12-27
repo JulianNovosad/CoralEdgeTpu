@@ -1,24 +1,16 @@
 file(REMOVE_RECURSE
-  "CMakeFiles/detector.dir/civetweb/src/civetweb.c.o"
-  "CMakeFiles/detector.dir/civetweb/src/civetweb.c.o.d"
-  "CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o"
-  "CMakeFiles/detector.dir/civetweb_temp/src/CivetServer.cpp.o.d"
   "CMakeFiles/detector.dir/src/application.cpp.o"
   "CMakeFiles/detector.dir/src/application.cpp.o.d"
   "CMakeFiles/detector.dir/src/application_supervisor.cpp.o"
   "CMakeFiles/detector.dir/src/application_supervisor.cpp.o.d"
   "CMakeFiles/detector.dir/src/camera_capture.cpp.o"
   "CMakeFiles/detector.dir/src/camera_capture.cpp.o.d"
-  "CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o"
-  "CMakeFiles/detector.dir/src/civetweb_wrapper.cpp.o.d"
   "CMakeFiles/detector.dir/src/config_loader.cpp.o"
   "CMakeFiles/detector.dir/src/config_loader.cpp.o.d"
   "CMakeFiles/detector.dir/src/global_definitions.cpp.o"
   "CMakeFiles/detector.dir/src/global_definitions.cpp.o.d"
   "CMakeFiles/detector.dir/src/h264_encoder.cpp.o"
   "CMakeFiles/detector.dir/src/h264_encoder.cpp.o.d"
-  "CMakeFiles/detector.dir/src/http_streamer.cpp.o"
-  "CMakeFiles/detector.dir/src/http_streamer.cpp.o.d"
   "CMakeFiles/detector.dir/src/image_processor.cpp.o"
   "CMakeFiles/detector.dir/src/image_processor.cpp.o.d"
   "CMakeFiles/detector.dir/src/inference.cpp.o"
@@ -46,6 +38,6 @@ file(REMOVE_RECURSE
 )
 
 # Per-language clean rules from dependency scanning.
-foreach(lang C CXX)
+foreach(lang CXX)
   include(CMakeFiles/detector.dir/cmake_clean_${lang}.cmake OPTIONAL)
 endforeach()

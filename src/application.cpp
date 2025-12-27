@@ -198,12 +198,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         keyboard_monitor_ = std::make_unique<KeyboardMonitor>();
         APP_LOG_INFO("KeyboardMonitor created.");
         
-        // DEBUGGING: Added std::cout to trace HttpStreamer creation
-        // std::cout << "DEBUG: Creating HttpStreamer..." << std::endl;
-        // std::vector<std::string> options = {"listening_ports", "8080"};
-        // http_streamer_ = std::make_unique<HttpStreamer>(options);
-        // std::cout << "DEBUG: HttpStreamer created." << std::endl;
-        // END DEBUGGING
+
 
         // Create RTSP server
         APP_LOG_INFO("Creating RTSPServerWrapper...");
@@ -242,7 +237,7 @@ bool Application::start_modules() {
         APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
         // Stop all modules that were successfully started
         if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
-        // http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
+
         if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
         if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
         if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
@@ -295,7 +290,7 @@ bool Application::start_modules() {
     overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
 
     // Start HTTP streamer after consumer threads are running
-    // http_streamer_->start(); // HttpStreamer start() returns void, so no &= assignment
+
     
     // Start RTSP server
     if (rtsp_server_) {
@@ -324,7 +319,7 @@ bool Application::start_modules() {
         APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
         // Stop all modules that were successfully started
         if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
-        // http_streamer_->stop(); // HttpStreamer doesn't have is_running() method
+
         if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
         if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
         if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
@@ -893,22 +888,10 @@ void Application::h264_queue_consumer_thread_func() {
                     }
                 }
                 
-                // Convert the H264 buffer data to a vector and push to HTTP streamer
-                std::vector<uint8_t> data_vector(h264_buffer->data.data(), 
-                                               h264_buffer->data.data() + h264_buffer->size);
-                
-                // Push the H264 data to the HTTP streamer
-                if (http_streamer_) {
-                    http_streamer_->pushH264Data(data_vector);
-                }
-                
                 // Push the H264 data to the RTSP server
                 if (rtsp_server_) {
-                    // Create a shared_ptr<H264Buffer> to pass to the RTSP server
-                    auto rtsp_buffer = std::make_shared<H264Buffer>();
-                    rtsp_buffer->data = std::move(data_vector);
-                    rtsp_buffer->size = rtsp_buffer->data.size();
-                    rtsp_server_->pushH264Data(rtsp_buffer);
+                    // Directly pass the shared_ptr from the pool to the RTSP server
+                    rtsp_server_->pushH264Data(h264_buffer);
                 }
                 
                 frame_counter++;

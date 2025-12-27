@@ -5,7 +5,6 @@
 /home/pi/CoralEdgeTpu/CMakeFiles/tpu_diagnostic.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/list_tpu_devices.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/check_edgetpu_version.dir
-/home/pi/CoralEdgeTpu/CMakeFiles/civetweb_cpp_wrapper.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/dashboard.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/integrated_system.dir
 /home/pi/CoralEdgeTpu/CMakeFiles/config_loader_test.dir
