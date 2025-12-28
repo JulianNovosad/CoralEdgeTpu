@@ -1,4 +1,5 @@
 #include "h264_encoder.h"
+#include "application.h"
 #include <x264.h>
 #include <iostream> // Added for std::cerr/cout
 
@@ -13,11 +14,16 @@ H264Encoder::H264Encoder(ImageQueue& input_queue,
       height_(height),
       fps_(fps),
       running_(false),
-      encoder_(nullptr) {
+      encoder_(nullptr),
+      frame_count_(0) {
     // Initialize x264 structures
     x264_param_default(&param_);
     x264_picture_init(&picture_in_);
     x264_picture_init(&picture_out_);
+}
+
+void H264Encoder::set_application_ref(Application* app) {
+    app_ = app;
 }
 
 H264Encoder::~H264Encoder() {
@@ -87,11 +93,14 @@ void H264Encoder::worker_thread_func() {
 
     param_.i_height = height_;
 
-    param_.i_fps_num = 40; // Throttled from 120 FPS
+    param_.i_fps_num = (int)fps_; // Use the configured FPS instead of hardcoded 40
 
     param_.i_fps_den = 1;
 
-    param_.i_keyint_max = 20; // Keyframe every 0.5 seconds at 40 FPS
+    param_.i_timebase_num = 1;
+    param_.i_timebase_den = (int)fps_; // Match our input FPS
+
+    param_.i_keyint_max = 30; // Keyframe every 1-2 seconds at 40 FPS
 
     param_.b_intra_refresh = 0; // Traditional Full IDR frames for VLC compatibility
 
@@ -105,7 +114,7 @@ void H264Encoder::worker_thread_func() {
 
     // Stream parameters
 
-    param_.i_threads = 1; // Simplify to 1 thread for debugging
+    param_.i_threads = 4; // Use all 4 cores on Pi 5 for x264 encoding
 
     param_.b_vfr_input = 0; // Constant frame rate
 
@@ -209,7 +218,6 @@ void H264Encoder::worker_thread_func() {
 
                 APP_LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
 
-    picture_in_.i_pts = 0; // Initialize presentation timestamp
     x264_picture_init(&picture_out_); // Initialize picture_out_
 
     while (running_.load()) {
@@ -222,12 +230,6 @@ void H264Encoder::worker_thread_func() {
             // Reduced sleep to 25 microseconds to improve responsiveness
             std::this_thread::sleep_for(std::chrono::microseconds(25));
             continue; 
-        }
-        
-        // Throttling: Only process every 3rd frame (120 FPS -> 40 FPS)
-        if (frame_counter_++ % 3 != 0) {
-            image_data.buffer.reset(); // Ensure buffer is released
-            continue;
         }
         
         // Log when a frame is received for encoding
@@ -346,121 +348,49 @@ void H264Encoder::worker_thread_func() {
 
         image_data.buffer.reset(); // Release buffer after conversion
 
-        // 3. Copying data to x264 picture_in_ with proper stride handling
+        // 3. Pass raw I420 data to output queue (for GStreamer encoding)
         [[maybe_unused]] auto memcpy_start = std::chrono::high_resolution_clock::now();
-        
-        // More efficient copying with direct memory access
-        // Copy Y plane (luminance)
-        const int y_plane_size = width_ * height_;
-        memcpy(picture_in_.img.plane[0], frame_yuv.data, y_plane_size);
-        
-        // Copy U plane (chrominance blue) 
-        const int uv_plane_size = width_ * height_ / 4;  // For I420 format
-        const int u_offset = y_plane_size;
-        memcpy(picture_in_.img.plane[1], frame_yuv.data + u_offset, uv_plane_size);
-        
-        // Copy V plane (chrominance red)
-        const int v_offset = u_offset + uv_plane_size;
-        memcpy(picture_in_.img.plane[2], frame_yuv.data + v_offset, uv_plane_size);
-        [[maybe_unused]] auto memcpy_end = std::chrono::high_resolution_clock::now();
-        APP_LOG_DEBUG("H264Encoder: Time for memcpy to picture_in_: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(memcpy_end - memcpy_start).count()) + " us");
 
-        picture_in_.i_pts++;
+        // Increment frame count
+        frame_count_++;
 
-        x264_nal_t *nal;
-        int i_nal;
-        // 4. Encode frame
-        auto encoding_start_time = std::chrono::high_resolution_clock::now();
-        
-        // Force the first frame to be a keyframe to ensure SPS/PPS headers are sent
-        if (!first_frame_sent_.load()) {
-            picture_in_.i_type = X264_TYPE_IDR;
-            first_frame_sent_.store(true);
+        auto h264_buffer = h264_buffer_pool_->acquire();
+        if (h264_buffer) {
+             size_t frame_size = frame_yuv.total() * frame_yuv.elemSize();
+             if (frame_size > h264_buffer->data.capacity()) {
+                 APP_LOG_ERROR("H264Encoder: Frame size " + std::to_string(frame_size) + 
+                               " exceeds buffer capacity " + std::to_string(h264_buffer->data.capacity()));
+             } else {
+                 memcpy(h264_buffer->data.data(), frame_yuv.data, frame_size);
+                 h264_buffer->size = frame_size;
+                 h264_buffer->timestamp_epoch_ms = image_data.timestamp_epoch_ms;
+                 h264_buffer->frame_id = image_data.frame_id;
+                 h264_buffer->encoder_frame_count = frame_count_;
+
+                 if (push_latest_only(output_queue_, std::move(h264_buffer))) {
+                     if (app_) app_->increment_h264_output_queue_in();
+                     APP_LOG_DEBUG("H264Encoder: Pushed raw frame to output. Size: " + std::to_string(frame_size));
+                 } else {
+                     APP_LOG_WARNING("H264Encoder: Failed to push buffer to output queue.");
+                 }
+             }
         } else {
-            picture_in_.i_type = X264_TYPE_P; // Use P-frames for better performance after first frame
+             APP_LOG_WARNING("H264Encoder: Failed to acquire buffer. Dropping frame.");
+             // Try to free up buffers
+             std::shared_ptr<H264Buffer> old_buffer;
+             if (output_queue_.pop(old_buffer)) {
+                 old_buffer.reset(); 
+             }
         }
+
+        image_data.encode_end_time = std::chrono::high_resolution_clock::now();
+        last_frame_processed_time_ = std::chrono::high_resolution_clock::now();
+        last_frame_id_ = image_data.frame_id;
         
-        int frame_size = x264_encoder_encode(encoder_, &nal, &i_nal, &picture_in_, &picture_out_);
-
-        if (frame_size < 0) {
-            APP_LOG_ERROR("H264Encoder: x264_encoder_encode failed with frame_size: " + std::to_string(frame_size));
-            continue;
-        }
-        
-        // Check if encoder is still valid after encoding
-        if (!encoder_) {
-            APP_LOG_ERROR("H264Encoder: Encoder became invalid during encoding. Stopping thread.");
-            running_.store(false);
-            break;
-        }
-
-        APP_LOG_DEBUG("H264Encoder: x264_encoder_encode returned frame_size: " + std::to_string(frame_size) + ", i_nal: " + std::to_string(i_nal));
-
-        if (frame_size > 0 && nal != nullptr && i_nal > 0) {
-            auto encoding_end_time = std::chrono::high_resolution_clock::now();
-            long long duration_us = std::chrono::duration_cast<std::chrono::microseconds>(encoding_end_time - encoding_start_time).count();
-            APP_LOG_DEBUG("H264Encoder: Time for x264_encoder_encode: " + std::to_string(duration_us / 1000) + " ms");
-            
-            // Update average encoding time for monitoring
-            long long current_avg = avg_encode_time_us_.load();
-            avg_encode_time_us_.store((current_avg + duration_us) / 2);
-            
-            // 5. Bundle all NAL units into a single buffer for the output queue
-            // This ensures all NALs of a single frame have the same timestamp in the RTSP server
-            auto h264_buffer = h264_buffer_pool_->acquire();
-            if (h264_buffer) {
-                size_t total_size = 0;
-                for (int i = 0; i < i_nal; ++i) {
-                    total_size += nal[i].i_payload;
-                }
-
-                if (total_size > h264_buffer->data.capacity()) {
-                    APP_LOG_ERROR("H264Encoder: Total NAL size (" + std::to_string(total_size) + 
-                                 ") exceeds buffer capacity (" + std::to_string(h264_buffer->data.capacity()) + ").");
-                } else {
-                    size_t offset = 0;
-                    for (int i = 0; i < i_nal; ++i) {
-                        memcpy(h264_buffer->data.data() + offset, nal[i].p_payload, nal[i].i_payload);
-                        
-                        // Correctly identify NAL type by skipping start code (Annex-B)
-                        uint8_t* p = nal[i].p_payload;
-                        int p_size = nal[i].i_payload;
-                        int start_offset = 0;
-                        if (p_size >= 4 && p[0] == 0 && p[1] == 0 && p[2] == 0 && p[3] == 1) start_offset = 4;
-                        else if (p_size >= 3 && p[0] == 0 && p[1] == 0 && p[2] == 1) start_offset = 3;
-                        
-                        uint8_t nal_type = (p_size > start_offset) ? (p[start_offset] & 0x1F) : 0;
-                        
-                        offset += nal[i].i_payload;
-
-                        // Log keyframes and SPS/PPS for debugging
-                        if (nal_type == 5 || nal_type == 7 || nal_type == 8) {
-                            const char* nal_type_str = (nal_type == 5) ? "IDR-Slice" : (nal_type == 7 ? "SPS" : "PPS");
-                            APP_LOG_INFO("H264Encoder: Bundled " + std::string(nal_type_str) + 
-                                        " NAL. Size: " + std::to_string(nal[i].i_payload));
-                        }
-                    }
-                    h264_buffer->size = total_size;
-                    
-                    if (output_queue_.push(std::move(h264_buffer))) {
-                        APP_LOG_DEBUG("H264Encoder: Successfully pushed bundled H264 buffer to output queue. Total size: " + std::to_string(total_size));
-                    } else {
-                        APP_LOG_WARNING("H264Encoder: Failed to push H264 buffer to output queue.");
-                    }
-                }
-            } else {
-                APP_LOG_WARNING("H264Encoder: Failed to acquire buffer for NAL units. Dropping frame.");
-            }
-
-            // Record encoding end time
-            image_data.encode_end_time = std::chrono::high_resolution_clock::now();
-            
-            // Update last frame processing time for starvation detection
-            last_frame_processed_time_ = std::chrono::high_resolution_clock::now();
-            last_frame_id_ = image_data.frame_id;
-        } else {
-            APP_LOG_DEBUG("H264Encoder: No NAL units to process (frame_size: " + std::to_string(frame_size) + ", i_nal: " + std::to_string(i_nal) + ")");
-        }
+        /* 
+         * Original x264 encoding logic removed to support GStreamer x264enc pipeline.
+         * The raw I420 frames are now passed directly to UDPStreamer which feeds appsrc -> x264enc.
+         */
         [[maybe_unused]] auto total_loop_end = std::chrono::high_resolution_clock::now();
         APP_LOG_DEBUG("H264Encoder: Total worker thread loop iteration time: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_loop_end - total_loop_start).count()) + " us");
     }

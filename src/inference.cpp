@@ -410,9 +410,8 @@ void InferenceEngine::worker_thread_func() {
                 inference_start_time = current_time;
             }
             
-            // Batch logging: only log every 5th inference to reduce overhead
-            static int inference_log_counter = 0;
-
+                // Batch logging: only log every 5th inference to reduce overhead
+                // static int inference_log_counter = 0;
 
             // 4. Get output tensor
             [[maybe_unused]] auto get_output_start = std::chrono::high_resolution_clock::now();

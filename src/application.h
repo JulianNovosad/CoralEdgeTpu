@@ -13,7 +13,7 @@
 #include "image_processor.h" // New include
 #include "keyboard_monitor.h"
 
-#include "rtsp_server.h"
+#include "udp_streamer.h"
 #include "monitor.h"
 
 #include "buffer_pool.h"
@@ -64,7 +64,7 @@ public:
     // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
     std::unique_ptr<H264Encoder> h264_encoder_;
 
-    std::unique_ptr<RTSPServerWrapper> rtsp_server_;
+    std::unique_ptr<UDPStreamer> udp_streamer_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;
     std::unique_ptr<SystemMonitor> system_monitor_;
@@ -170,6 +170,8 @@ private:
     void stop_detector_process();
     bool is_detector_running();
     
+    void generate_sdp_file();
+    
     // Recovery counters for each subsystem
     std::map<std::string, int> recovery_attempts_;
     const int max_recovery_attempts_ = 5; // Maximum attempts per second
@@ -185,6 +187,9 @@ private:
     std::atomic<int64_t> inference_results_dropped_{0};
     std::atomic<int64_t> inference_results_consumed_by_logic_{0};
     std::atomic<int64_t> inference_results_consumed_by_overlay_{0};
+
+    std::atomic<int64_t> h264_output_queue_in_{0};
+    std::atomic<int64_t> h264_output_queue_out_{0};
 
 public:
     // Getter methods for Monitor class
@@ -207,6 +212,9 @@ public:
     int64_t get_inference_results_consumed_by_logic() const { return inference_results_consumed_by_logic_.load(); }
     int64_t get_inference_results_consumed_by_overlay() const { return inference_results_consumed_by_overlay_.load(); }
     
+    int64_t get_h264_output_queue_in() const { return h264_output_queue_in_.load(); }
+    int64_t get_h264_output_queue_out() const { return h264_output_queue_out_.load(); }
+
     // Methods to update counters from modules
     void increment_camera_frames_produced() { camera_frames_produced_.fetch_add(1); }
     void increment_camera_frames_dropped() { camera_frames_dropped_.fetch_add(1); }
@@ -215,6 +223,9 @@ public:
     void increment_inference_results_dropped() { inference_results_dropped_.fetch_add(1); }
     void increment_inference_results_consumed_by_logic() { inference_results_consumed_by_logic_.fetch_add(1); }
     void increment_inference_results_consumed_by_overlay() { inference_results_consumed_by_overlay_.fetch_add(1); }
+
+    void increment_h264_output_queue_in() { h264_output_queue_in_.fetch_add(1); }
+    void increment_h264_output_queue_out() { h264_output_queue_out_.fetch_add(1); }
 
 private:
 };

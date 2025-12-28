@@ -897,7 +897,7 @@ void LogicModule::calculate_ballistics_for_tracks() {
     // --- 5. Ballistics Calculation ---
     
     // Record start time for performance measurement
-    auto start_time = std::chrono::high_resolution_clock::now();
+    [[maybe_unused]] auto start_time = std::chrono::high_resolution_clock::now();
     
     // Log number of active tracks
     APP_LOG_DEBUG("Active tracks: " + std::to_string(active_tracks_.size()));
@@ -999,7 +999,7 @@ void LogicModule::perform_safety_and_actuation() {
     // --- 4. Uncertainty Propagation & Safety Checks ---
     
     // Record start time for performance measurement
-    auto start_time = std::chrono::high_resolution_clock::now();
+    [[maybe_unused]] auto start_time = std::chrono::high_resolution_clock::now();
     
     // Iterate through active tracks and perform safety checks
     for (auto& track : active_tracks_) {
@@ -1238,8 +1238,8 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         // For a target at expected distance, the bounding box should be within reasonable bounds
         // Typical target might occupy ~0.1 to 0.8 of image area depending on target size
         if (bbox_area < 0.01f || bbox_area > 0.8f) {  // Less than 1% or more than 80% of image area
-            APP_LOG_DEBUG("Early rejection: Bounding box area implausible (" + std::to_string(bbox_area) + ", width=" + 
-                         std::to_string(bbox_width) + ", height=" + std::to_string(bbox_height) + ")");
+            /* APP_LOG_DEBUG("Early rejection: Bounding box area implausible (" + std::to_string(bbox_area) + ", width=" + 
+                         std::to_string(bbox_width) + ", height=" + std::to_string(bbox_height) + ")"); */
             continue;
         }
         

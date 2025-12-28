@@ -17,7 +17,7 @@
 
 class RTSPServerWrapper {
 public:
-    RTSPServerWrapper(int rtspPort, const std::string& streamName);
+    RTSPServerWrapper(int rtspPort, const std::string& streamName, int width = 1536, int height = 864, double fps = 40.0);
     ~RTSPServerWrapper();
     
     bool start();
@@ -40,6 +40,7 @@ public:
     void send_latest_keyframe();
     std::vector<GstRTSPClient*> take_pending_clients();
     void flush_pending_buffers();
+    bool is_appsrc_ready() const;    // Check if appsrc is ready to receive data
 
 private:
     void serverThread();
@@ -55,8 +56,9 @@ private:
     // Server configuration
     int rtspPort_;
     std::string streamName_;
-    
-    // Threading
+    int width_;
+    int height_;
+    double fps_;
     std::atomic<bool> running_;
     std::thread server_thread_;
     
@@ -98,7 +100,6 @@ private:
     
     // Client management methods
     void manage_client_connection(GstRTSPClient* client);
-    bool is_appsrc_ready() const;
     
     // Thread-safe pending client management
     void add_pending_client(GstRTSPClient* client);
@@ -117,7 +118,10 @@ private:
     // Internal cleanup
     void internal_cleanup();
     
-
+    // Timing synchronization
+    std::atomic<long long> base_time_{0};
+    std::atomic<long long> first_pts_{0};
+    std::atomic<GstClockTime> last_pts_{0};
 };
 
 #endif // RTSP_SERVER_H

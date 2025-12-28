@@ -125,6 +125,12 @@ void ImageProcessor::worker_thread_func() {
             // Record queue pop time
             input_image.queue_pop_time = process_start_time;
             
+            // Frame skipping logic: Only process every skip_factor_ frame
+            if (frame_counter_++ % skip_factor_ != 0) {
+                input_image.buffer.reset(); // Return buffer to pool
+                continue;
+            }
+            
             // Log when a frame is dequeued for debugging
             APP_LOG_INFO("ImageProcessor: Dequeued frame from input queue. Frame ID: " + std::to_string(input_image.frame_id) + 
                         ", Timestamp: " + std::to_string(input_image.timestamp_epoch_ms) +
@@ -249,12 +255,10 @@ void ImageProcessor::worker_thread_func() {
 
             // Ensure processed_buffer_data->data has enough capacity
             size_t required_size = processed_mat.total() * processed_mat.elemSize();
-            if (required_size > processed_buffer_data->data.capacity()) {
-                APP_LOG_ERROR("ImageProcessor: Processed image size (" + std::to_string(required_size) +
-                              ") exceeds buffer pool capacity (" + std::to_string(processed_buffer_data->data.capacity()) + "). Dropping frame.");
-                input_image.buffer.reset(); // Return input buffer to pool
-                processed_buffer_data.reset(); // Return acquired buffer to pool
-                continue;
+            if (processed_buffer_data->data.size() < required_size) {
+                APP_LOG_WARNING("ImageProcessor: Resizing pooled buffer from " + std::to_string(processed_buffer_data->data.size()) +
+                              " to " + std::to_string(required_size) + ".");
+                processed_buffer_data->data.resize(required_size);
             }
             
             // Safety check to ensure processed_mat is valid before copying
@@ -268,8 +272,6 @@ void ImageProcessor::worker_thread_func() {
             // Copy processed image data (with overlays) to the pooled buffer
             std::memcpy(processed_buffer_data->data.data(), processed_mat.data, required_size);
             processed_buffer_data->size = required_size;
-            // Explicitly resize the underlying std::vector to reflect the actual data size
-            processed_buffer_data->data.resize(required_size);
 
             // 5. Create new ImageData object and push to output queue
             ImageData output_image_data(input_image.timestamp_epoch_ms, input_image.frame_id);

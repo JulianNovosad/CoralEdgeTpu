@@ -4,6 +4,7 @@
 #include "queue_monitor.h"
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 #include <csignal>
 #include <dirent.h>
 #include <unistd.h>
@@ -83,12 +84,12 @@ void Application::setup_pools_and_queues() {
     
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
     // For now, let's keep it at 80 as it's what's been tested, but log the memory usage.
-    size_t image_pool_count = 5; // Reduced to save memory for RTSP-only operation
+    size_t image_pool_count = 30; // Increased to prevent buffer exhaustion during high frame rates
 
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
     APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
-    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(50, 200, "DetectionPool"); // Reduced for memory saving
-    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(30, 1024 * 1024, "H264Pool"); // Reduced significantly for RTSP-only operation
+    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(100, 200, "DetectionPool"); // Increased
+    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(120, 4 * 1024 * 1024, "H264Pool"); // Increased to prevent buffer exhaustion during high frame rates
 }
 
 bool Application::initialize_modules(const std::string& model_path, const std::string& labels_path) {
@@ -137,6 +138,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             raw_image_for_processor_queue_, tpu_inference_queue_, image_pool_,
             config_loader_.get_tpu_stream_pixel_format(), // Pass configured format
             inf_w, inf_h); // Pass target width/height for TPU processing
+        image_processor_->set_skip_factor(3); // Keep TPU at 40 FPS (120/3)
         APP_LOG_INFO("ImageProcessor created.");
 
         APP_LOG_INFO("Creating ImageProcessor for visualization with overlays...");
@@ -147,6 +149,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             image_pool_, 
             config_loader_.get_tpu_stream_pixel_format(), // Use same format as TPU stream for consistency
             cam_w, cam_h); // Use main camera dimensions
+        visualization_processor_->set_skip_factor(1); // Process every frame (120 FPS)
         APP_LOG_INFO("Visualization ImageProcessor created.");
         
         // Set application reference for visualization processor to update counters
@@ -192,6 +195,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 
         APP_LOG_INFO("Creating H264Encoder...");
         h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
+        h264_encoder_->set_application_ref(this);
         APP_LOG_INFO("H264Encoder created.");
 
         APP_LOG_INFO("Creating KeyboardMonitor...");
@@ -200,12 +204,10 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         
 
 
-        // Create RTSP server
-        APP_LOG_INFO("Creating RTSPServerWrapper...");
-        int rtsp_port = config_loader_.get_rtsp_port();
-        std::string rtsp_mount_point = config_loader_.get_rtsp_mount_point();
-        rtsp_server_ = std::make_unique<RTSPServerWrapper>(rtsp_port, rtsp_mount_point);
-        APP_LOG_INFO("RTSPServerWrapper created on port " + std::to_string(rtsp_port) + " with mount point " + rtsp_mount_point);
+        // Create UDP streamer
+        APP_LOG_INFO("Creating UDPStreamer...");
+        udp_streamer_ = std::make_unique<UDPStreamer>(cam_w, cam_h, config_loader_.get_camera_fps());
+        APP_LOG_INFO("UDPStreamer created for 192.168.178.255:5004");
 
         APP_LOG_INFO("Creating Monitor...");
         monitor_ = std::make_unique<Monitor>(*this);
@@ -266,6 +268,16 @@ bool Application::start_modules() {
     // 3. Start logic module (depends on inference)
     start_ok &= logic_module_->start();
     
+    // Start UDP streamer BEFORE camera to ensure appsrc is ready when camera starts
+    if (udp_streamer_) {
+        if (!udp_streamer_->start()) {
+            APP_LOG_ERROR("Failed to start UDP streamer");
+            start_ok = false;
+        } else {
+            APP_LOG_INFO("UDP streamer started successfully");
+        }
+    }
+    
     // 4. Start camera (this may fail if camera is not available)
     bool camera_ok = primary_camera_->start();
     if (!camera_ok) {
@@ -290,17 +302,6 @@ bool Application::start_modules() {
     overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
 
     // Start HTTP streamer after consumer threads are running
-
-    
-    // Start RTSP server
-    if (rtsp_server_) {
-        if (!rtsp_server_->start()) {
-            APP_LOG_ERROR("Failed to start RTSP server");
-            start_ok = false;
-        } else {
-            APP_LOG_INFO("RTSP server started successfully");
-        }
-    }
     
     // 6. Start input monitoring (non-critical)
     if (!keyboard_monitor_->start()) {
@@ -359,11 +360,11 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
     supervisor_.register_module_stop("KeyboardMonitor", [&]() { keyboard_monitor_->stop(); });
     // supervisor_.register_module_stop("HttpStreamer", [&]() { http_streamer_->stop(); }); // Register HTTP streamer for shutdown
-    supervisor_.register_module_stop("RTSPServer", [&]() { 
-        if (rtsp_server_) {
-            rtsp_server_->stop();
+    supervisor_.register_module_stop("UDPStreamer", [&]() { 
+        if (udp_streamer_) {
+            udp_streamer_->stop();
         }
-    }); // Register RTSP server for shutdown
+    }); // Register UDP streamer for shutdown
     supervisor_.register_module_stop("OverlayConsumer", [&]() {
         overlay_consumer_running_ = false;
         if (overlay_consumer_thread_.joinable()) {
@@ -800,6 +801,7 @@ void Application::h264_queue_consumer_thread_func() {
     while (h264_consumer_running_) {
         // Attempt to pop a buffer from the H264 output queue
         if (h264_output_queue_.pop(h264_buffer)) {
+            increment_h264_output_queue_out();
             // Check if the buffer is valid and has data
             if (h264_buffer && h264_buffer->data.data() && h264_buffer->size > 0) {
                 // Log frame information
@@ -888,10 +890,10 @@ void Application::h264_queue_consumer_thread_func() {
                     }
                 }
                 
-                // Push the H264 data to the RTSP server
-                if (rtsp_server_) {
-                    // Directly pass the shared_ptr from the pool to the RTSP server
-                    rtsp_server_->pushH264Data(h264_buffer);
+                // Push the H264 data to the UDP streamer
+                if (udp_streamer_) {
+                    // UDPStreamer handles frame delivery to network
+                    udp_streamer_->pushH264Data(h264_buffer);
                 }
                 
                 frame_counter++;
@@ -901,30 +903,7 @@ void Application::h264_queue_consumer_thread_func() {
             // Reduced sleep to 25 microseconds to reduce latency and improve responsiveness
             std::this_thread::sleep_for(std::chrono::microseconds(25));
             
-            // Check if RTSP server needs dummy frames to keep alive
-            // Send a minimal dummy frame every 100ms if RTSP server is running but no frames available
-            static auto last_dummy_frame_time = std::chrono::steady_clock::now();
-            auto current_time = std::chrono::steady_clock::now();
-            if (rtsp_server_ && (current_time - last_dummy_frame_time) > std::chrono::milliseconds(100)) {
-                // Create a minimal dummy H.264 frame (SPS/PPS header only) to keep RTSP alive
-                // This is a minimal H.264 header that indicates a basic stream
-                std::vector<uint8_t> dummy_frame = {
-                    0x00, 0x00, 0x00, 0x01,  // Start code
-                    0x67, 0x42, 0xc0, 0x1e,  // SPS header (example for constrained baseline)
-                    0xdd, 0x80, 0x50, 0x1e,  // More SPS data
-                    0x07, 0xe2, 0x00, 0x00,  // More SPS data
-                    0x00, 0x00, 0x00, 0x01,  // Start code
-                    0x68, 0xce, 0x3c, 0x80   // PPS header
-                };
-                
-                auto rtsp_buffer = std::make_shared<H264Buffer>();
-                rtsp_buffer->data = dummy_frame;
-                rtsp_buffer->size = dummy_frame.size();
-                rtsp_server_->pushH264Data(rtsp_buffer);
-                
-                last_dummy_frame_time = current_time;
-                APP_LOG_DEBUG("RTSP: Sent dummy frame to keep stream alive");
-            }
+            // No dummy frames needed for UDP streaming - just send actual frames when available
         }
     }
     APP_LOG_INFO("H264 queue consumer thread stopped. Total frames processed: " + std::to_string(frame_counter));
@@ -986,6 +965,9 @@ int Application::run() {
         APP_LOG_ERROR("Failed to start modules.");
         return 1;
     }
+    
+    // Generate SDP file for UDP streaming
+    generate_sdp_file();
     
     // Register shutdown handlers for graceful shutdown
     register_shutdown_handlers();
@@ -1618,4 +1600,24 @@ void Application::detector_supervisor_thread_func() {
     }
     
     APP_LOG_INFO("Detector supervisory thread stopped");
+}
+
+void Application::generate_sdp_file() {
+    const std::string sdp_content = 
+        "v=0\n"
+        "o=- 0 0 IN IP4 127.0.0.1\n"
+        "s=Aurore UDP Stream\n"
+        "c=IN IP4 192.168.178.255\n"
+        "t=0 0\n"
+        "m=video 5004 RTP/AVP 96\n"
+        "a=rtpmap:96 H264/90000\n";
+    
+    std::ofstream sdp_file("stream.sdp");
+    if (sdp_file.is_open()) {
+        sdp_file << sdp_content;
+        sdp_file.close();
+        APP_LOG_INFO("SDP file 'stream.sdp' generated successfully");
+    } else {
+        APP_LOG_ERROR("Failed to create SDP file 'stream.sdp'");
+    }
 }

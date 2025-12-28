@@ -75,7 +75,7 @@ add_executable(detector
     src/application_supervisor.cpp
     src/system_monitor.cpp
     src/keyboard_monitor.cpp
-    src/rtsp_server.cpp
+    src/udp_streamer.cpp
 )
 add_executable(camera_isolation_test
     src/camera_isolation_test.cpp
@@ -139,12 +139,36 @@ if (GSTREAMER_RTSP_SERVER_FOUND)
     target_link_libraries(detector PRIVATE ${GSTREAMER_RTSP_SERVER_LIBRARIES})
 endif()
 
+# Check for and link GStreamer core library
+pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0)
+if (GSTREAMER_FOUND)
+    message(STATUS "Found GStreamer: ${GSTREAMER_LIBRARIES}")
+    target_link_libraries(detector PRIVATE ${GSTREAMER_LIBRARIES})
+    target_include_directories(detector PRIVATE ${GSTREAMER_INCLUDE_DIRS})
+endif()
+
 # Check for and link GStreamer app library (needed for gst_app_src_push_buffer)
 pkg_check_modules(GSTREAMER_APP QUIET gstreamer-app-1.0)
 if (GSTREAMER_APP_FOUND)
     message(STATUS "Found GStreamer App: ${GSTREAMER_APP_LIBRARIES}")
     target_link_libraries(detector PRIVATE ${GSTREAMER_APP_LIBRARIES})
     target_include_directories(detector PRIVATE ${GSTREAMER_APP_INCLUDE_DIRS})
+endif()
+
+# Check for and link GStreamer video library (needed for video processing)
+pkg_check_modules(GSTREAMER_VIDEO QUIET gstreamer-video-1.0)
+if (GSTREAMER_VIDEO_FOUND)
+    message(STATUS "Found GStreamer Video: ${GSTREAMER_VIDEO_LIBRARIES}")
+    target_link_libraries(detector PRIVATE ${GSTREAMER_VIDEO_LIBRARIES})
+    target_include_directories(detector PRIVATE ${GSTREAMER_VIDEO_INCLUDE_DIRS})
+endif()
+
+# Check for and link GStreamer base library
+pkg_check_modules(GSTREAMER_BASE QUIET gstreamer-base-1.0)
+if (GSTREAMER_BASE_FOUND)
+    message(STATUS "Found GStreamer Base: ${GSTREAMER_BASE_LIBRARIES}")
+    target_link_libraries(detector PRIVATE ${GSTREAMER_BASE_LIBRARIES})
+    target_include_directories(detector PRIVATE ${GSTREAMER_BASE_INCLUDE_DIRS})
 endif()
 
 target_link_libraries(camera_isolation_test PRIVATE

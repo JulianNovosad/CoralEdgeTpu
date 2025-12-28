@@ -26,14 +26,17 @@ public:
     ~ImageProcessor();
 
     bool start();
-    void stop();
-    bool is_running() const;
+        void stop();
+        bool is_running() const;
     
-    // Timing methods for monitoring
-    long long get_queue_pop_timing_us() const { return avg_queue_pop_time_us_; }
-    long long get_preprocess_timing_us() const { return avg_preprocess_time_us_; }
-    long long get_conversion_timing_us() const { return avg_conversion_time_us_; }
-    long long get_visualization_timing_us() const { return avg_visualization_time_us_; }
+        // Set skip factor (process only every Nth frame)
+        void set_skip_factor(int skip_factor) { skip_factor_ = skip_factor; }
+    
+        // Timing methods for monitoring
+        long long get_queue_pop_timing_us() const { return avg_queue_pop_time_us_; }
+        long long get_preprocess_timing_us() const { return avg_preprocess_time_us_; }
+        long long get_conversion_timing_us() const { return avg_conversion_time_us_; }
+        long long get_visualization_timing_us() const { return avg_visualization_time_us_; }
     
     // Method to set application reference for updating counters
     void set_application_ref(class Application* app) { app_ref_ = app; }
@@ -51,6 +54,8 @@ private:
     libcamera::PixelFormat input_pixel_format_;
     int output_width_;
     int output_height_;
+    int skip_factor_ = 1;
+    uint64_t frame_counter_ = 0;
 
     std::atomic<bool> running_{false};
     std::thread worker_thread_;

@@ -1,1 +1,5 @@
 - Whenever there is an issue with the Edge TPU, always first investigate if there is already an instance of detector running, using `pgrep detector`. If such an instance is found, do pkill -9 detector
+- Do not ever use the ./build.sh script, always use cmake and make -j4 inside of build/
+- Remember that exit code 137 means it was killed by the user. not oom-killer, not kernel, user.
+- do not try to connect to the server from a separate shell, only connect to the server not only from the same shell, but from the same command
+- when you run a network status on port 8554 and it is empty, and the rstp server is also not running, you have more than likely simply stopped the binary running the server

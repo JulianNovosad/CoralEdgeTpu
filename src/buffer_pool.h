@@ -20,6 +20,10 @@ struct PooledBuffer {
     std::vector<T> data;
     // Add any other metadata you need, e.g., size, timestamp.
     size_t size = 0;
+    // Timestamp for video frames to enable proper PTS calculation
+    long long timestamp_epoch_ms = 0;  // Timestamp in milliseconds since epoch
+    int frame_id = -1;                 // Frame ID to track frame sequence
+    int64_t encoder_frame_count = -1;  // Frame count from encoder for PTS calculation
     
     // Zero-copy related fields
     int fd = -1;           // File descriptor for zero-copy access
@@ -87,7 +91,7 @@ public:
         // Log acquisition with buffer address and timing
         auto acquire_end = std::chrono::high_resolution_clock::now();
         auto wait_time_us = std::chrono::duration_cast<std::chrono::microseconds>(acquire_end - acquire_start).count();
-        APP_LOG_INFO(name_ + ": Acquired buffer " + std::to_string(reinterpret_cast<uintptr_t>(buffer_ptr)) + 
+        APP_LOG_DEBUG(name_ + ": Acquired buffer " + std::to_string(reinterpret_cast<uintptr_t>(buffer_ptr)) + 
                     ". Available: " + std::to_string(available_buffers_.size()) + 
                     ", In use: " + std::to_string(current_in_use_) + 
                     ", Wait time: " + std::to_string(wait_time_us) + " us");
@@ -102,7 +106,7 @@ public:
             auto hold_time_us = std::chrono::duration_cast<std::chrono::microseconds>(release_start - acquire_end).count();
             
             // Log release with buffer address and timing
-            APP_LOG_INFO(this->name_ + ": Releasing buffer " + std::to_string(reinterpret_cast<uintptr_t>(b)) + 
+            APP_LOG_DEBUG(this->name_ + ": Releasing buffer " + std::to_string(reinterpret_cast<uintptr_t>(b)) + 
                         ", Hold time: " + std::to_string(hold_time_us) + " us");
             
             // Use atomic compare-and-swap to ensure buffer is only returned once

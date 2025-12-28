@@ -12,6 +12,8 @@
 #include <vector>
 #include <x264.h>
 
+class Application;
+
 class H264Encoder {
 public:
     H264Encoder(ImageQueue& input_queue, 
@@ -24,6 +26,7 @@ public:
     void stop();
     bool is_running() const { return running_; }
     void get_state() const;
+    void set_application_ref(Application* app);
     
     // Timing methods for monitoring
     long long get_encode_timing_us() const { return avg_encode_time_us_; }
@@ -35,6 +38,7 @@ private:
     ImageQueue& input_queue_;
     H264Queue& output_queue_;
     std::shared_ptr<BufferPool<uint8_t>> h264_buffer_pool_;
+    Application* app_ = nullptr;
     int width_;
     int height_;
     double fps_;
@@ -58,6 +62,18 @@ private:
     
     // Throttling logic
     uint64_t frame_counter_{0};
+    
+    // Frame counter for PTS
+    int64_t frame_count_{0};
+    
+    // Presentation timestamp tracking for monotonicity
+    std::chrono::high_resolution_clock::time_point stream_start_time_;
+    bool stream_start_time_initialized_{false};
+    
+    // Buffer exhaustion monitoring
+    std::chrono::steady_clock::time_point last_buffer_acquisition_success_;
+    bool buffer_acquisition_success_initialized_{false};
+    static constexpr std::chrono::seconds BUFFER_EXHAUSTION_THRESHOLD{2};
     
     // Method for checking display starvation
     bool is_display_starving() const;

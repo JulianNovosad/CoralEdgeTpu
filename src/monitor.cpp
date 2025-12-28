@@ -87,8 +87,8 @@ void Monitor::monitor_thread_func() {
         int detection_logic_queue_out = 0;
         int overlaid_video_queue_in = 0;
         int overlaid_video_queue_out = 0;
-        int h264_output_queue_in = 0;
-        int h264_output_queue_out = 0;
+        int h264_output_queue_in = app_.get_h264_output_queue_in();
+        int h264_output_queue_out = app_.get_h264_output_queue_out();
         
         // Calculate module rates based on the current FPS/IPS/CPS values
         int camera_fps = 0;
