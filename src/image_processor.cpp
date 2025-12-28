@@ -220,16 +220,35 @@ void ImageProcessor::worker_thread_func() {
                 std::shared_ptr<DetectionResultBuffer> detection_buffer;
                 // Attempt to pop detection results, but don't block if none are available
                 if (detection_queue_ptr_->pop(detection_buffer)) {
+                    // Update cache with new detections
+                    last_detections_ = detection_buffer;
+                    last_detection_time_ = std::chrono::steady_clock::now();
+
                     // If we have an application reference, update the consumed counter
                     if (app_ref_) {
                         app_ref_->increment_inference_results_consumed_by_overlay();
                     }
                     // Apply detection overlays to the processed frame
                     apply_detections_to_frame(processed_mat, detection_buffer);
-                    APP_LOG_DEBUG("ImageProcessor: Applied " + std::to_string(detection_buffer->size) + " detections to frame " + std::to_string(input_image.frame_id));
+                    APP_LOG_DEBUG("ImageProcessor: Applied NEW " + std::to_string(detection_buffer->size) + " detections to frame " + std::to_string(input_image.frame_id));
                 } else {
-                    // No detection results available for this frame, continue without overlays
-                    APP_LOG_DEBUG("ImageProcessor: No detection results available for frame " + std::to_string(input_image.frame_id));
+                    // No new detection results. Check if we have cached ones that are fresh enough.
+                    auto now = std::chrono::steady_clock::now();
+                    // Initialize last_detection_time_ if it's never been set (checking against epoch)
+                    if (last_detection_time_.time_since_epoch().count() == 0) {
+                         // First run or reset, treat as expired
+                    } else {
+                        auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_detection_time_).count();
+                        const long long MAX_DETECTION_AGE_MS = 500; // 500ms timeout for sticky boxes
+
+                        if (last_detections_ && elapsed_ms < MAX_DETECTION_AGE_MS) {
+                            apply_detections_to_frame(processed_mat, last_detections_);
+                            APP_LOG_DEBUG("ImageProcessor: Applied CACHED " + std::to_string(last_detections_->size) + " detections (age: " + std::to_string(elapsed_ms) + "ms)");
+                        } else {
+                            // No valid cached detections
+                            APP_LOG_DEBUG("ImageProcessor: No detection results available for frame " + std::to_string(input_image.frame_id) + " (Queue empty, Cache expired or empty)");
+                        }
+                    }
                 }
             } else {
                 // No detection queue configured, continue without overlays

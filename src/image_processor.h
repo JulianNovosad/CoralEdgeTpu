@@ -65,4 +65,8 @@ private:
     mutable std::atomic<long long> avg_preprocess_time_us_{0};
     mutable std::atomic<long long> avg_conversion_time_us_{0};      // Additional timing variable
     mutable std::atomic<long long> avg_visualization_time_us_{0};   // Additional timing variable
+
+    // Caching for sticky detections
+    std::shared_ptr<DetectionResultBuffer> last_detections_;
+    std::chrono::steady_clock::time_point last_detection_time_;
 };
