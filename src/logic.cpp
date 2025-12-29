@@ -127,8 +127,8 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
         trajectory.push_back(current_state);
         
         // Enhanced safety stop with multiple conditions
-        if (trajectory.size() > 5000) { // Reduced from 20000 to 5000
-            APP_LOG_WARNING("Trajectory calculation exceeded 5000 steps. Max distance: " + std::to_string(max_distance) + "m, Time step: " + std::to_string(actual_time_step) + "s. Last Pos Y: " + std::to_string(current_state.position.y) + "m");
+        if (trajectory.size() > 100) { // FORENSIC SAFETY CAP: 100 STEPS MAX
+            APP_LOG_WARNING("Trajectory calculation exceeded 100 steps (FORENSIC CAP). Max distance: " + std::to_string(max_distance) + "m, Time step: " + std::to_string(actual_time_step) + "s. Last Pos Y: " + std::to_string(current_state.position.y) + "m");
             break;
         }
         
@@ -481,8 +481,8 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
     }
     
     // Load labelmap for human-readable class names
-    if (!load_labelmap("labelmap.pbtxt")) {
-        APP_LOG_WARNING("Failed to load labelmap, using numeric class IDs only");
+    if (!load_labelmap(config.get_labels_path())) {
+        APP_LOG_WARNING("Failed to load labelmap from: " + config.get_labels_path() + ", using numeric class IDs only");
     }
 }
 
@@ -565,8 +565,8 @@ void LogicModule::worker_thread_func() {
     
     while (running_) {
         std::shared_ptr<DetectionResultBuffer> detections_buffer;
-        // Use blocking pop with timeout to ensure every inference result is processed
-        if (detection_input_queue_.pop(detections_buffer)) {
+        // Use blocking wait_pop instead of polling to eliminate micro-stutter
+        if (detection_input_queue_.wait_pop(detections_buffer, std::chrono::milliseconds(10))) {
             successful_pops++;
             long long call_ts = 0;
             if (detections_buffer && detections_buffer->size > 0) {
@@ -642,27 +642,6 @@ void LogicModule::worker_thread_func() {
                 // Update the last activity time for rate calculation
                 last_activity_time = std::chrono::high_resolution_clock::now();
             }
-        } else {
-            // Check if we should update the rate even when idle to prevent it from showing 0 for too long
-            auto current_time = std::chrono::high_resolution_clock::now();
-            auto idle_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_activity_time).count();
-            
-            // If we've been idle for more than 200ms, update the rate to reflect current state
-            if (idle_duration > 200) {
-                // Calculate effective rate based on the idle period
-                auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_update_time).count();
-                if (elapsed_ms > 1000) {  // If more than 1 second has passed since last rate update
-                    logic_rate_ = 0;  // Set to 0 if truly idle
-                    last_update_time = current_time;  // Update last update time to prevent constant 0 reporting
-                }
-            }
-            
-            // Log that pop failed, and sleep briefly to prevent busy-waiting
-            // Reduced sleep to 50 microseconds to reduce latency
-            if (running_) { // Only log if still intended to be running
-                APP_LOG_DEBUG("LogicModule: Pop failed (queue empty or stopped). Sleeping briefly.");
-            }
-            std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
     }
     APP_LOG_INFO("LogicModule worker thread stopped.");
@@ -1368,9 +1347,9 @@ float LogicModule::estimate_target_distance(const DetectionResult& detection) {
     const float IMAGE_WIDTH = config_.get_tpu_target_width();   // 320 pixels
     
     // Calculate pixel dimensions of the detection
-    // The detection coordinates are already in pixel coordinates, not normalized
-    float pixel_width = detection.xmax - detection.xmin;
-    float pixel_height = detection.ymax - detection.ymin;
+    // The detection coordinates are normalized [0,1], convert to pixels
+    float pixel_width = (detection.xmax - detection.xmin) * config_.get_tpu_target_width();
+    float pixel_height = (detection.ymax - detection.ymin) * config_.get_tpu_target_height();
     
     // Determine which dimension to use for distance calculation
     // Use the dimension (width or height) that gives us the most accurate result
@@ -1580,6 +1559,7 @@ bool LogicModule::load_class_scale_factors(const std::string& filepath) {
 
 bool LogicModule::load_labelmap(const std::string& filepath) {
     try {
+        APP_LOG_INFO("Loading labelmap from: " + filepath);
         // Open the labelmap file
         std::ifstream file(filepath);
         if (!file.is_open()) {

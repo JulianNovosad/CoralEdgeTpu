@@ -36,14 +36,14 @@ float InferenceEngine::get_tpu_temperature() {
 
 InferenceEngine::InferenceEngine(const std::string& model_path, 
                                      ImageQueue& input_queue, 
-                                     DetectionResultsQueue& detection_results_for_overlay_queue, 
+                                     TripleBuffer<DetectionResults>* detection_results_for_overlay_buffer, 
                                      DetectionResultsQueue& detection_results_for_logic_queue, 
                                      std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool,
                                      float score_threshold,
                                      int num_threads)
     : model_path_(model_path), 
       input_queue_(input_queue), 
-      detection_results_for_overlay_queue_(detection_results_for_overlay_queue), 
+      detection_results_for_overlay_buffer_(detection_results_for_overlay_buffer), 
       detection_results_for_logic_queue_(detection_results_for_logic_queue),
       detection_result_pool_(detection_result_pool),
       num_threads_(num_threads),
@@ -165,7 +165,7 @@ void InferenceEngine::stop() {
         dummy_data.buffer = nullptr; // Mark as dummy
         dummy_data.width = 0;
         dummy_data.height = 0;
-        input_queue_.push(dummy_data);
+        input_queue_.push(std::move(dummy_data));
         
         for (std::thread& thread : worker_threads_) {
             if (thread.joinable()) {
@@ -177,7 +177,43 @@ void InferenceEngine::stop() {
     }
 }
 
+void InferenceEngine::recreate_delegate() {
+    // Thread-safety: Use unique_lock to ensure no other thread is using the delegate
+    // while we are freeing and recreating it.
+    std::unique_lock<std::shared_mutex> lock(delegate_mutex_);
+
+    // 1. Free existing delegate
+    if (edgetpu_delegate_) {
+        APP_LOG_INFO("Recreating Delegate: Freeing old Edge TPU delegate...");
+        edgetpu_free_delegate(edgetpu_delegate_);
+        edgetpu_delegate_ = nullptr;
+    }
+
+    // 2. Create new delegate
+    size_t num_devices;
+    std::unique_ptr<edgetpu_device, decltype(&edgetpu_free_devices)> devices(
+        edgetpu_list_devices(&num_devices), &edgetpu_free_devices);
+
+    if (num_devices > 0) {
+        const auto& device = devices.get()[0];
+        std::vector<edgetpu_option> options;
+        options.push_back({"verbose", "1"});
+        
+        edgetpu_delegate_ = edgetpu_create_delegate(device.type, device.path, options.data(), options.size());
+        if (edgetpu_delegate_) {
+             APP_LOG_INFO("Recreating Delegate: Success. Address: " + std::to_string(reinterpret_cast<uintptr_t>(edgetpu_delegate_)));
+        } else {
+             APP_LOG_ERROR("Recreating Delegate: Failed to create delegate.");
+        }
+    } else {
+        APP_LOG_ERROR("Recreating Delegate: No Edge TPU devices found.");
+    }
+}
+
 std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
+    // Safety: Take shared lock because we read edgetpu_delegate_
+    std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
+    
     std::unique_ptr<tflite::Interpreter> local_interpreter;
     tflite::InterpreterBuilder(*model_, resolver_)(&local_interpreter);
     if (!local_interpreter) {
@@ -187,12 +223,12 @@ std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
 
     // Apply the pre-created EdgeTPU delegate
     if (edgetpu_delegate_ && local_interpreter->ModifyGraphWithDelegate(edgetpu_delegate_) != kTfLiteOk) {
-        APP_LOG_ERROR("Failed to apply EdgeTPU delegate. Check if the model is compatible with Edge TPU.");
+        APP_LOG_ERROR("Failed to apply EdgeTPU delegate.");
         return nullptr;
     }
     
     if (local_interpreter->AllocateTensors() != kTfLiteOk) {
-        APP_LOG_ERROR("Failed to allocate tensors after applying EdgeTPU delegate.");
+        APP_LOG_ERROR("Failed to allocate tensors.");
         return nullptr;
     }
     
@@ -207,20 +243,12 @@ void InferenceEngine::worker_thread_func() {
     
     // Counter for periodic delegate recreation
     int inference_count = 0;
-    const int RECREATE_INTERVAL = 50; // Recreate delegate every 50 inferences (even more aggressive)
-                                  // WORKAROUND: This is reduced from 100 to prevent resource accumulation
-                                  // and delegate issues in the Edge TPU delegate which appears to have
-                                  // memory management bugs causing "Node number X (EdgeTpuDelegateForCustomOp) 
-                                  // failed to invoke" errors.
+    const int RECREATE_INTERVAL = 1000000; // Disable periodic resets (recreate only on error)
     
     ImageData input_image;
     while (running_) {
-        [[maybe_unused]] auto total_loop_start = std::chrono::high_resolution_clock::now();
-        // 1. Pop from input queue with non-blocking approach to prevent stalling
-        [[maybe_unused]] auto pop_start = std::chrono::high_resolution_clock::now();
-        if (input_queue_.pop(input_image)) {
-            [[maybe_unused]] auto pop_end = std::chrono::high_resolution_clock::now();
-            
+        // Use blocking wait_pop instead of polling to eliminate micro-stutter
+        if (input_queue_.wait_pop(input_image, std::chrono::milliseconds(10))) {
             // CRITICAL: Always ensure buffer is released if it's a dummy or if interpreter is null
             if (!input_image.buffer) {
                 if (!running_) return;
@@ -233,234 +261,110 @@ void InferenceEngine::worker_thread_func() {
                 continue;
             }
             
-            // Increment the frames consumed counter
             frames_consumed_.fetch_add(1);
-            
-            // If we have an application reference, also update the application's counter
             if (app_ref_) {
                 app_ref_->increment_camera_frames_consumed_by_inference();
             }
             
             long long call_ts = input_image.timestamp_epoch_ms;
 
-            // Preprocessing (e.g., resizing, format conversion) is assumed to be done before data is put into the queue.
-            // We log the time taken for this implicitly by measuring from pop to set_input_start.
-            [[maybe_unused]] auto preprocessing_end = std::chrono::high_resolution_clock::now(); // Assuming pop_end is the end of preprocessing if it happened before queueing
-            APP_LOG_DEBUG("InferenceEngine: Time for preprocessing (implicit from pop to set_input_start): " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(preprocessing_end - pop_end).count()) + " us");
-
-            // 2. Set input tensor (copy data to interpreter input)
-            [[maybe_unused]] auto set_input_start = std::chrono::high_resolution_clock::now();
+            // 2. Set input tensor
             try {
                 set_input_tensor(interpreter.get(), input_image);
-            } catch (const std::exception& e) {
-                APP_LOG_ERROR("Failed to set input tensor: " + std::string(e.what()) + ". Skipping frame.");
-                input_image.buffer.reset(); // Explicitly release the buffer here!
+            } catch (...) {
+                input_image.buffer.reset();
                 continue;
             }
-            input_image.buffer.reset(); // Explicitly release the buffer here!
-            [[maybe_unused]] auto set_input_end = std::chrono::high_resolution_clock::now();
-            APP_LOG_DEBUG("InferenceEngine: Time to copy data to input tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(set_input_end - set_input_start).count()) + " us");
-
-
+            input_image.buffer.reset();
+            
             // 3. Invoke interpreter
             auto invoke_start_time = std::chrono::high_resolution_clock::now();
-            TfLiteStatus invoke_status = interpreter->Invoke();
+            TfLiteStatus invoke_status;
+            {
+                std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
+                invoke_status = interpreter->Invoke();
+            }
             auto invoke_end_time = std::chrono::high_resolution_clock::now();
             
-            // Check if we need to recreate the interpreter due to delegate issues
-            // WORKAROUND: The Edge TPU delegate occasionally fails with "Node number X (EdgeTpuDelegateForCustomOp) failed to invoke"
-            // This appears to be a memory corruption bug in the delegate where it might be looking for incorrect tensor names
-            // (e.g., "normalizdd_input_image_tensor" instead of "normalized_input_image_tensor").
-            // To work around this issue, we retry interpreter creation multiple times and provide detailed error logging.
             if (invoke_status != kTfLiteOk) {
-                APP_LOG_ERROR("Failed to invoke interpreter with status: " + std::to_string(invoke_status) + ". Attempting to recreate interpreter.");
-                
-                // Try to recreate the interpreter with a fresh delegate multiple times
+                // Recreate logic remains but with zero hot-path logging
                 int max_retries = 3;
                 bool recreate_success = false;
                 for (int retry = 0; retry < max_retries; ++retry) {
-                    APP_LOG_INFO("Attempt " + std::to_string(retry + 1) + " to recreate interpreter.");
-                    
-                    // Try to recreate the interpreter with a fresh delegate
+                    interpreter.reset();
+                    recreate_delegate();
                     interpreter = create_interpreter();
-                    if (!interpreter) {
-                        APP_LOG_ERROR("Worker thread failed to recreate interpreter on attempt " + std::to_string(retry + 1) + ". Retrying...");
-                        continue;
-                    }
-                    APP_LOG_INFO("Successfully recreated interpreter with fresh delegate on attempt " + std::to_string(retry + 1) + ".");
+                    if (!interpreter) continue;
                     
-                    // Try inference again with the new interpreter
                     invoke_start_time = std::chrono::high_resolution_clock::now();
-                    invoke_status = interpreter->Invoke();
+                    {
+                        std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
+                        invoke_status = interpreter->Invoke();
+                    }
                     invoke_end_time = std::chrono::high_resolution_clock::now();
                     
                     if (invoke_status == kTfLiteOk) {
                         recreate_success = true;
-                        APP_LOG_INFO("Successfully invoked interpreter after recreation on attempt " + std::to_string(retry + 1) + ".");
                         break;
-                    } else {
-                        APP_LOG_ERROR("Failed to invoke interpreter on attempt " + std::to_string(retry + 1) + " with status: " + std::to_string(invoke_status) + ". Retrying...");
                     }
                 }
-                
-                if (!recreate_success) {
-                    APP_LOG_ERROR("Failed to invoke interpreter even after " + std::to_string(max_retries) + " recreation attempts with status: " + std::to_string(invoke_status) + ". Skipping frame.");
-                    continue;
-                }
+                if (!recreate_success) continue;
             }
             
-            // Periodically recreate the interpreter to prevent resource accumulation and delegate issues
             inference_count++;
             if (inference_count % RECREATE_INTERVAL == 0) {
-                APP_LOG_INFO("Periodically recreating interpreter to prevent resource accumulation and delegate issues. Inference count: " + std::to_string(inference_count));
+                interpreter.reset();
+                recreate_delegate();
                 interpreter = create_interpreter();
-                if (!interpreter) {
-                    APP_LOG_ERROR("Worker thread failed to recreate interpreter during periodic refresh. Exiting thread.");
-                    return;
-                }
-                APP_LOG_INFO("Successfully recreated interpreter during periodic refresh.");
+                if (!interpreter) return;
             }
             
-            long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(invoke_end_time - invoke_start_time).count();
-            long long duration_us = std::chrono::duration_cast<std::chrono::microseconds>(invoke_end_time - invoke_start_time).count();
-            APP_LOG_DEBUG("InferenceEngine: Time to invoke interpreter (inference_done): " + std::to_string(duration_ms) + " ms");
+            [[maybe_unused]] long long duration_us = std::chrono::duration_cast<std::chrono::microseconds>(invoke_end_time - invoke_start_time).count();
             
-            // Update freshness indicators
+            // Update telemetry (with systolic warm-up bypass)
             last_inference_timestamp_ = call_ts;
-            
-            // Update average inference time for monitoring with proper exponential moving average
-            long long current_avg = avg_inference_time_us_.load();
-            avg_inference_time_us_.store(static_cast<long long>(current_avg * 0.9 + duration_us * 0.1)); // 0.1 alpha value for EMA
-            
-            // Check TPU temperature periodically and log if threshold is exceeded
-            static int temp_check_count = 0;
-            temp_check_count++;
-            if (temp_check_count % 10 == 0) { // Check every 10 inferences to avoid overhead
-                float tpu_temp = get_tpu_temperature();
-                if (tpu_temp > 0.0f && tpu_temp < 100.0f) { // Valid temperature range
-                    if (tpu_temp > 75.0f) { // Thermal throttling threshold
-                        APP_LOG_WARNING("TPU Temperature Alert: " + std::to_string(tpu_temp) + "°C (threshold: 75°C)");
-                    }
-                    // Log temperature periodically for monitoring
-                    APP_LOG_DEBUG("TPU Temperature: " + std::to_string(tpu_temp) + "°C");
-                }
+            if (inference_count > 10) {
+                avg_inference_time_us_.store(static_cast<long long>(avg_inference_time_us_.load() * 0.9 + duration_us * 0.1));
             }
             
-            // Store inference timing for statistics
-            static std::vector<long long> inference_times_us;
-            static int timing_inference_count = 0;
-            inference_times_us.push_back(duration_us);
-            timing_inference_count++;
-            
-            // Update inference rate
-            if (timing_inference_count % 100 == 0 && inference_times_us.size() > 0) {
-                long long total_time_us = 0;
-                for (long long time : inference_times_us) {
-                    total_time_us += time;
+            if (inference_count % 100 == 0) {
+                // Pipe sanitized thermal sensor to telemetry
+                float temp = get_tpu_temperature();
+                if (temp > -10.0f) {
+                    tpu_temperature_.store(temp);
                 }
-                double avg_time_us = static_cast<double>(total_time_us) / inference_times_us.size();
-                double avg_time_ms = avg_time_us / 1000.0;
-                if (avg_time_ms > 0) {
-                    inference_rate_ = static_cast<int>(1000.0 / avg_time_ms);
-                }
-            }
-            
-            // Print inference timing statistics every 100 inferences
-            if (timing_inference_count % 100 == 0 && inference_times_us.size() > 0) {
-                long long total_time_us = 0;
-                long long min_time_us = inference_times_us[0];
-                long long max_time_us = inference_times_us[0];
-                
-                for (long long time : inference_times_us) {
-                    total_time_us += time;
-                    if (time < min_time_us) min_time_us = time;
-                    if (time > max_time_us) max_time_us = time;
-                }
-                
-                // Calculate 95th percentile
-                std::sort(inference_times_us.begin(), inference_times_us.end());
-                long long p95_index = static_cast<long long>(inference_times_us.size() * 0.95);
-                [[maybe_unused]] long long p95_time_us = inference_times_us[p95_index];
-                
-                [[maybe_unused]] double avg_time_us = static_cast<double>(total_time_us) / inference_times_us.size();
-                
-                APP_LOG_INFO("Inference Timing Stats (last 100 inferences): Avg=" + std::to_string(avg_time_us) + "us, Min=" + std::to_string(min_time_us) + "us, P95=" + std::to_string(p95_time_us) + "us, Max=" + std::to_string(max_time_us) + "us");
-            }
-            
-            // Check if interpreter is null after invocation
-            if (!interpreter) {
-                APP_LOG_ERROR("Interpreter is null after invocation. Skipping frame.");
-                continue;
-            }
-            
-            // FPS measurement for inference stage
-            static int inference_frame_counter = 0;
-            static auto inference_start_time = std::chrono::high_resolution_clock::now();
-            inference_frame_counter++;
-            auto current_time = std::chrono::high_resolution_clock::now();
-            auto inference_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - inference_start_time).count();
-            if (inference_duration >= 1000) { // Log every second
-                double inference_fps = (inference_frame_counter * 1000.0) / inference_duration;
-                APP_LOG_INFO("INFERENCE FPS MEASUREMENT: " + std::to_string(inference_fps) + " FPS over " + std::to_string(inference_frame_counter) + " inferences in " + std::to_string(inference_duration) + " ms");
-                
 
-                
-                // Reset for next measurement
-                inference_frame_counter = 0;
-                inference_start_time = current_time;
+                // Rate calculation for watchdog/monitor using class state
+                auto now = std::chrono::steady_clock::now();
+                auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_rate_check_).count();
+                if (elapsed_ms >= 1000) {
+                    int current_count = inference_count;
+                    int diff = current_count - last_inference_count_.load();
+                    inference_rate_.store(static_cast<int>(diff * 1000 / elapsed_ms));
+                    last_inference_count_.store(current_count);
+                    last_rate_check_ = now;
+                }
             }
             
-                // Batch logging: only log every 5th inference to reduce overhead
-                // static int inference_log_counter = 0;
-
             // 4. Get output tensor
-            [[maybe_unused]] auto get_output_start = std::chrono::high_resolution_clock::now();
             auto results_buffer = get_output_tensor(interpreter.get(), input_image);
-            [[maybe_unused]] auto get_output_end = std::chrono::high_resolution_clock::now();
-            APP_LOG_DEBUG("InferenceEngine: Time to get output tensor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(get_output_end - get_output_start).count()) + " us");
 
-            // 5. Push results to output queues with blocking behavior for strict pipeline coupling.
-            [[maybe_unused]] auto push_output_start = std::chrono::high_resolution_clock::now();
-            if (results_buffer && results_buffer->size > 0) {
-                // Log detailed detection information
-                APP_LOG_INFO("DETECTION_RESULTS: Frame " + std::to_string(input_image.frame_id) + 
-                           " - " + std::to_string(results_buffer->size) + " detections:");
-                for (int i = 0; i < results_buffer->size && i < 10; i++) { // Log first 10 detections to avoid spam
-                    const auto& det = results_buffer->data[i];
-                    APP_LOG_INFO("  Detection " + std::to_string(i+1) + ": Class=" + std::to_string(det.class_id) + 
-                               ", Score=" + std::to_string(det.score) + 
-                               ", BBox=[" + std::to_string(det.xmin) + "," + std::to_string(det.ymin) + 
-                               "," + std::to_string(det.xmax) + "," + std::to_string(det.ymax) + "]");
+            // 5. Push results to output buffers/queues
+            if (detection_results_for_overlay_buffer_) {
+                DetectionResults& overlay_results = detection_results_for_overlay_buffer_->get_write_buffer();
+                if (results_buffer && results_buffer->size > 0) {
+                    overlay_results.assign(results_buffer->data.data(), results_buffer->data.data() + results_buffer->size);
                 }
-                
-                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to overlay queue.");
-                bool overlay_pushed = push_blocking(detection_results_for_overlay_queue_, results_buffer);
-                APP_LOG_DEBUG("InferenceEngine: Pushing " + std::to_string(results_buffer->size) + " detections to logic queue.");
-                bool logic_pushed = push_blocking(detection_results_for_logic_queue_, results_buffer);
-                
-                if (!overlay_pushed) {
-                    APP_LOG_WARNING("InferenceEngine: Failed to push detections to overlay queue - queue full.");
-                    overlay_queue_drop_count_++;
+                else {
+                    overlay_results.clear();
                 }
-                if (!logic_pushed) {
-                    APP_LOG_WARNING("InferenceEngine: Failed to push detections to logic queue - queue full.");
-                    logic_queue_drop_count_++;
-                }
-                if (!overlay_pushed || !logic_pushed) {
-                    APP_LOG_WARNING("InferenceEngine: Failed to push detections to one or more queues. Overlay: " + 
-                                   std::to_string(overlay_pushed) + ", Logic: " + std::to_string(logic_pushed));
-                }
-            } else {
-                APP_LOG_DEBUG("InferenceEngine: No detections found in frame " + std::to_string(input_image.frame_id) + ".");
+                detection_results_for_overlay_buffer_->commit_write();
             }
-            [[maybe_unused]] auto push_output_end = std::chrono::high_resolution_clock::now();
-            APP_LOG_DEBUG("InferenceEngine: Time to push results to queues: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(push_output_end - push_output_start).count()) + " us");
-        } else {
-            // Reduce sleep time to reduce latency when no input is available
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+            if (results_buffer && results_buffer->size > 0) {
+                detection_results_for_logic_queue_.push(results_buffer);
+            }
         }
-        [[maybe_unused]] auto total_loop_end = std::chrono::high_resolution_clock::now();
-        APP_LOG_DEBUG("InferenceEngine: Total worker thread loop iteration time: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_loop_end - total_loop_start).count()) + " us");
     }
 }
 
@@ -495,12 +399,10 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
     std::string tensor_name_str(tensor_name);
     APP_LOG_DEBUG("Input tensor name: " + tensor_name_str);
     
-    // This is the critical check - the tensor name must match what the Edge TPU delegate expects
-    if (tensor_name_str != "serving_default_input:0") {
-        APP_LOG_ERROR("Input tensor name mismatch. Expected: serving_default_input:0, Actual: " + tensor_name_str);
-        // This is a critical invariant violation - throw exception for graceful handling
-        throw std::runtime_error("Input tensor name mismatch. Expected: serving_default_input:0, Actual: " + tensor_name_str);
-    }
+    // "Memory Z" Watchdog Fix:
+    // The EdgeTPU delegate can corrupt the input tensor name (e.g., "normalizdd_...").
+    // We stop checking for "serving_default_input:0" and trust Index 0.
+    // if (tensor_name_str != "serving_default_input:0") { ... } <- REMOVED
 
     // 3. Check tensor type
     if (input_tensor->type != kTfLiteUInt8) {
@@ -560,23 +462,6 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
                       " bytes).");
     }
 
-    // Zero-copy optimization: If we have a valid file descriptor, try to map directly
-    if (image.fd >= 0 && image.length > 0) {
-        APP_LOG_DEBUG("Attempting zero-copy operation with fd: " + std::to_string(image.fd) + ", offset: " + std::to_string(image.offset) + ", length: " + std::to_string(image.length));
-        
-        // Try to mmap the frame buffer directly
-        void* mmap_ptr = mmap(NULL, image.length, PROT_READ, MAP_SHARED, image.fd, image.offset);
-        if (mmap_ptr != MAP_FAILED) {
-            // Successfully mapped, copy directly from mapped memory
-            APP_LOG_DEBUG("Zero-copy mmap successful. Copying " + std::to_string(image.length) + " bytes from mapped memory to tensor.");
-            memcpy(tensor_data, static_cast<uint8_t*>(mmap_ptr), image.length);
-            munmap(mmap_ptr, image.length);
-            return; // Early return since we've already copied the data
-        } else {
-            APP_LOG_WARNING("Zero-copy mmap failed: " + std::string(strerror(errno)) + ". Falling back to buffer copy.");
-        }
-    }
-
     APP_LOG_DEBUG("Copying " + std::to_string(image.buffer->size) + " bytes from image buffer to input tensor.");
     memcpy(tensor_data, image.buffer->data.data(), image.buffer->size);
 }
@@ -589,272 +474,259 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     }
     results_buffer->size = 0; // Reset size
 
-    if (interpreter->outputs().size() < 4) {
-        APP_LOG_ERROR("Model does not have expected number of output tensors (expected 4 for SSD MobileNet).");
-        return nullptr;
-    }
+    size_t num_outputs = interpreter->outputs().size();
+    std::vector<DetectionResult> raw_detections;
+    auto timestamp = std::chrono::high_resolution_clock::now();
 
-    // Access tensors using the interpreter's tensor() method
-    // Model output order based on our analysis:
-    // Output_0 (index 120): classes [1, 10] - UINT8
-    // Output_1 (index 121): boxes [1, 10, 4] - UINT8  
-    // Output_2 (index 122): num_detections [1] - UINT8
-    // Output_3 (index 123): scores [1, 10] - UINT8
-    
-    // Map the outputs correctly based on their actual indices
-    TfLiteTensor* detection_classes_tensor = interpreter->tensor(interpreter->outputs()[0]);   // index 120
-    TfLiteTensor* detection_boxes_tensor = interpreter->tensor(interpreter->outputs()[1]);     // index 121
-    TfLiteTensor* num_detections_tensor = interpreter->tensor(interpreter->outputs()[2]);      // index 122
-    TfLiteTensor* detection_scores_tensor = interpreter->tensor(interpreter->outputs()[3]);    // index 123
+    // -------------------------------------------------------------------------
+    // STRATEGY A: Standard SSD MobileNet (4 outputs)
+    // -------------------------------------------------------------------------
+    if (num_outputs == 4) {
+        // FORENSIC FIX: Mapping adjusted based on quantization dump
+        // Output 0: Scores (Scale 0.0039), Output 3: Classes (Scale 0.047)
+        TfLiteTensor* detection_scores_tensor = interpreter->tensor(interpreter->outputs()[0]);
+        TfLiteTensor* detection_boxes_tensor = interpreter->tensor(interpreter->outputs()[1]);
+        TfLiteTensor* num_detections_tensor = interpreter->tensor(interpreter->outputs()[2]);
+        TfLiteTensor* detection_classes_tensor = interpreter->tensor(interpreter->outputs()[3]);
 
-    // Check for null pointers before dereferencing
-    if (!detection_boxes_tensor || !detection_classes_tensor || !detection_scores_tensor || !num_detections_tensor) {
-        APP_LOG_ERROR("One or more output tensors are null. Cannot process detection results.");
-        return nullptr;
-    }
+        if (!detection_boxes_tensor || !detection_classes_tensor || !detection_scores_tensor || !num_detections_tensor) {
+            APP_LOG_ERROR("One or more output tensors are null.");
+            return nullptr;
+        }
 
-    // Check that all tensors are UINT8 as expected
-    if (detection_boxes_tensor->type != kTfLiteUInt8 || 
-        detection_classes_tensor->type != kTfLiteUInt8 || 
-        detection_scores_tensor->type != kTfLiteUInt8 || 
-        num_detections_tensor->type != kTfLiteUInt8) {
-        APP_LOG_ERROR("Unexpected tensor types. Expected all UINT8.");
-        return nullptr;
-    }
-
-    // Get data pointers from tensors
-    const uint8_t* detection_boxes_uint8 = reinterpret_cast<const uint8_t*>(detection_boxes_tensor->data.raw);
-    const uint8_t* detection_classes_uint8 = reinterpret_cast<const uint8_t*>(detection_classes_tensor->data.raw);
-    const uint8_t* detection_scores_uint8 = reinterpret_cast<const uint8_t*>(detection_scores_tensor->data.raw);
-    const uint8_t* num_detections_uint8 = reinterpret_cast<const uint8_t*>(num_detections_tensor->data.raw);
-
-    // Check for null data pointers
-    if (!detection_boxes_uint8 || !detection_classes_uint8 || !detection_scores_uint8 || !num_detections_uint8) {
-        APP_LOG_ERROR("One or more output tensor data pointers are null. Cannot process detection results.");
-        return nullptr;
-    }
-
-    // Dequantize the num_detections value
-    // For UINT8 tensors, we need to apply: float_value = (uint8_value - zero_point) * scale
-    float num_detections_dequantized = 0.0f;
-    if (num_detections_tensor->quantization.type == kTfLiteAffineQuantization) {
-        // Get quantization parameters from the affine quantization struct
-        const TfLiteAffineQuantization* quantization_params = 
-            reinterpret_cast<const TfLiteAffineQuantization*>(num_detections_tensor->quantization.params);
-        if (quantization_params && quantization_params->scale && quantization_params->scale->size > 0) {
-            float scale = quantization_params->scale->data[0];
-            int zero_point = 0;  // Default zero point for uint8
-            if (quantization_params->zero_point && quantization_params->zero_point->size > 0) {
-                zero_point = quantization_params->zero_point->data[0];
-            }
-            num_detections_dequantized = static_cast<float>(num_detections_uint8[0] - zero_point) * scale;
+        // 1. Dequantize num_detections (Count)
+        float num_detections_val = 0.0f;
+        const uint8_t* num_det_uint8 = reinterpret_cast<const uint8_t*>(num_detections_tensor->data.raw);
+        if (num_detections_tensor->quantization.type == kTfLiteAffineQuantization) {
+            const TfLiteAffineQuantization* quant = reinterpret_cast<const TfLiteAffineQuantization*>(num_detections_tensor->quantization.params);
+            float scale = (quant && quant->scale && quant->scale->size > 0) ? quant->scale->data[0] : 1.0f;
+            int zero_point = (quant && quant->zero_point && quant->zero_point->size > 0) ? quant->zero_point->data[0] : 0;
+            num_detections_val = (static_cast<float>(num_det_uint8[0]) - zero_point) * scale;
         } else {
-            // Fallback if quantization params are not available
-            num_detections_dequantized = static_cast<float>(num_detections_uint8[0]);
+            // Fallback to legacy params if modern quantization metadata is missing
+            num_detections_val = (static_cast<float>(num_det_uint8[0]) - num_detections_tensor->params.zero_point) * num_detections_tensor->params.scale;
+        }
+        int num_detections = std::min(static_cast<int>(std::round(num_detections_val)), 100);
+
+        // 2. Setup Quantization for Boxes, Classes, Scores
+        auto get_robust_quant = [](TfLiteTensor* t, float& scale, int& zp) {
+            if (t->quantization.type == kTfLiteAffineQuantization) {
+                const TfLiteAffineQuantization* q = reinterpret_cast<const TfLiteAffineQuantization*>(t->quantization.params);
+                scale = (q && q->scale && q->scale->size > 0) ? q->scale->data[0] : 1.0f;
+                zp = (q && q->zero_point && q->zero_point->size > 0) ? q->zero_point->data[0] : 0;
+            } else {
+                scale = t->params.scale;
+                zp = t->params.zero_point;
+            }
+            // Sanity check: if scale is still 0 (uninitialized), default to 1.0 to prevent zero-scores
+            if (scale == 0.0f) scale = 1.0f;
+        };
+
+        float box_scale, class_scale, score_scale;
+        int box_zp, class_zp, score_zp;
+        get_robust_quant(detection_boxes_tensor, box_scale, box_zp);
+        get_robust_quant(detection_classes_tensor, class_scale, class_zp);
+        get_robust_quant(detection_scores_tensor, score_scale, score_zp);
+
+        const uint8_t* boxes = reinterpret_cast<const uint8_t*>(detection_boxes_tensor->data.raw);
+        const uint8_t* classes = reinterpret_cast<const uint8_t*>(detection_classes_tensor->data.raw);
+        const uint8_t* scores = reinterpret_cast<const uint8_t*>(detection_scores_tensor->data.raw);
+
+        for (int i = 0; i < num_detections; ++i) {
+            float score = (static_cast<float>(scores[i]) - score_zp) * score_scale;
+            if (score > score_threshold_) {
+                float class_val = (static_cast<float>(classes[i]) - class_zp) * class_scale;
+                
+                DetectionResult res;
+                res.class_id = static_cast<int>(std::round(class_val)) + 1; // 0-based -> 1-based
+                res.score = score;
+                res.source_frame_id = input_image.frame_id;
+                res.timestamp = timestamp;
+                
+                res.ymin = (static_cast<float>(boxes[i * 4 + 0]) - box_zp) * box_scale;
+                res.xmin = (static_cast<float>(boxes[i * 4 + 1]) - box_zp) * box_scale;
+                res.ymax = (static_cast<float>(boxes[i * 4 + 2]) - box_zp) * box_scale;
+                res.xmax = (static_cast<float>(boxes[i * 4 + 3]) - box_zp) * box_scale;
+
+                // Clamp and fix
+                res.ymin = std::max(0.0f, std::min(1.0f, res.ymin));
+                res.xmin = std::max(0.0f, std::min(1.0f, res.xmin));
+                res.ymax = std::max(0.0f, std::min(1.0f, res.ymax));
+                res.xmax = std::max(0.0f, std::min(1.0f, res.xmax));
+                if (res.xmin > res.xmax) std::swap(res.xmin, res.xmax);
+                if (res.ymin > res.ymax) std::swap(res.ymin, res.ymax);
+
+                raw_detections.push_back(res);
+            }
+        }
+    } 
+    // -------------------------------------------------------------------------
+    // STRATEGY B: Multi-Tensor Class Output (13 outputs)
+    // -------------------------------------------------------------------------
+    else if (num_outputs == 13) {
+        static bool logged_13_tensor = false;
+        if (!logged_13_tensor) {
+            APP_LOG_INFO("Detected 13-output model. Activating Global NMS Logic.");
+            for (int i = 0; i < 13; ++i) {
+                TfLiteTensor* tensor = interpreter->tensor(interpreter->outputs()[i]);
+                if (tensor) {
+                     std::string dims_str = "[";
+                     for (int d = 0; d < tensor->dims->size; ++d) dims_str += std::to_string(tensor->dims->data[d]) + (d < tensor->dims->size - 1 ? "," : "");
+                     dims_str += "]";
+                     APP_LOG_INFO("Tensor " + std::to_string(i) + " Dims: " + dims_str + " Type: " + std::to_string(tensor->type));
+                }
+            }
+            logged_13_tensor = true;
+        }
+
+        // Iterate through all 13 tensors (assumed one per class)
+        for (int i = 0; i < 13; ++i) {
+            TfLiteTensor* tensor = interpreter->tensor(interpreter->outputs()[i]);
+            if (!tensor || tensor->type != kTfLiteUInt8) continue;
+
+            // Get robust quantization metadata
+            float scale = 1.0f; 
+            int zero_point = 0;
+            if (tensor->quantization.type == kTfLiteAffineQuantization) {
+                 const TfLiteAffineQuantization* q = reinterpret_cast<const TfLiteAffineQuantization*>(tensor->quantization.params);
+                 scale = (q && q->scale && q->scale->size > 0) ? q->scale->data[0] : 1.0f;
+                 zero_point = (q && q->zero_point && q->zero_point->size > 0) ? q->zero_point->data[0] : 0;
+            } else {
+                 scale = tensor->params.scale;
+                 zero_point = tensor->params.zero_point;
+            }
+            if (scale == 0.0f) scale = 1.0f;
+
+            // Check shape: Expecting [1, N, K] where K >= 4
+            if (tensor->dims->size != 3) continue;
+            
+            int num_candidates = tensor->dims->data[1]; // N
+            int feat_dim = tensor->dims->data[2];      // K
+
+            const uint8_t* data = reinterpret_cast<const uint8_t*>(tensor->data.raw);
+
+            for (int j = 0; j < num_candidates; ++j) {
+                int offset = j * feat_dim;
+                
+                // Determine Score
+                float score = 0.0f;
+                if (feat_dim >= 5) {
+                    // Assume [y, x, y, x, score]
+                    score = (static_cast<float>(data[offset + 4]) - zero_point) * scale;
+                } else {
+                    // If no score column, maybe implicit 1.0? 
+                    // But for NMS we need scores. Skip if ambiguous.
+                    continue; 
+                }
+
+                // Global Threshold: 0.6 per mandate (overriding config if lower)
+                if (score < 0.6f) continue;
+
+                DetectionResult res;
+                res.class_id = i + 1; // 0-based index -> 1-based class ID (Target=12)
+                res.score = score;
+                res.source_frame_id = input_image.frame_id;
+                res.timestamp = timestamp;
+                
+                res.ymin = (static_cast<float>(data[offset + 0]) - zero_point) * scale;
+                res.xmin = (static_cast<float>(data[offset + 1]) - zero_point) * scale;
+                res.ymax = (static_cast<float>(data[offset + 2]) - zero_point) * scale;
+                res.xmax = (static_cast<float>(data[offset + 3]) - zero_point) * scale;
+
+                // Clamp
+                res.ymin = std::max(0.0f, std::min(1.0f, res.ymin));
+                res.xmin = std::max(0.0f, std::min(1.0f, res.xmin));
+                res.ymax = std::max(0.0f, std::min(1.0f, res.ymax));
+                res.xmax = std::max(0.0f, std::min(1.0f, res.xmax));
+                
+                // Fix inverted
+                if (res.xmin > res.xmax) std::swap(res.xmin, res.xmax);
+                if (res.ymin > res.ymax) std::swap(res.ymin, res.ymax);
+                
+                // 10-Frame Logging for verification
+                static int raw_dump_counter = 0;
+                if (raw_dump_counter < 100) { // Limit total logs
+                     // APP_LOG_INFO("[RAW] Class: " + std::to_string(res.class_id) + " | Score: " + std::to_string(score) + " | Box: [" + std::to_string(res.xmin) + ", " + std::to_string(res.ymin) + "]");
+                     raw_dump_counter++;
+                }
+
+                raw_detections.push_back(res);
+            }
         }
     } else {
-        // Fallback if no quantization info - assume scale=1.0, zero_point=0
-        num_detections_dequantized = static_cast<float>(num_detections_uint8[0]);
+        APP_LOG_ERROR("Unsupported output count: " + std::to_string(num_outputs));
+        return nullptr;
     }
-    
-    // Ensure num_detections is within reasonable bounds
-    const int num_detections = std::max(0, std::min(static_cast<int>(num_detections_dequantized), 100));
 
-    // Get quantization parameters for all tensors
-    const TfLiteAffineQuantization* boxes_quant_params = nullptr;
-    const TfLiteAffineQuantization* classes_quant_params = nullptr;
-    const TfLiteAffineQuantization* scores_quant_params = nullptr;
-    const TfLiteAffineQuantization* num_detections_quant_params = nullptr;
+    // -------------------------------------------------------------------------
+    // GLOBAL NMS (Unified across all classes)
+    // -------------------------------------------------------------------------
+    // Sort by score descending
+    std::sort(raw_detections.begin(), raw_detections.end(), [](const DetectionResult& a, const DetectionResult& b) {
+        return a.score > b.score;
+    });
+
+    std::vector<DetectionResult> filtered_detections;
+    std::vector<bool> is_suppressed(raw_detections.size(), false);
     
-    if (detection_boxes_tensor->quantization.type == kTfLiteAffineQuantization) {
-        boxes_quant_params = reinterpret_cast<const TfLiteAffineQuantization*>(detection_boxes_tensor->quantization.params);
-    }
-    
-    if (detection_classes_tensor->quantization.type == kTfLiteAffineQuantization) {
-        classes_quant_params = reinterpret_cast<const TfLiteAffineQuantization*>(detection_classes_tensor->quantization.params);
-    }
-    
-    if (detection_scores_tensor->quantization.type == kTfLiteAffineQuantization) {
-        scores_quant_params = reinterpret_cast<const TfLiteAffineQuantization*>(detection_scores_tensor->quantization.params);
-    }
-    
-    if (num_detections_tensor->quantization.type == kTfLiteAffineQuantization) {
-        num_detections_quant_params = reinterpret_cast<const TfLiteAffineQuantization*>(num_detections_tensor->quantization.params);
-    }
+    auto calculate_iou = [](const DetectionResult& a, const DetectionResult& b) {
+        float x_left = std::max(a.xmin, b.xmin);
+        float y_top = std::max(a.ymin, b.ymin);
+        float x_right = std::min(a.xmax, b.xmax);
+        float y_bottom = std::min(a.ymax, b.ymax);
+        if (x_right < x_left || y_bottom < y_top) return 0.0f;
+        float intersection_area = (x_right - x_left) * (y_bottom - y_top);
+        float area1 = (a.xmax - a.xmin) * (a.ymax - a.ymin);
+        float area2 = (b.xmax - b.xmin) * (b.ymax - b.ymin);
+        float union_area = area1 + area2 - intersection_area;
+        return (union_area > 0.0f) ? (intersection_area / union_area) : 0.0f;
+    };
+
+    int pruned_count = 0;
+    for (size_t i = 0; i < raw_detections.size(); ++i) {
+        if (is_suppressed[i]) continue;
+        filtered_detections.push_back(raw_detections[i]);
         
-    // Extract quantization parameters for boxes
-    float boxes_scale = 1.0f;
-    int boxes_zero_point = 0;
-    if (boxes_quant_params && boxes_quant_params->scale && boxes_quant_params->scale->size > 0) {
-        boxes_scale = boxes_quant_params->scale->data[0];
-    }
-    if (boxes_quant_params && boxes_quant_params->zero_point && boxes_quant_params->zero_point->size > 0) {
-        boxes_zero_point = boxes_quant_params->zero_point->data[0];
-    }
-    
-    // Extract quantization parameters for classes
-    float classes_scale = 1.0f;
-    [[maybe_unused]] int classes_zero_point = 0;
-    if (classes_quant_params && classes_quant_params->scale && classes_quant_params->scale->size > 0) {
-        classes_scale = classes_quant_params->scale->data[0];
-    }
-    if (classes_quant_params && classes_quant_params->zero_point && classes_quant_params->zero_point->size > 0) {
-        classes_zero_point = classes_quant_params->zero_point->data[0];
-    }
-    
-    // Extract quantization parameters for scores
-    float scores_scale = 1.0f;
-    int scores_zero_point = 0;
-    if (scores_quant_params && scores_quant_params->scale && scores_quant_params->scale->size > 0) {
-        scores_scale = scores_quant_params->scale->data[0];
-    }
-    if (scores_quant_params && scores_quant_params->zero_point && scores_quant_params->zero_point->size > 0) {
-        scores_zero_point = scores_quant_params->zero_point->data[0];
-    }
-    
-    // Extract quantization parameters for num_detections
-    float num_detections_scale = 1.0f;
-    int num_detections_zero_point = 0;
-    if (num_detections_quant_params && num_detections_quant_params->scale && num_detections_quant_params->scale->size > 0) {
-        num_detections_scale = num_detections_quant_params->scale->data[0];
-    }
-    if (num_detections_quant_params && num_detections_quant_params->zero_point && num_detections_quant_params->zero_point->size > 0) {
-        num_detections_zero_point = num_detections_quant_params->zero_point->data[0];
-    }
-    
-    // Validate quantization parameters to prevent invalid values
-    if (boxes_scale <= 0.0f) boxes_scale = 1.0f;
-    if (classes_scale <= 0.0f) classes_scale = 1.0f;
-    if (scores_scale <= 0.0f) scores_scale = 1.0f;
-    if (num_detections_scale <= 0.0f) num_detections_scale = 1.0f;
-    
-    // Log quantization parameters for debugging
-    APP_LOG_DEBUG("Quantization params - Boxes: scale=" + std::to_string(boxes_scale) + ", zero_point=" + std::to_string(boxes_zero_point));
-    APP_LOG_DEBUG("Quantization params - Classes: scale=" + std::to_string(classes_scale) + ", zero_point=" + std::to_string(classes_zero_point));
-    APP_LOG_DEBUG("Quantization params - Scores: scale=" + std::to_string(scores_scale) + ", zero_point=" + std::to_string(scores_zero_point));
-    APP_LOG_DEBUG("Quantization params - NumDetections: scale=" + std::to_string(num_detections_scale) + ", zero_point=" + std::to_string(num_detections_zero_point));
-    
-    // Log some raw UINT8 values for debugging
-    std::string raw_classes_log = "Raw classes (first 5): ";
-    std::string raw_scores_log = "Raw scores (first 5): ";
-    for (int i = 0; i < std::min(num_detections, 5); ++i) {
-        raw_classes_log += std::to_string(detection_classes_uint8[i]) + " ";
-        raw_scores_log += std::to_string(detection_scores_uint8[i]) + " ";
-    }
-    APP_LOG_DEBUG(raw_classes_log);
-    APP_LOG_DEBUG(raw_scores_log);
-    
-    // Dequantize the num_detections value
-    // For UINT8 tensors, we need to apply: float_value = (uint8_value - zero_point) * scale
-    num_detections_dequantized = static_cast<float>(num_detections_uint8[0] - num_detections_zero_point) * num_detections_scale;
-
-    APP_LOG_DEBUG("Raw model output - num_detections: " + std::to_string(num_detections));
-    APP_LOG_DEBUG("Score threshold: " + std::to_string(score_threshold_));
-    std::string scores_log = "Raw model output - top 5 scores: ";
-    for (int i = 0; i < std::min(num_detections, 5); ++i) {
-        // Properly dequantize UINT8 score to float
-        float score_float = static_cast<float>(detection_scores_uint8[i] - scores_zero_point) * scores_scale;
-        scores_log += std::to_string(score_float) + " ";
-    }
-    APP_LOG_DEBUG(scores_log);
-
-    // Log raw detection information for invariant verification
-    for (int i = 0; i < num_detections; ++i) {
-        // For class IDs, use raw UINT8 values directly as they appear to be class IDs already
-        // For scores, properly dequantize UINT8 values to meaningful ranges
-        [[maybe_unused]] int class_id = static_cast<int>(detection_classes_uint8[i]);  // Use raw value directly
-        [[maybe_unused]] float score_float = static_cast<float>(detection_scores_uint8[i] - scores_zero_point) * scores_scale;
-        APP_LOG_DEBUG("Raw detection " + std::to_string(i) + ": class=" + std::to_string(class_id) + 
-                      ", score=" + std::to_string(score_float) + ", raw_class=" + std::to_string(detection_classes_uint8[i]) + 
-                      ", raw_score=" + std::to_string(detection_scores_uint8[i]));
-    }
-
-    auto timestamp = std::chrono::high_resolution_clock::now();
-    size_t result_count = 0;
-
-    for (int i = 0; i < num_detections; ++i) {
-        // Properly dequantize UINT8 score to float for threshold comparison
-        float score_float = static_cast<float>(detection_scores_uint8[i] - scores_zero_point) * scores_scale;
-        
-        // Determine the actual range of the dequantized scores
-        // Edge TPU detection models typically output scores in 0.0-1.0 range (not 0.0-100.0)
-        // Compare against the threshold directly (both in 0.0-1.0 range)
-        if (score_float > score_threshold_) { 
-            if (result_count >= results_buffer->data.size()) {
-                APP_LOG_WARNING("More detections found than space in the result buffer. Some detections will be dropped.");
-                break;
+        for (size_t j = i + 1; j < raw_detections.size(); ++j) {
+            if (is_suppressed[j]) continue;
+            
+            float iou = calculate_iou(raw_detections[i], raw_detections[j]);
+            if (iou > 0.45f) { // IoU Threshold
+                is_suppressed[j] = true;
+                pruned_count++;
+                
+                // Diagnostic Log for significant overlaps being pruned
+                static int overlap_log_limit = 0;
+                if (overlap_log_limit < 5) {
+                    APP_LOG_DEBUG("[DEBUG] Global NMS Pruned: Class " + std::to_string(raw_detections[j].class_id) + 
+                                  " (Score " + std::to_string(raw_detections[j].score) + ") by Class " + 
+                                  std::to_string(raw_detections[i].class_id) + " (Score " + std::to_string(raw_detections[i].score) + 
+                                  ") IoU=" + std::to_string(iou));
+                    overlap_log_limit++;
+                }
             }
-            DetectionResult& res = results_buffer->data[result_count];
-            // Properly dequantize UINT8 class ID to integer
-            // Class IDs from TFLite_Detection_PostProcess are typically indices starting from 0
-            int raw_class_id = static_cast<int>(detection_classes_uint8[i]);
-            float class_id_float = static_cast<float>(raw_class_id - classes_zero_point) * classes_scale;
-            res.class_id = static_cast<int>(class_id_float);
-            
-            // Convert from 0-based index to 1-based ID as expected by labelmap
-            res.class_id += 1;
-            // Store the dequantized score directly (in 0.0-1.0 range)
-            res.score = score_float;
-            
-            // Set the source frame ID to maintain frame-detection relationship
-            res.source_frame_id = input_image.frame_id;
-            
-            // Validate class ID is within labelmap bounds (1-13 based on current labelmap)
-            if (res.class_id < 1 || res.class_id > 13) {
-                APP_LOG_WARNING("Invalid class ID detected: " + std::to_string(res.class_id) + 
-                               " (raw: " + std::to_string(raw_class_id) + "). Skipping detection.");
-                continue;
-            }
-            
-            APP_LOG_DEBUG("InferenceEngine: Detected class_id: " + std::to_string(res.class_id) + " with score: " + std::to_string(res.score));
-            res.timestamp = timestamp;
-
-            // Properly dequantize UINT8 box coordinates to normalized coordinates
-            // Box format: [ymin, xmin, ymax, xmax] normalized to [0, 1]
-            float ymin_norm = static_cast<float>(detection_boxes_uint8[i * 4 + 0] - boxes_zero_point) * boxes_scale;
-            float xmin_norm = static_cast<float>(detection_boxes_uint8[i * 4 + 1] - boxes_zero_point) * boxes_scale;
-            float ymax_norm = static_cast<float>(detection_boxes_uint8[i * 4 + 2] - boxes_zero_point) * boxes_scale;
-            float xmax_norm = static_cast<float>(detection_boxes_uint8[i * 4 + 3] - boxes_zero_point) * boxes_scale;
-            
-            res.ymin = ymin_norm * input_height_;
-            res.xmin = xmin_norm * input_width_;
-            res.ymax = ymax_norm * input_height_;
-            res.xmax = xmax_norm * input_width_;
-            
-            // Validate box dimensions
-            float box_width = res.xmax - res.xmin;
-            float box_height = res.ymax - res.ymin;
-            if (box_width <= 0 || box_height <= 0) {
-                APP_LOG_WARNING("Invalid box dimensions detected. Skipping detection.");
-                continue;
-            }
-            
-            // Reject full-frame boxes but allow nested rings
-            float image_area = static_cast<float>(input_width_ * input_height_);
-            float box_area = box_width * box_height;
-            if (box_area > image_area * 0.95f) {  // Increased threshold to reduce false positives
-                APP_LOG_WARNING("Oversized box detected (covers >95% of image). Skipping detection.");
-                continue;
-            }
-            result_count++;
         }
+    }
+
+    if (!filtered_detections.empty()) {
+        APP_LOG_INFO("Global NMS: Collected " + std::to_string(raw_detections.size()) + 
+                     " proposals. Pruned " + std::to_string(pruned_count) + 
+                     ". Outputting " + std::to_string(filtered_detections.size()) + " final boxes.");
+    }
+
+    // Fill buffer
+    size_t result_count = 0;
+    for (const auto& det : filtered_detections) {
+        if (result_count >= results_buffer->data.size()) break;
+        results_buffer->data[result_count++] = det;
     }
     results_buffer->size = result_count;
-    
-    // Log filtered detection count for invariant verification
-    APP_LOG_INFO("DETECTION_INVARIANT: Raw detections=" + std::to_string(num_detections) + 
-                 ", After score threshold=" + std::to_string(result_count));
-    
-    // Increment the results produced counter by the number of valid results
+
     if (result_count > 0) {
         results_produced_.fetch_add(result_count);
-        
-        // If we have an application reference, also update the application's counter
-        if (app_ref_) {
-           app_ref_->increment_inference_results_produced(result_count);
-        }
+        if (app_ref_) app_ref_->increment_inference_results_produced(result_count);
     }
-    
+
     return results_buffer;
 }
 

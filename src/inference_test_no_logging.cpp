@@ -22,14 +22,14 @@ int main() {
     
     // Create queues
     ImageQueue tpu_inference_queue;
-    DetectionResultsQueue detection_results_for_overlay_queue;
+    TripleBuffer<DetectionResults> detection_results_for_overlay_buffer;
     DetectionResultsQueue detection_results_for_logic_queue;
     
     // Create inference engine
     InferenceEngine inference_engine(
         "/home/pi/CoralEdgeTpu/detect_int8_edgetpu.tflite",
         tpu_inference_queue,
-        detection_results_for_overlay_queue,
+        &detection_results_for_overlay_buffer,
         detection_results_for_logic_queue,
         detection_pool,
         config_loader.get_detection_score_threshold(),

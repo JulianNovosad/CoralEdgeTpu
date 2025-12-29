@@ -13,6 +13,7 @@
 #include <thread>   // For std::thread
 #include <atomic>   // For std::atomic
 #include <mutex>    // For std::mutex
+#include <shared_mutex> // For std::shared_mutex
 #include <queue>    // For std::queue (used in interpreter_pool_)
 
 #include "pipeline_structs.h" // Use the new central header for queue types and data structures
@@ -47,14 +48,15 @@ public:
      * @param model_path The filesystem path to the TensorFlow Lite model file.
      * @param input_queue Reference to the thread-safe ImageQueue from which
      *                    raw image data frames are consumed.
-     * @param detection_results_output_queue Reference to the thread-safe DetectionResultsQueue to which
-     *                                       detection results are pushed.
+     * @param detection_results_for_overlay_buffer Pointer to the TripleBuffer for detection results to overlay.
+     * @param detection_results_for_logic_queue Reference to the thread-safe DetectionResultsQueue to which
+     *                                       detection results are pushed for logic.
      * @param detection_result_pool Reference to the buffer pool for detection results.
      * @param num_threads The number of worker threads to spawn for parallel inference.
      */
     InferenceEngine(const std::string& model_path, 
                     ImageQueue& input_queue, 
-                    DetectionResultsQueue& detection_results_for_overlay_queue, 
+                    TripleBuffer<DetectionResults>* detection_results_for_overlay_buffer, 
                     DetectionResultsQueue& detection_results_for_logic_queue, 
                     std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool,
                     float score_threshold,
@@ -112,13 +114,14 @@ public:
 private:
     void worker_thread_func();
     std::unique_ptr<tflite::Interpreter> create_interpreter();
+    void recreate_delegate(); // Helper to safely recreate the Edge TPU delegate
     void set_input_tensor(tflite::Interpreter* interpreter, const ImageData& image);
     std::shared_ptr<DetectionResultBuffer> get_output_tensor(tflite::Interpreter* interpreter, const ImageData& input_image);
     float get_tpu_temperature();
 
     std::string model_path_; ///< Path to the TensorFlow Lite model file.
     ImageQueue& input_queue_; ///< Reference to the input queue for image data.
-    DetectionResultsQueue& detection_results_for_overlay_queue_; ///< Reference to the output queue for detection results to overlay.
+    TripleBuffer<DetectionResults>* detection_results_for_overlay_buffer_; ///< Pointer to the triple buffer for detection results to overlay.
     DetectionResultsQueue& detection_results_for_logic_queue_; ///< Reference to the output queue for detection results to the logic module.
     std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool_; ///< Pool for detection result buffers.
     int num_threads_; ///< Number of inference worker threads.
@@ -132,11 +135,13 @@ private:
     tflite::ops::builtin::BuiltinOpResolver resolver_; ///< Op resolver for built-in TFLite operations.
     std::vector<std::thread> worker_threads_; ///< Vector of active inference worker threads.
     std::atomic<bool> running_ = false; ///< Atomic flag to control the running state of the inference engine.
+    mutable std::shared_mutex delegate_mutex_; ///< Mutex for safe delegate recreation.
     
 public:
     // Freshness indicators
     std::atomic<long long> last_inference_timestamp_{0}; ///< Timestamp of the last inference
     std::atomic<int> inference_rate_{0}; ///< Current inference rate
+    std::atomic<float> tpu_temperature_{0.0f}; ///< Current TPU temperature
     
     // Timing statistics
     mutable std::atomic<long long> avg_inference_time_us_{0}; ///< Average inference time in microseconds
@@ -173,6 +178,10 @@ private:
     class Application* app_ref_ = nullptr;
     
     TfLiteDelegate* edgetpu_delegate_ = nullptr; ///< The single Edge TPU delegate.
+
+    // Telemetry state
+    std::atomic<int> last_inference_count_{0};
+    std::chrono::steady_clock::time_point last_rate_check_ = std::chrono::steady_clock::now();
 };
 
 #endif // INFERENCE_H

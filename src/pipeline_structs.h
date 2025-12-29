@@ -14,37 +14,6 @@
 #include <boost/lockfree/spsc_queue.hpp> // For lock-free SPSC queues
 #include <libcamera/pixel_format.h> // Include for libcamera::PixelFormat
 
-// Utility function for latest-only queue semantics
-template<typename QueueType, typename DataType>
-bool push_latest_only(QueueType& queue, DataType&& data) {
-    // If queue is full, pop and discard the oldest item to make space
-    while (queue.write_available() == 0) {
-        DataType discarded;
-        if (!queue.pop(discarded)) {
-            // Queue is full but pop failed - this is an unexpected state
-            APP_LOG_WARNING("Queue is full but pop failed - unexpected state");
-            return false;
-        }
-        // Continue discarding until there's space
-    }
-    
-    // Now push the new data
-    return queue.push(std::forward<DataType>(data));
-}
-
-// Utility function for blocking push - waits until queue has space then pushes
-template<typename QueueType, typename DataType>
-bool push_blocking(QueueType& queue, DataType&& data) {
-    // Wait until there is space in the queue
-    while (queue.write_available() == 0) {
-        // Small delay to prevent busy waiting
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
-    }
-    
-    // Now push the data
-    return queue.push(std::forward<DataType>(data));
-}
-
 // --- Generic Data Structures ---
 
 /**
@@ -136,19 +105,142 @@ struct InferenceFrame {
     std::vector<DetectionResult> detections; ///< Vector of detection results for this image.
 };
 
+/// @brief Type alias for a collection of detection results.
+typedef std::vector<DetectionResult> DetectionResults;
+
+/**
+ * @brief A high-performance triple buffer for asynchronous "latest-wins" data transfer.
+ * 
+ * Uses three distinct slots (Producer, Consumer, Latest) and atomic index swaps
+ * to ensure non-blocking operation for both producer and consumer.
+ */
+template<typename T>
+class TripleBuffer {
+public:
+    TripleBuffer() {
+        dirty_.store(false, std::memory_order_relaxed);
+        latest_index_.store(0, std::memory_order_relaxed);
+        producer_index_ = 1;
+        consumer_index_ = 2;
+        
+        // Performance: Pre-allocate vector capacity to avoid runtime heap allocations
+        // only if T is DetectionResults.
+        if constexpr (std::is_same_v<T, DetectionResults>) {
+            buffers_[0].reserve(100);
+            buffers_[1].reserve(100);
+            buffers_[2].reserve(100);
+        }
+    }
+
+    /**
+     * @brief Gets a reference to the buffer for writing (Producer only).
+     */
+    T& get_write_buffer() {
+        return buffers_[producer_index_];
+    }
+
+    /**
+     * @brief Commits the current write buffer and swaps it with the 'Latest' slot (Producer only).
+     */
+    void commit_write() {
+        producer_index_ = latest_index_.exchange(producer_index_, std::memory_order_acq_rel);
+        dirty_.store(true, std::memory_order_release);
+    }
+
+    /**
+     * @brief Updates the consumer buffer to the latest available clean buffer (Consumer only).
+     * @return True if a new buffer was acquired.
+     */
+    bool update_consumer() {
+        if (!dirty_.exchange(false, std::memory_order_acquire)) {
+            return false;
+        }
+        consumer_index_ = latest_index_.exchange(consumer_index_, std::memory_order_acq_rel);
+        return true;
+    }
+
+    /**
+     * @brief Gets a reference to the current consumer buffer (Consumer only).
+     */
+    const T& get_read_buffer() const {
+        return buffers_[consumer_index_];
+    }
+
+private:
+    T buffers_[3];
+    std::atomic<int> latest_index_;
+    int producer_index_;
+    int consumer_index_;
+    std::atomic<bool> dirty_;
+};
+
 // --- Type aliases for all pipeline queues ---
 
-/// @brief Type alias for a lock-free SPSC queue holding ImageData objects.
-typedef boost::lockfree::spsc_queue<ImageData, boost::lockfree::capacity<50ul>> ImageQueue; // Reduced from 1600 to 50 to reduce latency
+/**
+ * @brief A thread-safe, Multi-Producer Multi-Consumer queue.
+ */
+template<typename T>
+class MPMCQueue {
+public:
+    MPMCQueue() = default;
+
+    void push(const T& data) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        queue_.push(data);
+        lock.unlock();
+        cond_.notify_all();
+    }
+
+    void push(T&& data) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        queue_.push(std::move(data));
+        lock.unlock();
+        cond_.notify_all();
+    }
+
+    bool pop(T& data) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (queue_.empty()) return false;
+        data = std::move(queue_.front());
+        queue_.pop();
+        return true;
+    }
+
+    bool wait_pop(T& data, std::chrono::milliseconds timeout) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!cond_.wait_for(lock, timeout, [this] { return !queue_.empty(); })) {
+            return false;
+        }
+        data = std::move(queue_.front());
+        queue_.pop();
+        return true;
+    }
+
+    size_t read_available() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.size();
+    }
+
+    // Dummy for compatibility with spsc_queue calls
+    size_t write_available() { return 100; }
+
+private:
+    std::queue<T> queue_;
+    std::mutex mutex_;
+    std::condition_variable cond_;
+};
+
+/// @brief Type alias for a thread-safe MPMC queue holding ImageData objects.
+typedef MPMCQueue<ImageData> ImageQueue;
 
 // Define a type for a pooled buffer of detection results
 using DetectionResultBuffer = PooledBuffer<DetectionResult>;
-/// @brief Type alias for a lock-free SPSC queue holding shared pointers to pooled detection result buffers.
-using DetectionResultsQueue = boost::lockfree::spsc_queue<std::shared_ptr<DetectionResultBuffer>, boost::lockfree::capacity<50>>; // Reduced from 1600 to 50 to reduce latency
+/// @brief Type alias for a thread-safe MPMC queue holding shared pointers to pooled detection result buffers.
+using DetectionResultsQueue = MPMCQueue<std::shared_ptr<DetectionResultBuffer>>;
 
 // Define a type for a pooled buffer of H.264 NAL units
 using H264Buffer = PooledBuffer<uint8_t>;
-/// @brief Type alias for a lock-free SPSC queue holding shared pointers to pooled H.264 buffers.
-using H264Queue = boost::lockfree::spsc_queue<std::shared_ptr<H264Buffer>, boost::lockfree::capacity<50>>; // Reduced from 1600 to 50 to reduce latency
+/// @brief Type alias for a thread-safe MPMC queue holding shared pointers to pooled H.264 buffers.
+using H264Queue = MPMCQueue<std::shared_ptr<H264Buffer>>;
 
 #endif // PIPELINE_STRUCTS_H

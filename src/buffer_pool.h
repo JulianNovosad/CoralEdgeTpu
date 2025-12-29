@@ -68,7 +68,6 @@ public:
     }
 
     std::shared_ptr<PooledBuffer<T>> acquire() {
-        auto acquire_start = std::chrono::high_resolution_clock::now();
         std::unique_lock<std::mutex> lock(mutex_);
         if (!cond_.wait_for(lock, std::chrono::milliseconds(100), // Reduced timeout to 100ms
                             [this]{ return !available_buffers_.empty(); })) {
@@ -88,27 +87,12 @@ public:
             peak_in_use_ = current_in_use_;
         }
         
-        // Log acquisition with buffer address and timing
-        auto acquire_end = std::chrono::high_resolution_clock::now();
-        auto wait_time_us = std::chrono::duration_cast<std::chrono::microseconds>(acquire_end - acquire_start).count();
-        APP_LOG_DEBUG(name_ + ": Acquired buffer " + std::to_string(reinterpret_cast<uintptr_t>(buffer_ptr)) + 
-                    ". Available: " + std::to_string(available_buffers_.size()) + 
-                    ", In use: " + std::to_string(current_in_use_) + 
-                    ", Wait time: " + std::to_string(wait_time_us) + " us");
-        
         lock.unlock();
 
         // Create a shared_ptr with a custom deleter that returns the raw pointer to the pool
         // Use an atomic flag to ensure the buffer is only returned once
         auto return_flag = std::make_shared<std::atomic<bool>>(false);
-        return std::shared_ptr<PooledBuffer<T>>(buffer_ptr, [this, return_flag, acquire_end](PooledBuffer<T>* b) {
-            auto release_start = std::chrono::high_resolution_clock::now();
-            auto hold_time_us = std::chrono::duration_cast<std::chrono::microseconds>(release_start - acquire_end).count();
-            
-            // Log release with buffer address and timing
-            APP_LOG_DEBUG(this->name_ + ": Releasing buffer " + std::to_string(reinterpret_cast<uintptr_t>(b)) + 
-                        ", Hold time: " + std::to_string(hold_time_us) + " us");
-            
+        return std::shared_ptr<PooledBuffer<T>>(buffer_ptr, [this, return_flag](PooledBuffer<T>* b) {
             // Use atomic compare-and-swap to ensure buffer is only returned once
             bool expected = false;
             if (return_flag->compare_exchange_strong(expected, true)) {
@@ -121,11 +105,6 @@ public:
                 
                 local_lock.unlock();
                 this->cond_.notify_one();
-            } else {
-                // Buffer was already returned by another shared_ptr instance
-                APP_LOG_ERROR(this->name_ + ": Attempted to return buffer " + 
-                            std::to_string(reinterpret_cast<uintptr_t>(b)) + 
-                            " that was already returned by another shared_ptr. Preventing double-free.");
             }
         });
     }

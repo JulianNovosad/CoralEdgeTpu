@@ -78,7 +78,7 @@ public:
     ImageQueue raw_image_for_processor_queue_; // New queue
     ImageQueue tpu_inference_queue_;
 
-    DetectionResultsQueue detection_results_for_overlay_queue_;
+    TripleBuffer<DetectionResults> detection_results_for_overlay_buffer_;
     DetectionResultsQueue detection_results_for_logic_queue_;
     ImageQueue overlaid_video_queue_;
     H264Queue h264_output_queue_;

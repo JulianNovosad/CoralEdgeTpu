@@ -138,14 +138,14 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             raw_image_for_processor_queue_, tpu_inference_queue_, image_pool_,
             config_loader_.get_tpu_stream_pixel_format(), // Pass configured format
             inf_w, inf_h); // Pass target width/height for TPU processing
-        image_processor_->set_skip_factor(3); // Keep TPU at 40 FPS (120/3)
+        image_processor_->set_skip_factor(1); // Process every frame (Mandate: Zero Skip)
         APP_LOG_INFO("ImageProcessor created.");
 
         APP_LOG_INFO("Creating ImageProcessor for visualization with overlays...");
         // Create a new ImageProcessor instance for the main video stream with detection overlays
         visualization_processor_ = std::make_unique<ImageProcessor>(
             main_video_queue_, overlaid_video_queue_, 
-            detection_results_for_overlay_queue_, // Connect to detection results queue for overlays
+            &detection_results_for_overlay_buffer_, // Connect to triple buffer for overlays
             image_pool_, 
             config_loader_.get_tpu_stream_pixel_format(), // Use same format as TPU stream for consistency
             cam_w, cam_h); // Use main camera dimensions
@@ -157,7 +157,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 
         APP_LOG_INFO("Creating InferenceEngine...");
         inference_engine_ = std::make_unique<InferenceEngine>(
-            model_path, tpu_inference_queue_, detection_results_for_overlay_queue_, 
+            model_path, tpu_inference_queue_, &detection_results_for_overlay_buffer_, 
             detection_results_for_logic_queue_, detection_pool_, 
             config_loader_.get_detection_score_threshold(), 
             config_loader_.get_inference_worker_threads());
@@ -581,7 +581,7 @@ bool Application::restart_inference_subsystem() {
         
         // Recreate the inference engine
         inference_engine_ = std::make_unique<InferenceEngine>(
-            model_path, tpu_inference_queue_, detection_results_for_overlay_queue_, 
+            model_path, tpu_inference_queue_, &detection_results_for_overlay_buffer_, 
             detection_results_for_logic_queue_, detection_pool_, 
             config_loader_.get_detection_score_threshold(), 
             config_loader_.get_inference_worker_threads());
@@ -687,7 +687,7 @@ bool Application::restart_visualization_subsystem() {
         // Recreate the visualization processor
         visualization_processor_ = std::make_unique<ImageProcessor>(
             main_video_queue_, overlaid_video_queue_, 
-            detection_results_for_overlay_queue_, // Connect to detection results queue for overlays
+            &detection_results_for_overlay_buffer_, // Connect to triple buffer for overlays
             image_pool_, 
             config_loader_.get_tpu_stream_pixel_format(), // Use same format as TPU stream for consistency
             cam_w, cam_h); // Use main camera dimensions
@@ -779,16 +779,10 @@ void Application::overlay_queue_consumer_thread_func() {
     APP_LOG_INFO("Overlay consumer thread started (disabled - visualization processor handles overlays).");
     // The overlay consumer thread is now disabled since the visualization_processor
     // handles the overlay application directly to the main video stream.
-    // We still need to consume from the queue to prevent it from filling up and blocking the inference engine.
-    std::shared_ptr<DetectionResultBuffer> detections_buffer;
-    while (overlay_consumer_running_) {
-        if (!detection_results_for_overlay_queue_.pop(detections_buffer)) {
-            // Reduced sleep to reduce latency and prevent queue buildup
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-        }
-        // Just consume the detections without processing them since the visualization_processor handles them
-    }
-    APP_LOG_INFO("Overlay consumer thread stopped.");
+    // We strictly DO NOT consume from the queue here to prevent stealing data from the visualization processor.
+    
+    // Simply exit the thread.
+    return; 
 }
 
 void Application::h264_queue_consumer_thread_func() {
@@ -1168,7 +1162,6 @@ void Application::monitor_queue_depths() {
     // Check queue depths using the read_available() method
     size_t raw_image_queue_depth = raw_image_for_processor_queue_.read_available();
     size_t tpu_inference_queue_depth = tpu_inference_queue_.read_available();
-    size_t detection_overlay_queue_depth = detection_results_for_overlay_queue_.read_available();
     size_t detection_logic_queue_depth = detection_results_for_logic_queue_.read_available();
     size_t overlaid_video_queue_depth = overlaid_video_queue_.read_available();
     size_t h264_output_queue_depth = h264_output_queue_.read_available();
@@ -1184,9 +1177,6 @@ void Application::monitor_queue_depths() {
     if (tpu_inference_queue_depth > 40) { // More than 80% of capacity (50)
         APP_LOG_WARNING("ANOMALY @" + std::to_string(current_time_ms) + "ms: QUEUE STALL DETECTED: TPU Inference Queue depth = " + std::to_string(tpu_inference_queue_depth) + "/50 - ImageProcessor pushing faster than Inference consuming");
     }
-    if (detection_overlay_queue_depth > 40) { // More than 80% of capacity (50)
-        APP_LOG_WARNING("ANOMALY @" + std::to_string(current_time_ms) + "ms: QUEUE STALL DETECTED: Detection Overlay Queue depth = " + std::to_string(detection_overlay_queue_depth) + "/50 - Potential stall between Inference and Overlay");
-    }
     if (detection_logic_queue_depth > 40) { // More than 80% of capacity (50)
         APP_LOG_WARNING("ANOMALY @" + std::to_string(current_time_ms) + "ms: QUEUE STALL DETECTED: Detection Logic Queue depth = " + std::to_string(detection_logic_queue_depth) + "/50 - Potential stall between Inference and Logic");
     }
@@ -1199,7 +1189,7 @@ void Application::monitor_queue_depths() {
     
     // Check if any queue is critically full and needs draining to prevent deadlock
     bool needs_draining = (raw_image_queue_depth > 45 || tpu_inference_queue_depth > 45 || 
-                          detection_overlay_queue_depth > 45 || detection_logic_queue_depth > 45 ||
+                          detection_logic_queue_depth > 45 ||
                           overlaid_video_queue_depth > 45 || h264_output_queue_depth > 45);
     
     if (needs_draining) {
@@ -1216,7 +1206,6 @@ void Application::monitor_queue_depths() {
         APP_LOG_INFO("QUEUE DEPTHS @" + std::to_string(current_time_ms) + "ms: " +
                   "Raw=" + std::to_string(raw_image_queue_depth) + 
                   ", TPU=" + std::to_string(tpu_inference_queue_depth) + 
-                  ", Overlay=" + std::to_string(detection_overlay_queue_depth) + 
                   ", Logic=" + std::to_string(detection_logic_queue_depth) + 
                   ", Overlaid=" + std::to_string(overlaid_video_queue_depth) + 
                   ", H264=" + std::to_string(h264_output_queue_depth));
@@ -1227,7 +1216,6 @@ void Application::monitor_queue_depths() {
     
     APP_LOG_DEBUG("Queue monitoring @" + std::to_string(current_time_ms) + "ms - Depths: Raw=" + std::to_string(raw_image_queue_depth) + 
                   ", TPU=" + std::to_string(tpu_inference_queue_depth) + 
-                  ", Overlay=" + std::to_string(detection_overlay_queue_depth) + 
                   ", Logic=" + std::to_string(detection_logic_queue_depth) + 
                   ", Overlaid=" + std::to_string(overlaid_video_queue_depth) + 
                   ", H264=" + std::to_string(h264_output_queue_depth));
@@ -1381,30 +1369,6 @@ void Application::drain_queues() {
                 increment_inference_results_dropped();
                 if (inference_engine_) {
                     inference_engine_->increment_logic_queue_drop_count();
-                }
-            }
-        }
-    }
-    
-    size_t detection_overlay_depth = detection_results_for_overlay_queue_.read_available();
-    if (detection_overlay_depth > 45) { // Almost full
-        APP_LOG_WARNING("DRAIN: Detection Overlay Queue has " + std::to_string(detection_overlay_depth) + " items, draining excess");
-        int items_drained = 0;
-        std::shared_ptr<DetectionResultBuffer> dummy_buffer;
-        while (detection_results_for_overlay_queue_.read_available() > 10 && items_drained < 20) {
-            if (detection_results_for_overlay_queue_.pop(dummy_buffer)) {
-                items_drained++;
-            } else {
-                break; // Queue is now empty
-            }
-        }
-        if (items_drained > 0) {
-            APP_LOG_INFO("DRAIN: Drained " + std::to_string(items_drained) + " items from Detection Overlay Queue");
-            // Update drop counter to maintain accounting invariant
-            for (int i = 0; i < items_drained; i++) {
-                increment_inference_results_dropped();
-                if (inference_engine_) {
-                    inference_engine_->increment_overlay_queue_drop_count();
                 }
             }
         }

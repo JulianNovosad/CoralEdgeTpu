@@ -221,22 +221,11 @@ void H264Encoder::worker_thread_func() {
     x264_picture_init(&picture_out_); // Initialize picture_out_
 
     while (running_.load()) {
-        [[maybe_unused]] auto total_loop_start = std::chrono::high_resolution_clock::now();
         ImageData image_data;
-        // 1. Pop from input queue
-        [[maybe_unused]] auto pop_start = std::chrono::high_resolution_clock::now();
-        if (!input_queue_.pop(image_data)) {
-            if (!running_.load()) break;
-            // Reduced sleep to 25 microseconds to improve responsiveness
-            std::this_thread::sleep_for(std::chrono::microseconds(25));
+        // 1. Pop from input queue with blocking wait_pop to eliminate micro-stutter
+        if (!input_queue_.wait_pop(image_data, std::chrono::milliseconds(10))) {
             continue; 
         }
-        
-        // Log when a frame is received for encoding
-        APP_LOG_DEBUG("H264Encoder: Received frame for encoding. Frame ID: " + std::to_string(image_data.frame_id) + 
-                    ", Timestamp: " + std::to_string(image_data.timestamp_epoch_ms));
-        [[maybe_unused]] auto pop_end = std::chrono::high_resolution_clock::now();
-        APP_LOG_DEBUG("H264Encoder: Time to pop from queue: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(pop_end - pop_start).count()) + " us");
         
         // Record queue pop time
         image_data.encode_start_time = std::chrono::high_resolution_clock::now();
@@ -284,11 +273,6 @@ void H264Encoder::worker_thread_func() {
         // Let's be explicit about the expected format and handle it properly
         size_t expected_bgr_size = image_data.width * image_data.height * 3;  // BGR: 3 bytes per pixel
         size_t actual_size = image_data.buffer->data.size();
-        
-        APP_LOG_DEBUG("H264Encoder: Processing frame - width: " + std::to_string(image_data.width) + 
-                     ", height: " + std::to_string(image_data.height) + 
-                     ", buffer size: " + std::to_string(actual_size) +
-                     ", expected BGR size: " + std::to_string(expected_bgr_size));
         
         if (actual_size >= expected_bgr_size) {
             // Create OpenCV matrix with the expected BGR format
@@ -367,12 +351,9 @@ void H264Encoder::worker_thread_func() {
                  h264_buffer->frame_id = image_data.frame_id;
                  h264_buffer->encoder_frame_count = frame_count_;
 
-                 if (push_latest_only(output_queue_, std::move(h264_buffer))) {
-                     if (app_) app_->increment_h264_output_queue_in();
-                     APP_LOG_DEBUG("H264Encoder: Pushed raw frame to output. Size: " + std::to_string(frame_size));
-                 } else {
-                     APP_LOG_WARNING("H264Encoder: Failed to push buffer to output queue.");
-                 }
+                 output_queue_.push(std::move(h264_buffer));
+                 if (app_) app_->increment_h264_output_queue_in();
+             }
              }
         } else {
              APP_LOG_WARNING("H264Encoder: Failed to acquire buffer. Dropping frame.");
@@ -386,13 +367,6 @@ void H264Encoder::worker_thread_func() {
         image_data.encode_end_time = std::chrono::high_resolution_clock::now();
         last_frame_processed_time_ = std::chrono::high_resolution_clock::now();
         last_frame_id_ = image_data.frame_id;
-        
-        /* 
-         * Original x264 encoding logic removed to support GStreamer x264enc pipeline.
-         * The raw I420 frames are now passed directly to UDPStreamer which feeds appsrc -> x264enc.
-         */
-        [[maybe_unused]] auto total_loop_end = std::chrono::high_resolution_clock::now();
-        APP_LOG_DEBUG("H264Encoder: Total worker thread loop iteration time: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_loop_end - total_loop_start).count()) + " us");
     }
     APP_LOG_INFO("H264Encoder worker thread stopped.");
 }

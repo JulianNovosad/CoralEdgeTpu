@@ -71,7 +71,6 @@ void Monitor::monitor_thread_func() {
         // Get current values for throughput calculations
         size_t current_raw_image_queue_depth = app_.raw_image_for_processor_queue_.read_available();
         size_t current_tpu_inference_queue_depth = app_.tpu_inference_queue_.read_available();
-        size_t current_detection_overlay_queue_depth = app_.detection_results_for_overlay_queue_.read_available();
         size_t current_detection_logic_queue_depth = app_.detection_results_for_logic_queue_.read_available();
         size_t current_overlaid_video_queue_depth = app_.overlaid_video_queue_.read_available();
         size_t current_h264_output_queue_depth = app_.h264_output_queue_.read_available();
@@ -81,8 +80,6 @@ void Monitor::monitor_thread_func() {
         int raw_image_queue_out = 0;
         int tpu_inference_queue_in = 0;
         int tpu_inference_queue_out = 0;
-        int detection_overlay_queue_in = 0;
-        int detection_overlay_queue_out = 0;
         int detection_logic_queue_in = 0;
         int detection_logic_queue_out = 0;
         int overlaid_video_queue_in = 0;
@@ -150,18 +147,6 @@ void Monitor::monitor_thread_func() {
                 tpu_inference_queue_out = inference_ips;
             }
             
-            long long detection_overlay_change = static_cast<long long>(current_detection_overlay_queue_depth) - static_cast<long long>(prev_detection_overlay_queue_depth_);
-            if (detection_overlay_change > 0) {
-                detection_overlay_queue_in = inference_ips; // From inference output
-                detection_overlay_queue_out = std::max(0, detection_overlay_queue_in - static_cast<int>(detection_overlay_change));
-            } else if (detection_overlay_change < 0) {
-                detection_overlay_queue_out = inference_ips; // Estimate when queue is decreasing
-                detection_overlay_queue_in = std::max(0, detection_overlay_queue_out + static_cast<int>(-detection_overlay_change));
-            } else {
-                detection_overlay_queue_in = inference_ips;
-                detection_overlay_queue_out = inference_ips;
-            }
-            
             long long detection_logic_change = static_cast<long long>(current_detection_logic_queue_depth) - static_cast<long long>(prev_detection_logic_queue_depth_);
             if (detection_logic_change > 0) {
                 detection_logic_queue_in = inference_ips; // From inference output
@@ -212,13 +197,12 @@ void Monitor::monitor_thread_func() {
         int inference_module_out = tpu_inference_queue_in; // What inference pushes to TPU queue
         
         // Logic Module: Input is detection results, Output is logic results
-        int logic_module_in = detection_overlay_queue_out; // What logic pulls from detection queue
+        int logic_module_in = inference_ips; // Pulls from inference output conceptually
         int logic_module_out = detection_logic_queue_in; // What logic pushes to next queue
         
         // Store current values for next iteration
         prev_raw_image_queue_depth_ = current_raw_image_queue_depth;
         prev_tpu_inference_queue_depth_ = current_tpu_inference_queue_depth;
-        prev_detection_overlay_queue_depth_ = current_detection_overlay_queue_depth;
         prev_detection_logic_queue_depth_ = current_detection_logic_queue_depth;
         prev_overlaid_video_queue_depth_ = current_overlaid_video_queue_depth;
         prev_h264_output_queue_depth_ = current_h264_output_queue_depth;
@@ -340,7 +324,6 @@ void Monitor::monitor_thread_func() {
         std::cout << "[Queue Throughput]" << std::endl;
         std::cout << "  Raw Image Queue: In: " << raw_image_queue_in << " | Out: " << raw_image_queue_out << std::endl;
         std::cout << "  TPU Inference Queue: In: " << tpu_inference_queue_in << " | Out: " << tpu_inference_queue_out << std::endl;
-        std::cout << "  Detection Overlay Queue: In: " << detection_overlay_queue_in << " | Out: " << detection_overlay_queue_out << std::endl;
         std::cout << "  Detection Logic Queue: In: " << detection_logic_queue_in << " | Out: " << detection_logic_queue_out << std::endl;
         std::cout << "  Overlaid Video Queue: In: " << overlaid_video_queue_in << " | Out: " << overlaid_video_queue_out << std::endl;
         std::cout << "  H264 Output Queue: In: " << h264_output_queue_in << " | Out: " << h264_output_queue_out << std::endl;

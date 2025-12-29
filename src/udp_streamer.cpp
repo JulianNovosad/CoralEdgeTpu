@@ -8,7 +8,7 @@ extern std::atomic<bool> shutdown_requested;
 
 UDPStreamer::UDPStreamer(int width, int height, double fps)
     : pipeline_(nullptr), appsrc_(nullptr), loop_(nullptr),
-      width_(width), height_(height), fps_(fps), running_(false), base_time_(0), last_pts_(0) {
+      running_(false), width_(width), height_(height), fps_(fps), base_time_(0), last_pts_(0) {
 }
 
 UDPStreamer::~UDPStreamer() {
@@ -151,10 +151,10 @@ void UDPStreamer::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
     
     // Set timestamp
     GstClockTime pts = 0;
-    if (base_time_ == 0) base_time_ = buffer->timestamp_epoch_ms;
+    if (base_time_ == 0) base_time_ = static_cast<GstClockTime>(buffer->timestamp_epoch_ms);
     
-    if (buffer->timestamp_epoch_ms >= base_time_) {
-        pts = (GstClockTime)(buffer->timestamp_epoch_ms - base_time_) * GST_MSECOND;
+    if (static_cast<GstClockTime>(buffer->timestamp_epoch_ms) >= base_time_) {
+        pts = (static_cast<GstClockTime>(buffer->timestamp_epoch_ms) - base_time_) * GST_MSECOND;
     }
     if (pts <= last_pts_ && last_pts_ != 0) pts = last_pts_ + 1 * GST_MSECOND;
     last_pts_ = pts;

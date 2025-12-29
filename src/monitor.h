@@ -38,7 +38,6 @@ private:
     // Previous queue depths for calculating in/out rates
     size_t prev_raw_image_queue_depth_{0};
     size_t prev_tpu_inference_queue_depth_{0};
-    size_t prev_detection_overlay_queue_depth_{0};
     size_t prev_detection_logic_queue_depth_{0};
     size_t prev_overlaid_video_queue_depth_{0};
     size_t prev_h264_output_queue_depth_{0};

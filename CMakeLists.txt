@@ -458,3 +458,14 @@ target_compile_options(tpu_performance_test PRIVATE
 # target_compile_options(test_ballistics_fixed PRIVATE
 #     -Wno-error
 # )
+add_executable(metadata_audit tests/metadata_audit.cpp)
+target_link_libraries(metadata_audit PRIVATE
+    ${TFLITE_LIB_DIR}/libtensorflowlite.so
+    edgetpu
+    Threads::Threads
+)
+target_include_directories(metadata_audit PRIVATE
+    include
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+)
