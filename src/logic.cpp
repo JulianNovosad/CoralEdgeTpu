@@ -3,6 +3,7 @@
 #include "util_logging.h"
 #include "orientation_sensor.h"
 #include "application.h"  // For Application counter updates
+#include "timing.h"       // Static inline get_time_raw_ms
 #include <algorithm>
 #include <cmath>
 #include <chrono>
@@ -126,9 +127,12 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
         current_state = rk4_step(current_state, actual_time_step, air_density); // Use actual_time_step
         trajectory.push_back(current_state);
         
+        // Explicit exit condition to prevent infinite loops or backward movement
+        if (current_state.position.x > max_distance || current_state.velocity.x <= 0) break;
+
         // Enhanced safety stop with multiple conditions
-        if (trajectory.size() > 100) { // FORENSIC SAFETY CAP: 100 STEPS MAX
-            APP_LOG_WARNING("Trajectory calculation exceeded 100 steps (FORENSIC CAP). Max distance: " + std::to_string(max_distance) + "m, Time step: " + std::to_string(actual_time_step) + "s. Last Pos Y: " + std::to_string(current_state.position.y) + "m");
+        if (trajectory.size() > 5000) { // FURTHER INCREASED SAFETY CAP
+            APP_LOG_WARNING("Trajectory calculation exceeded 5000 steps (STABILITY CAP). Max distance: " + std::to_string(max_distance) + "m, Time step: " + std::to_string(actual_time_step) + "s. Last Pos X: " + std::to_string(current_state.position.x) + "m, Last Pos Y: " + std::to_string(current_state.position.y) + "m");
             break;
         }
         
@@ -152,6 +156,9 @@ std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial
 
 float BallisticsSolver::calculate_zero_pitch() {
     APP_LOG_INFO("Calculating zero pitch for " + std::to_string(profile_.zero_distance_m) + "m...");
+    APP_LOG_DEBUG("Ballistics Solver Input: muzzle_velocity=" + std::to_string(profile_.muzzle_velocity_mps) + 
+                 "m/s, zero_dist=" + std::to_string(profile_.zero_distance_m) + 
+                 "m, sight_height=" + std::to_string(profile_.sight_height_m) + "m");
     
     // Calculate initial bounds based on simplified ballistics to ensure convergence
     // Use basic physics: height = sight_height - 0.5 * g * t^2 where t = distance / muzzle_velocity
@@ -428,10 +435,10 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
       track_missed_frames_threshold_(config.get_track_missed_frames_threshold()),
       min_track_confidence_(config.get_min_track_confidence()),
       current_fallback_mode_(NORMAL_OPERATION),
-      servo_position_(0.0f),
-      servo_direction_(true),
-      last_direction_change_(std::chrono::steady_clock::now()),
       distance_history_(DISTANCE_WINDOW_SIZE, 0.0f) {
+    
+    state_start_ms_ = get_time_raw_ms(); // Use raw timing for state initialization
+    telemetry_idx_.store(0, std::memory_order_relaxed);
     
     // Initialize camera intrinsics for angular error calculation
     float image_width_px = static_cast<float>(config_.get_tpu_target_width());
@@ -509,6 +516,9 @@ bool LogicModule::start() {
     servo_worker_running_ = true;
     servo_worker_thread_ = std::thread(&LogicModule::servo_worker_thread_func, this);
     
+    // Start telemetry worker thread
+    telemetry_worker_thread_ = std::thread(&LogicModule::telemetry_worker_thread_func, this);
+    
     worker_thread_ = std::thread(&LogicModule::worker_thread_func, this);
     APP_LOG_INFO("LogicModule started.");
     return true;
@@ -516,7 +526,12 @@ bool LogicModule::start() {
 void LogicModule::stop() {
     if (running_.exchange(false)) {
         APP_LOG_INFO("Stopping LogicModule...");
+        // Poison Pill: Wake up worker thread blocked on wait_pop
+        detection_input_queue_.push(nullptr);
         if (worker_thread_.joinable()) worker_thread_.join();
+        
+        // Stop telemetry worker thread
+        if (telemetry_worker_thread_.joinable()) telemetry_worker_thread_.join();
         
         // Stop servo worker thread
         if (servo_worker_running_.exchange(false)) {
@@ -552,95 +567,106 @@ void LogicModule::send_telemetry_data(const std::string& telemetry_message) {
 }
 
 void LogicModule::worker_thread_func() {
-    APP_LOG_INFO("LogicModule worker thread started.");
+    APP_LOG_INFO("LogicModule worker thread started (Deterministic Timing).");
     
     // Initialize timing variables for logic rate calculation
     int logic_cycle_count = 0;
-    std::vector<long long> logic_cycle_times;
-    auto last_update_time = std::chrono::high_resolution_clock::now();
+    auto last_update_time = get_time_raw_ms();
     int successful_pops = 0;
     
-    // Track rate calculation for idle periods too
-    auto last_activity_time = std::chrono::high_resolution_clock::now();
-    
-    while (running_) {
+    while (running_ && !shutdown_requested.load(std::memory_order_acquire)) {
         std::shared_ptr<DetectionResultBuffer> detections_buffer;
-        // Use blocking wait_pop instead of polling to eliminate micro-stutter
-        if (detection_input_queue_.wait_pop(detections_buffer, std::chrono::milliseconds(10))) {
+        if (detection_input_queue_.wait_pop(detections_buffer, std::chrono::milliseconds(100))) {
+            if (!detections_buffer) break;
             successful_pops++;
-            long long call_ts = 0;
-            if (detections_buffer && detections_buffer->size > 0) {
-                APP_LOG_DEBUG("LogicModule: Detections buffer is valid with size: " + std::to_string(detections_buffer->size));
-                // Use the timestamp of the first detection as the call_ts
-                call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            detections_buffer->data[0].timestamp.time_since_epoch()).count();
-                
-                // If we have an application reference, update the consumed counter
-                if (app_ref_) {
-                    app_ref_->increment_inference_results_consumed_by_logic();
-                }
-                
-                auto t_start = std::chrono::high_resolution_clock::now();
-                process(detections_buffer->data);
-                auto t_end = std::chrono::high_resolution_clock::now();
-                long long duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t_end - t_start).count();
-                // Update freshness indicators
-                last_logic_timestamp_ = call_ts;
-                
-                // Track processing time for rate calculation
-                logic_cycle_times.push_back(duration_ms);
-                logic_cycle_count++;
-                
-                // Update the last activity time for rate calculation
-                last_activity_time = std::chrono::high_resolution_clock::now();
-                
-                // Update logic rate every 50 cycles instead of 100 to be more responsive
-                if (logic_cycle_count % 25 == 0 && logic_cycle_times.size() > 0) {  // Reduced from 50 to 25 for more responsive updates
-                    auto current_time = std::chrono::high_resolution_clock::now();
-                    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_update_time).count();
-                    if (elapsed_ms > 0) {
-                        // Calculate rate as cycles per second
-                        logic_rate_ = static_cast<int>((25.0 * 1000.0) / elapsed_ms);
-                    } else {
-                        // Fallback: use the average processing time
-                        long long total_time_ms = 0;
-                        for (long long time : logic_cycle_times) {
-                            total_time_ms += time;
+            
+            // --- RAII AccountingGuard for Logic ---
+            struct LogicAccountingGuard {
+                LogicModule* module;
+                bool processed = false;
+                LogicAccountingGuard(LogicModule* m) : module(m) {}
+                ~LogicAccountingGuard() {
+                    if (processed) {
+                        if (module->app_ref_) {
+                            module->app_ref_->increment_inference_results_consumed_by_logic();
                         }
-                        double avg_time_ms = static_cast<double>(total_time_ms) / logic_cycle_times.size();
-                        if (avg_time_ms > 0) {
-                            logic_rate_ = static_cast<int>(1000.0 / avg_time_ms);
+                    } else {
+                        if (module->app_ref_) {
+                            module->app_ref_->increment_inference_results_dropped();
                         }
                     }
-                    logic_cycle_times.clear();
-                    // Update the last update time after calculation
-                    last_update_time = current_time;
-                    // Log statistics periodically
-                    APP_LOG_INFO("LogicModule: Processed " + std::to_string(successful_pops) + " detection batches. Logic rate: " + std::to_string(logic_rate_.load()) + " CPS");
                 }
-                // FPS measurement for decision stage
-                static int decision_frame_counter = 0;
-                static auto decision_start_time = std::chrono::high_resolution_clock::now();
-                decision_frame_counter++;
-                auto current_time = std::chrono::high_resolution_clock::now();
-                auto decision_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - decision_start_time).count();
-                if (decision_duration >= 1000) { // Log every second
-                    double decision_fps = (decision_frame_counter * 1000.0) / decision_duration;
-                    APP_LOG_INFO("DECISION FPS MEASUREMENT: " + std::to_string(decision_fps) + " FPS over " + std::to_string(decision_frame_counter) + " decisions in " + std::to_string(decision_duration) + " ms");
-                    // Reset for next measurement
-                    decision_frame_counter = 0;
-                    decision_start_time = current_time;
+            } guard(this);
+
+            if (detections_buffer) {
+                // Heartbeat / Empty Frame Check
+                // Maintain P=C+D even for invalid/empty results from Inference
+                if (!detections_buffer->valid || detections_buffer->size == 0) {
+                    guard.processed = true; 
+                    continue;
                 }
-            } else {
-                // Buffer exists but has no detections - still count this as a successful pop
-                APP_LOG_DEBUG("LogicModule: Pop successful, but detections_buffer is null or empty. Frame processed without detections.");
-                // Update the last logic timestamp even for empty frames to maintain timing
-                last_logic_timestamp_ = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                            std::chrono::system_clock::now().time_since_epoch()).count();
-                logic_cycle_count++;
+
+                // Ballistic Hit-Scan Invariant (Section V.3)
+                uint64_t t_logic_start = get_time_raw_ms();
+                uint64_t t_capture = detections_buffer->data[0].t_capture_raw_ms;
+                uint64_t latency = t_logic_start - t_capture;
+
+                if (latency > MAX_FRAME_BUDGET_RAW_MS) {
+                    char err_buf[128];
+                    snprintf(err_buf, sizeof(err_buf), "[TIMING_VIOLATION] Logic Input Latency %lu ms > %lu ms. DROPPING FRAME.", 
+                             latency, MAX_FRAME_BUDGET_RAW_MS);
+                    APP_LOG_ERROR(err_buf);
+                    
+                    // Record dropped frame in telemetry too
+                    size_t idx = telemetry_idx_.load(std::memory_order_relaxed);
+                    TelemetryFrame& f = telemetry_buffer_[idx % TELEMETRY_BUFFER_SIZE];
+                    f.frame_id = detections_buffer->data[0].source_frame_id;
+                    f.t_capture = t_capture;
+                    f.t_inf_start = detections_buffer->t_inf_start;
+                    f.t_inf_end = detections_buffer->t_inf_end;
+                    f.t_logic_start = t_logic_start;
+                    f.t_logic_end = get_time_raw_ms();
+                    f.target_x = 0; f.target_y = 0; f.target_z = 0;
+                    f.state = (int)servo_state_;
+                    f.hit_scan = false;
+                    telemetry_idx_.store(idx + 1, std::memory_order_release);
+
+                    continue; // guard destructor will increment Dropped
+                }
+
+                last_hit_scan_ = false; // Reset for this frame
+                process(detections_buffer->data);
+                guard.processed = true;
                 
-                // Update the last activity time for rate calculation
-                last_activity_time = std::chrono::high_resolution_clock::now();
+                // --- Telemetry Recording (O(1)) ---
+                size_t idx = telemetry_idx_.load(std::memory_order_relaxed);
+                TelemetryFrame& f = telemetry_buffer_[idx % TELEMETRY_BUFFER_SIZE];
+                f.frame_id = detections_buffer->data[0].source_frame_id;
+                f.t_capture = t_capture;
+                f.t_inf_start = detections_buffer->t_inf_start;
+                f.t_inf_end = detections_buffer->t_inf_end;
+                f.t_logic_start = t_logic_start;
+                f.t_logic_end = get_time_raw_ms();
+                f.target_x = last_target_pos_.x;
+                f.target_y = last_target_pos_.y;
+                f.target_z = last_target_pos_.z;
+                f.state = (int)servo_state_;
+                f.hit_scan = last_hit_scan_;
+                telemetry_idx_.store(idx + 1, std::memory_order_release);
+
+                // Update logic rate and freshness indicators
+                uint64_t current_time_ms = get_time_raw_ms();
+                last_logic_timestamp_ns_.store(current_time_ms * 1000000);
+                
+                logic_cycle_count++;
+                if (logic_cycle_count % 25 == 0) {
+                    uint64_t elapsed_ms = current_time_ms - last_update_time;
+                    if (elapsed_ms > 0) {
+                        logic_rate_ = static_cast<int>((25.0 * 1000.0) / elapsed_ms);
+                    }
+                    last_update_time = current_time_ms;
+                    APP_LOG_INFO("LogicModule Rate: " + std::to_string(logic_rate_.load()) + " CPS");
+                }
             }
         }
     }
@@ -648,112 +674,144 @@ void LogicModule::worker_thread_func() {
 }
 
 void LogicModule::servo_worker_thread_func() {
-    APP_LOG_INFO("Servo worker thread started.");
-    while (servo_worker_running_) {
-        ServoCommand command;
-        bool has_command = false;
+    APP_LOG_INFO("Servo worker thread started (Non-Blocking State Machine).");
+    
+    servo_state_ = ServoState::IDLE;
+    state_start_ms_ = get_time_raw_ms();
+
+    while (servo_worker_running_ && !shutdown_requested.load(std::memory_order_acquire)) {
+        uint64_t now = get_time_raw_ms();
         
-        // Check if there's a command in the queue
-        {
-            std::lock_guard<std::mutex> lock(servo_queue_mutex_);
-            if (!servo_command_queue_.empty()) {
-                command = servo_command_queue_.front();
-                servo_command_queue_.pop();
-                has_command = true;
-            }
-        }
-        
-        if (has_command) {
-            // Log timing information for servo command verification
-            auto queue_to_execution_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - command.timestamp).count();
-            
-            // Check cooldown period (0.3 seconds)
-            auto time_since_last_actuation = 0;
-            {
-                std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
-                time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - last_direction_change_).count();
-            }
-            
-            // Log detailed timing information
-            char timing_log_buffer[256];
-            snprintf(timing_log_buffer, sizeof(timing_log_buffer), 
-                     "SERVO_TIMING: queue_to_execution=%dms cooldown_elapsed=%dms", 
-                     static_cast<int>(queue_to_execution_time), static_cast<int>(time_since_last_actuation));
-            APP_LOG_INFO(timing_log_buffer);
-            
-            if (time_since_last_actuation >= 300) { // 300ms cooldown
-                // Execute servo command
-                auto execution_start = std::chrono::high_resolution_clock::now();
-                execute_servo_command(command.target_x, command.target_y, command.target_z, command.confidence);
-                auto execution_end = std::chrono::high_resolution_clock::now();
-                auto execution_duration = std::chrono::duration_cast<std::chrono::microseconds>(
-                    execution_end - execution_start).count();
-                
-                // Log execution time
-                APP_LOG_INFO("SERVO_TIMING: execution_time=" + std::to_string(execution_duration) + "us");
-                
-                // Update last actuation time
-                {
-                    std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
-                    last_direction_change_ = std::chrono::steady_clock::now();
+        switch (servo_state_) {
+            case ServoState::IDLE: {
+                // Reassert Safe State (0.5 center) continuously in IDLE
+                if (led_controller_ && led_controller_->is_initialized()) {
+                    led_controller_->set_servo_position(0, 0.5f);
                 }
-            } else {
-                APP_LOG_INFO("Skipping servo command: Cooldown period active (" + std::to_string(time_since_last_actuation) + "ms since last actuation)");
+
+                ServoCommand command;
+                bool has_command = false;
+                {
+                    std::lock_guard<std::mutex> lock(servo_queue_mutex_);
+                    if (!servo_command_queue_.empty()) {
+                        command = servo_command_queue_.front();
+                        servo_command_queue_.pop();
+                        has_command = true;
+                    }
+                }
+
+                if (has_command) {
+                    // Latency Audit
+                    uint64_t latency = now - command.t_capture;
+                    if (latency > MAX_FRAME_BUDGET_RAW_MS) {
+                        char err_buf[128];
+                        snprintf(err_buf, sizeof(err_buf), "[TIMING_VIOLATION] Latency %lu ms exceeds %lu ms. DROPPING ACTUATION.", 
+                                 latency, MAX_FRAME_BUDGET_RAW_MS);
+                        APP_LOG_ERROR(err_buf);
+                    } else if (command.confidence > config_.get_servo_activate_confidence()) {
+                        // TRANSITION: IDLE -> ENGAGED
+                        servo_state_ = ServoState::ENGAGED;
+                        state_start_ms_ = now;
+                        
+                        // Execute forward stroke
+                        float normalized_x = 0.5f + (command.target_x / static_cast<float>(config_.get_tpu_target_width()));
+                        float target_pos = std::max(0.0f, std::min(1.0f, normalized_x));
+                        
+                        if (led_controller_ && led_controller_->is_initialized()) {
+                            led_controller_->set_servo_position(0, target_pos);
+                        }
+                        
+                        char log_buf[256];
+                        snprintf(log_buf, sizeof(log_buf), "ACTUATION_START: Latency=%lu ms, Pos=%.2f, Conf=%.2f%%", 
+                                 latency, target_pos, command.confidence * 100.0f);
+                        APP_LOG_INFO(log_buf);
+                    }
+                }
+                break;
             }
-        } else {
-            // No commands, sleep briefly to prevent busy-waiting
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            case ServoState::ENGAGED: {
+                if (now - state_start_ms_ >= ACTUATION_DWELL_MS) {
+                    // TRANSITION: ENGAGED -> RETRACTING
+                    servo_state_ = ServoState::RETRACTING;
+                    state_start_ms_ = now;
+                    
+                    if (led_controller_ && led_controller_->is_initialized()) {
+                        led_controller_->set_servo_position(0, 0.5f); // Return to center
+                    }
+                }
+                break;
+            }
+
+            case ServoState::RETRACTING: {
+                if (now - state_start_ms_ >= ACTUATION_DWELL_MS) {
+                    // TRANSITION: RETRACTING -> COOLDOWN
+                    servo_state_ = ServoState::COOLDOWN;
+                    state_start_ms_ = now;
+                }
+                break;
+            }
+
+            case ServoState::COOLDOWN: {
+                if (now - state_start_ms_ >= ACTUATION_COOLDOWN_MS) {
+                    // TRANSITION: COOLDOWN -> IDLE
+                    servo_state_ = ServoState::IDLE;
+                }
+                break;
+            }
         }
+
+        // 120 FPS Polling (~8.33ms)
+        // Use a precise wait to maintain frequency without heavy CPU load
+        std::this_thread::sleep_for(std::chrono::milliseconds(8));
     }
-    APP_LOG_INFO("Servo worker thread stopped.");
+
+    // SHUTDOWN SAFETY: Final reassertion of Safe State
+    if (led_controller_ && led_controller_->is_initialized()) {
+        led_controller_->set_servo_position(0, 0.5f);
+    }
+    APP_LOG_INFO("Servo worker thread stopped (Safe State Reasserted).");
 }
 
-void LogicModule::execute_servo_command(float target_x, float target_y, float target_z, float confidence) {
+void LogicModule::execute_servo_command(float target_x, float, float, float confidence) {
     // Only issue servo commands if confidence is above activation threshold
     if (confidence <= config_.get_servo_activate_confidence()) {
         APP_LOG_INFO("Skipping servo command: Confidence too low (" + std::to_string(confidence * 100.0f) + "%)");
         return;
     }
     
-    // Perform oscillation pattern: move to position and back
     if (led_controller_ && led_controller_->is_initialized()) {
-        // Execute one oscillation cycle
-        // Move to target position (centered at 0.5)
-        led_controller_->set_servo_position(0, 0.5f);
-        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Brief pause
-        
-        // Move to extended position based on target
+        // Calculate position based on target
         float normalized_x = 0.5f + (target_x / static_cast<float>(config_.get_tpu_target_width()));
-        float normalized_y = 0.5f + (target_y / static_cast<float>(config_.get_tpu_target_height()));
-        
-        // Clamp to valid range [0.0, 1.0]
-        normalized_x = std::max(0.0f, std::min(1.0f, normalized_x));
-        normalized_y = std::max(0.0f, std::min(1.0f, normalized_y));
-        
-        // Use average of x and y positions for servo
-        float target_position = (normalized_x + normalized_y) * 0.5f;
+        float target_position = std::max(0.0f, std::min(1.0f, normalized_x));
         led_controller_->set_servo_position(0, target_position);
-        std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Brief pause
-        
-        // Return to center position
-        led_controller_->set_servo_position(0, 0.5f);
-        
-        // Update last actuation time
-        {
-            std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
-            last_direction_change_ = std::chrono::steady_clock::now();
-        }
     }
     
-    // Log servo command with detailed information for causality validation
-    char log_buffer[256];
-    snprintf(log_buffer, sizeof(log_buffer), "CAUSALITY_VALIDATION: Servo oscillated: pos=(%.2f, %.2f, %.2f) conf=%.2f%%", 
-            target_x, target_y, target_z, confidence * 100.0f);
-    APP_LOG_INFO(log_buffer);
-    
     current_servo_command_count_++; // Increment servo command count
+}
+
+void LogicModule::telemetry_worker_thread_func() {
+    APP_LOG_INFO("Telemetry Janitor thread started.");
+    size_t last_processed_idx = 0;
+
+    while (running_.load(std::memory_order_acquire) && !shutdown_requested.load(std::memory_order_acquire)) {
+        size_t current_idx = telemetry_idx_.load(std::memory_order_acquire);
+        
+        // Trigger: 50% full (5000 entries) or shutdown
+        if (current_idx - last_processed_idx >= 5000) {
+            write_telemetry_trace(telemetry_buffer_.data(), last_processed_idx, current_idx);
+            last_processed_idx = current_idx;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    // Final flush on SIGINT/shutdown
+    size_t final_idx = telemetry_idx_.load(std::memory_order_acquire);
+    if (final_idx > last_processed_idx) {
+        write_telemetry_trace(telemetry_buffer_.data(), last_processed_idx, final_idx);
+    }
+    APP_LOG_INFO("Telemetry Janitor thread stopped (Final Flush Complete).");
 }
 
 void LogicModule::process(const std::vector<DetectionResult>& detections) {
@@ -762,12 +820,11 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
     // Early return if detections vector is empty to prevent unnecessary processing
     if (detections.empty()) {
         // Log this condition but don't process further
-        static auto last_empty_log = std::chrono::steady_clock::now();
-        auto now = std::chrono::steady_clock::now();
-        auto time_since_last_log = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_empty_log).count();
+        static uint64_t last_empty_log = 0;
+        uint64_t now = get_time_raw_ms();
         
         // Only log every 1000ms to avoid log spam
-        if (time_since_last_log > 1000) {
+        if (now - last_empty_log > 1000) {
             APP_LOG_DEBUG("LogicModule: No detections received, skipping processing.");
             last_empty_log = now;
         }
@@ -808,24 +865,14 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
     
     // If camera is covered, lock servo in safe position and return early
     if (camera_covered) {
-        // Lock servo in safe position (center)
-        if (led_controller_ && led_controller_->is_initialized()) {
-            // Check cooldown period (0.3 seconds)
-            auto current_time = std::chrono::steady_clock::now();
-            auto time_since_last_actuation = 0;
-            {
-                std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
-                time_since_last_actuation = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_direction_change_).count();
-            }
-            
-            if (time_since_last_actuation >= 300) { // 300ms cooldown
-                led_controller_->set_servo_position(0, 0.5f); // Center position is safe position
-                {
-                    std::lock_guard<std::mutex> lock(last_direction_change_mutex_);
-                    last_direction_change_ = std::chrono::steady_clock::now();
-                }
-                APP_LOG_INFO("CAMERA_COVERED: Locked servo in safe position (center)");
-            }
+        uint64_t now = get_time_raw_ms();
+        // Cooldown enforced by state machine, but we can avoid flooding the queue
+        static uint64_t last_safe_enqueue = 0;
+        
+        if (now - last_safe_enqueue >= 300) {
+            last_safe_enqueue = now;
+            issue_servo_commands(0.0f, 0.0f, 0.0f, 1.0f, now); // Center position (0,0,0), 100% confidence for override
+            APP_LOG_INFO("CAMERA_COVERED: Enqueued safe position command (center)");
         }
         return; // Skip all other processing when camera is covered
     }
@@ -835,12 +882,11 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
         APP_LOG_DEBUG("Valid detections: " + std::to_string(valid_detections_count) + "/" + std::to_string(detections.size()));
     } else {
         // Log that we have no valid detections
-        static auto last_invalid_log = std::chrono::steady_clock::now();
-        auto now = std::chrono::steady_clock::now();
-        auto time_since_last_log = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_invalid_log).count();
+        static uint64_t last_invalid_log = 0;
+        uint64_t now = get_time_raw_ms();
         
         // Only log every 1000ms to avoid log spam
-        if (time_since_last_log > 1000) {
+        if (now - last_invalid_log > 1000) {
             APP_LOG_DEBUG("LogicModule: No valid detections with reasonable confidence, skipping detailed processing.");
             last_invalid_log = now;
         }
@@ -923,33 +969,25 @@ void LogicModule::calculate_ballistics_for_tracks() {
                 continue; // Skip this track to prevent processing invalid data that causes hangs
             }
             
-            // Store the impact point and uncertainty in the track for use in safety checks
-            track.predicted_impact_point = impact_point;
-            track.uncertainty = uncertainty;
-            
-            // Basic ballistics logging
-            APP_LOG_DEBUG("Ballistics solved for Track ID " + std::to_string(track.id) + 
-                         ", confidence=" + std::to_string(uncertainty.total_confidence));
-            
-            // Log distance measurement for monitoring
-            float measured_distance = track.position.z;
-            APP_LOG_DEBUG("Distance measurement: " + std::to_string(measured_distance) + "m");
-            
-            // Calculate servo command based on ballistics and uncertainty
-            // This integrates the ballistics computation with servo feedback
-            float combined_confidence = uncertainty.total_confidence;
-            
-            // Only issue servo commands if confidence is above activation threshold
-            if (combined_confidence > config_.get_servo_activate_confidence()) {
-                current_hit_scan_count_++; // Increment hit scan count
-                
+                        // Store target for telemetry
+                        last_target_pos_ = impact_point;
+                        
+                        // Calculate servo command based on ballistics and uncertainty
+                        // This integrates the ballistics computation with servo feedback
+                        float combined_confidence = uncertainty.total_confidence;
+                        
+                        // Only issue servo commands if confidence is above activation threshold
+                        if (combined_confidence > config_.get_servo_activate_confidence()) {
+                            current_hit_scan_count_++; // Increment hit scan count
+                            last_hit_scan_ = true; // Mark for telemetry
+                            
                 // Log servo command issuance for invariant verification
                 APP_LOG_INFO("DETECTION_INVARIANT: Issuing servo command for track ID " + std::to_string(track.id) + 
                              ", class=" + std::to_string(track.last_detection.class_id) + 
                              ", confidence=" + std::to_string(combined_confidence));
 
                 // Issue servo commands to control LEDs
-                issue_servo_commands(impact_point.x, impact_point.y, impact_point.z, combined_confidence);
+                issue_servo_commands(impact_point.x, impact_point.y, impact_point.z, combined_confidence, track.last_detection.t_capture_raw_ms);
                 
                 // Format the impact point as JSON for telemetry
                 // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
@@ -1116,6 +1154,8 @@ void LogicModule::perform_safety_and_actuation() {
                     detection_confidence_ok && 
                     detection_stable) {
                     current_hit_scan_count_++; // Increment hit scan count
+                    last_hit_scan_ = true;     // Mark for telemetry
+                    last_target_pos_ = track.predicted_impact_point;
                     
                     // Log servo actuation
                     APP_LOG_DEBUG("Servo actuating for Track ID " + std::to_string(track.id) + 
@@ -1124,7 +1164,7 @@ void LogicModule::perform_safety_and_actuation() {
 
                     
                     // Issue servo commands to control LEDs
-                    issue_servo_commands(track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, combined_confidence);
+                    issue_servo_commands(track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, combined_confidence, track.last_detection.t_capture_raw_ms);
                     
                     // Format the impact point as JSON for telemetry
                     // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
@@ -1184,7 +1224,7 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         auto prev_time = track.last_update_time;
         
         // Predict track position based on previous velocity and acceleration
-        auto current_time = std::chrono::high_resolution_clock::now();
+        auto current_time = std::chrono::steady_clock::now();
         float dt = std::chrono::duration<float>(current_time - prev_time).count();
         
         if (dt > 0.0f) {
@@ -1250,8 +1290,19 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         }
         
         if (best_match_track) {
+            // SPATIAL GATE: Distance Deviation Reject any detection where |D_n - D_{n-1}| > 0.20 * D_{n-1}
+            float dist_deviation = std::abs(estimated_distance - best_match_track->prev_distance);
+            float max_allowed_deviation = 0.20f * best_match_track->prev_distance;
+            
+            if (dist_deviation > max_allowed_deviation) {
+                APP_LOG_INFO("[AUDIT][DROP] Distance Deviation: |" + std::to_string(estimated_distance) + " - " + 
+                             std::to_string(best_match_track->prev_distance) + "| > " + std::to_string(max_allowed_deviation));
+                continue; // Reject this detection for this track
+            }
+
             // Update track with new detection
             auto prev_position = best_match_track->position;
+            best_match_track->prev_distance = best_match_track->position.z; // Store D_{n-1}
             auto prev_time = best_match_track->last_update_time;
             best_match_track->last_detection = new_detection;
             best_match_track->position.z = estimated_distance;
@@ -1393,26 +1444,6 @@ float LogicModule::estimate_target_distance(const DetectionResult& detection) {
     // Apply per-class smoothing to the corrected distance estimate
     float smoothed_distance = add_class_distance_estimate(detection.class_id, corrected_distance);
     
-    // Log distance smoothing validation with enhanced details
-    char dist_log_buffer[512];
-    const auto& history = class_distance_histories_[detection.class_id];
-    size_t count = history.full ? CLASS_DISTANCE_WINDOW_SIZE : history.index;
-    
-    // Create a string with the current window values for detailed logging
-    std::string window_values = "[";
-    for (size_t i = 0; i < count; ++i) {
-        if (i > 0) window_values += ",";
-        
-        // Validate the distance value to prevent invalid string conversion
-        float distance_val = history.distances[i];
-        if (!std::isfinite(distance_val)) {
-            window_values += "0.000000"; // Use a safe default value
-        } else {
-            // Clamp the value to a reasonable range to prevent extremely long strings
-            distance_val = std::max(0.0f, std::min(1000.0f, distance_val));
-            window_values += std::to_string(distance_val);
-        }
-    }
     // Basic distance logging for debugging
     APP_LOG_DEBUG("Distance estimate: class=" + std::to_string(detection.class_id) + 
                  ", smoothed=" + std::to_string(smoothed_distance) + "m");
@@ -1890,7 +1921,7 @@ SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObj
 }
 
 
-void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z, float confidence) {
+void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z, float confidence, uint64_t t_capture) {
     // Instead of executing servo commands directly, enqueue them for the servo worker thread
     {
         std::lock_guard<std::mutex> lock(servo_queue_mutex_);
@@ -1899,7 +1930,7 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
         command.target_y = target_y;
         command.target_z = target_z;
         command.confidence = confidence;
-        command.timestamp = std::chrono::steady_clock::now();
+        command.t_capture = t_capture;
         servo_command_queue_.push(command);
     }
 }
@@ -1908,10 +1939,6 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
 void LogicModule::perform_sensor_fusion() { 
     // No IMU sensor fusion - using raw tracking data
     // Apply no orientation correction to active tracks
-    for (auto& track : active_tracks_) {
-        // No IMU corrections applied - using raw track positions
-        // Track positions remain unchanged
-    }
     
     APP_LOG_DEBUG("Sensor fusion updated - No IMU data used");
 }

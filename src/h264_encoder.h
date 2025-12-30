@@ -57,7 +57,7 @@ private:
     
     // Display starvation detection
     mutable std::atomic<bool> first_frame_sent_{false};
-    mutable std::chrono::high_resolution_clock::time_point last_frame_processed_time_;
+    mutable std::chrono::steady_clock::time_point last_frame_processed_time_;
     mutable int last_frame_id_{-1};
     
     // Throttling logic
@@ -67,7 +67,7 @@ private:
     int64_t frame_count_{0};
     
     // Presentation timestamp tracking for monotonicity
-    std::chrono::high_resolution_clock::time_point stream_start_time_;
+    std::chrono::steady_clock::time_point stream_start_time_;
     bool stream_start_time_initialized_{false};
     
     // Buffer exhaustion monitoring

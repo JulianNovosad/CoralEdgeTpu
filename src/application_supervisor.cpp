@@ -3,50 +3,37 @@
 #include <csignal>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <termios.h>  // for terminal settings
-#include <stdlib.h>   // for atexit
-#include <atomic>     // for memory_order
+#include <termios.h>
+#include <stdlib.h>
+#include <atomic>
 
-// Define the global atomic flag
-std::atomic<bool> shutdown_requested(false);
+// External declaration of the global atomic flag defined in main.cpp
+extern std::atomic<bool> shutdown_requested;
 
-// Static member definition
-bool ApplicationSupervisor::shutdown_in_progress_ = false;
-
-// External declaration for terminal settings
+// External declaration for terminal settings (defined in main.cpp)
 extern struct termios original_termios;
 
-// Flag to track if terminal settings have been restored
-static bool terminal_restored = false;
-
-// Function to restore terminal settings
-void restore_terminal_settings() {
-    if (!terminal_restored) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
-        terminal_restored = true;
+static void signal_handler(int signum) {
+    if (shutdown_requested.load(std::memory_order_acquire)) {
+        // Force exit if signal is received again during shutdown
+        _exit(signum);
     }
+    shutdown_requested.store(true, std::memory_order_release);
 }
 
-// Static member function to handle signals
-void signal_handler(int signal) {
-    // Restore terminal settings before setting shutdown flag
-    restore_terminal_settings();
-    // Only set the atomic flag - do minimal work in signal handler
-    if (signal == SIGINT || signal == SIGTERM || signal == SIGQUIT) {
-        shutdown_requested.store(true, std::memory_order_release);
-    } else if (signal == SIGSEGV || signal == SIGABRT) {
-        // For crash signals, we just restore terminal and exit
-        _exit(128 + signal);
-    }
+static void crash_handler(int signum) {
+    // Restore terminal settings on crash
+    tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
+    std::cerr << "\nFATAL: Program crashed with signal " << signum << std::endl;
+    _exit(signum);
 }
 
-// Exit handler for normal termination
-void exit_handler() {
-    restore_terminal_settings();
+static void exit_handler() {
+    // Final terminal restore on normal exit
+    tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
 }
 
 ApplicationSupervisor::ApplicationSupervisor() {
-    // No modules registered yet, done in main.cpp
 }
 
 ApplicationSupervisor::~ApplicationSupervisor() {
@@ -66,51 +53,40 @@ void ApplicationSupervisor::register_child_process(pid_t pid) {
 }
 
 void ApplicationSupervisor::setup_signal_handlers() {
-    struct sigaction sa;
-    sa.sa_handler = signal_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0; // No SA_RESTART to allow interruption of blocking calls
+    struct sigaction sa_graceful = {};
+    sa_graceful.sa_handler = signal_handler;
+    sigemptyset(&sa_graceful.sa_mask);
+    sa_graceful.sa_flags = 0; 
+
+    struct sigaction sa_crash = {};
+    sa_crash.sa_handler = crash_handler;
+    sigemptyset(&sa_crash.sa_mask);
+    sa_crash.sa_flags = 0;
     
-    // Register signal handlers for SIGINT (Ctrl+C), SIGTERM, and SIGQUIT
-    if (sigaction(SIGINT, &sa, NULL) == -1) {
-        APP_LOG_ERROR("Failed to register SIGINT handler.");
-    }
-    if (sigaction(SIGTERM, &sa, NULL) == -1) {
-        APP_LOG_ERROR("Failed to register SIGTERM handler.");
-    }
-    if (sigaction(SIGQUIT, &sa, NULL) == -1) {
-        APP_LOG_ERROR("Failed to register SIGQUIT handler.");
-    }
+    // Register handlers for graceful shutdown signals
+    sigaction(SIGINT, &sa_graceful, NULL);
+    sigaction(SIGTERM, &sa_graceful, NULL);
+    sigaction(SIGQUIT, &sa_graceful, NULL);
     
-    // Register handlers for crash signals as well
-    sa.sa_handler = signal_handler; // Reuse same handler
-    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
-        APP_LOG_ERROR("Failed to register SIGSEGV handler.");
-    }
-    if (sigaction(SIGABRT, &sa, NULL) == -1) {
-        APP_LOG_ERROR("Failed to register SIGABRT handler.");
-    }
+    // Register handlers for crash signals
+    sigaction(SIGSEGV, &sa_crash, NULL);
+    sigaction(SIGABRT, &sa_crash, NULL);
     
     // Register exit handler for normal termination
-    if (atexit(exit_handler) != 0) {
-        APP_LOG_ERROR("Failed to register exit handler.");
-    }
+    atexit(exit_handler);
 }
 
 void ApplicationSupervisor::initiate_shutdown() {
-    if (shutdown_in_progress_) {
-        return; // Already in progress, avoid duplicate shutdown attempts
+    if (shutdown_in_progress_.exchange(true, std::memory_order_acq_rel)) {
+        return; // Already in progress
     }
     
-    shutdown_in_progress_ = true;
     APP_LOG_INFO("Initiating graceful shutdown for all registered modules...");
     
-    // Stop modules in reverse order of registration if dependency exists (e.g., consumers before producers)
-    // For now, simple iteration. More advanced would track dependencies.
     for (auto it = registered_modules_.rbegin(); it != registered_modules_.rend(); ++it) {
         APP_LOG_INFO("Stopping module: " + it->first);
         try {
-            it->second(); // Call the stop function
+            it->second(); 
         } catch (const std::exception& e) {
             APP_LOG_ERROR("Error stopping module " + it->first + ": " + std::string(e.what()));
         }
@@ -119,50 +95,27 @@ void ApplicationSupervisor::initiate_shutdown() {
 }
 
 void ApplicationSupervisor::final_cleanup() {
+    if (cleanup_completed_.exchange(true, std::memory_order_acq_rel)) {
+        return; // Already cleaned up
+    }
+
     APP_LOG_INFO("Starting final cleanup of child processes...");
     
-    // Send SIGTERM to all tracked child processes
     for (pid_t pid : child_pids_) {
         if (pid > 0) {
-            std::cout << "Sending SIGTERM to child process: " << pid << std::endl;
-            APP_LOG_INFO("Sending SIGTERM to child process: " + std::to_string(pid));
             kill(pid, SIGTERM);
         }
     }
     
-    // Wait briefly for processes to terminate gracefully
-    usleep(500000); // Sleep for 500ms
+    usleep(500000); 
     
-    // Check which processes are still alive and send SIGKILL
     for (auto it = child_pids_.begin(); it != child_pids_.end();) {
         pid_t pid = *it;
-        if (pid > 0) {
-            // Check if process is still alive by sending signal 0 (doesn't actually send a signal)
-            if (kill(pid, 0) == 0) {
-                // Process is still alive, send SIGKILL
-                std::cout << "Process " << pid << " still alive, sending SIGKILL" << std::endl;
-                APP_LOG_INFO("Process " + std::to_string(pid) + " still alive, sending SIGKILL");
-                kill(pid, SIGKILL);
-                
-                // Wait briefly for the process to be killed
-                usleep(100000); // Sleep for 100ms
-            }
-            
-            // Remove from tracking since we've attempted to kill it
-            it = child_pids_.erase(it);
-        } else {
-            ++it;
+        if (pid > 0 && kill(pid, 0) == 0) {
+            kill(pid, SIGKILL);
+            usleep(100000);
         }
-    }
-    
-    // Final safety net: if this is the original parent process, ensure no detector processes remain
-    // Use killpg to ensure all processes in the process group are terminated
-    pid_t current_pid = getpid();
-    pid_t current_pgid = getpgid(current_pid);
-    
-    if (current_pgid == current_pid) {  // This process is the process group leader
-        APP_LOG_INFO("Executing final safety net process cleanup...");
-        // Additional cleanup could be added here if needed
+        it = child_pids_.erase(it);
     }
     
     APP_LOG_INFO("Final cleanup completed.");

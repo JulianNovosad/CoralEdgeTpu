@@ -26,8 +26,8 @@ struct ImageData {
     std::shared_ptr<PooledBuffer<uint8_t>> buffer; ///< Shared pointer to a pooled buffer holding pixel data.
     size_t width;                                  ///< Width of the image in pixels.
     size_t height;                                 ///< Height of the image in pixels.
+    size_t stride;                                 ///< Stride (bytes per line) of the image data.
     libcamera::PixelFormat format;                 ///< Pixel format of the image data.
-    long long timestamp_epoch_ms = 0;              ///< Timestamp of image capture in epoch milliseconds UTC.
     int frame_id = -1;                             ///< Monotonically increasing frame ID.
     
     // Zero-copy fields
@@ -35,32 +35,37 @@ struct ImageData {
     size_t offset = 0;                             ///< Offset within the file descriptor for zero-copy access.
     size_t length = 0;                             ///< Length of the frame data for zero-copy access.
 
-    // Timing measurements
-    std::chrono::high_resolution_clock::time_point capture_time;     ///< Time when frame was captured
-    std::chrono::high_resolution_clock::time_point queue_pop_time;   ///< Time when frame was popped from queue
-    std::chrono::high_resolution_clock::time_point preprocess_start_time; ///< Time when preprocessing started
-    std::chrono::high_resolution_clock::time_point preprocess_end_time;   ///< Time when preprocessing ended
-    std::chrono::high_resolution_clock::time_point inference_start_time;  ///< Time when inference started
-    std::chrono::high_resolution_clock::time_point inference_end_time;    ///< Time when inference ended
-    std::chrono::high_resolution_clock::time_point encode_start_time;     ///< Time when encoding started
-    std::chrono::high_resolution_clock::time_point encode_end_time;       ///< Time when encoding ended
-    std::chrono::high_resolution_clock::time_point rtsp_push_start_time;  ///< Time when RTSP push started
-    std::chrono::high_resolution_clock::time_point rtsp_push_end_time;    ///< Time when RTSP push ended
-    std::chrono::high_resolution_clock::time_point ingest_start_time;     ///< Time when frame ingest started
-    std::chrono::high_resolution_clock::time_point ingest_end_time;       ///< Time when frame ingest ended
-    std::chrono::high_resolution_clock::time_point conversion_start_time; ///< Time when format conversion started
-    std::chrono::high_resolution_clock::time_point conversion_end_time;   ///< Time when format conversion ended
-    std::chrono::high_resolution_clock::time_point visualization_start_time; ///< Time when visualization started
-    std::chrono::high_resolution_clock::time_point visualization_end_time;   ///< Time when visualization ended
-    std::chrono::high_resolution_clock::time_point display_start_time;    ///< Time when frame display started
-    std::chrono::high_resolution_clock::time_point display_end_time;      ///< Time when frame display ended
+    // Timing measurements (Deterministic)
+    uint64_t t_capture_raw_ms = 0;                  ///< Authoritative raw ms from get_time_raw_ms()
+    std::chrono::steady_clock::time_point capture_time;     ///< Time when frame was captured (PRIMARY TIMESTAMP)
+
+    bool isValid() const { return buffer != nullptr; }
+
+    // Per-frame accounting fields... (truncated for brevity but I will keep them)
+    std::chrono::steady_clock::time_point queue_pop_time;   ///< Time when frame was popped from queue
+    std::chrono::steady_clock::time_point preprocess_start_time; ///< Time when preprocessing started
+    std::chrono::steady_clock::time_point preprocess_end_time;   ///< Time when preprocessing ended
+    std::chrono::steady_clock::time_point inference_start_time;  ///< Time when inference started
+    std::chrono::steady_clock::time_point inference_end_time;    ///< Time when inference ended
+    std::chrono::steady_clock::time_point encode_start_time;     ///< Time when encoding started
+    std::chrono::steady_clock::time_point encode_end_time;       ///< Time when encoding ended
+    std::chrono::steady_clock::time_point rtsp_push_start_time;  ///< Time when RTSP push started
+    std::chrono::steady_clock::time_point rtsp_push_end_time;    ///< Time when RTSP push ended
+    std::chrono::steady_clock::time_point ingest_start_time;     ///< Time when frame ingest started
+    std::chrono::steady_clock::time_point ingest_end_time;       ///< Time when frame ingest ended
+    std::chrono::steady_clock::time_point conversion_start_time; ///< Time when format conversion started
+    std::chrono::steady_clock::time_point conversion_end_time;   ///< Time when format conversion ended
+    std::chrono::steady_clock::time_point visualization_start_time; ///< Time when visualization started
+    std::chrono::steady_clock::time_point visualization_end_time;   ///< Time when visualization ended
+    std::chrono::steady_clock::time_point display_start_time;    ///< Time when frame display started
+    std::chrono::steady_clock::time_point display_end_time;      ///< Time when frame display ended
 
     // Static member for global frame counter
     static std::atomic<int> global_frame_counter;
 
-    // Constructor to initialize timestamp and frame_id
-    ImageData(long long ts_epoch_ms = 0, int f_id = -1)
-        : timestamp_epoch_ms(ts_epoch_ms), frame_id(f_id) {}
+    // Constructor to initialize capture_time and frame_id
+    ImageData(std::chrono::steady_clock::time_point ts = std::chrono::steady_clock::now(), int f_id = -1)
+        : stride(0), frame_id(f_id), capture_time(ts) {}
 };
 
 /**
@@ -72,11 +77,11 @@ struct OrientationData {
     float yaw;   ///< Yaw angle in degrees or radians.
     float pitch; ///< Pitch angle in degrees or radians.
     float roll;  ///< Roll angle in degrees or radians.
-    std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of orientation data capture.
+    std::chrono::steady_clock::time_point timestamp; ///< Timestamp of orientation data capture.
 
     // Default constructor to initialize all members to 0 or an appropriate default
     OrientationData() : yaw(0.0f), pitch(0.0f), roll(0.0f),
-                        timestamp(std::chrono::high_resolution_clock::now()) {}
+                        timestamp(std::chrono::steady_clock::now()) {}
 };
 
 /**
@@ -90,8 +95,24 @@ struct DetectionResult {
     float score;    ///< The confidence score of the detection (0.0 - 1.0, normalized).
     float raw_score; ///< Raw dequantized model output for debugging.
     float xmin, ymin, xmax, ymax; ///< Bounding box coordinates (normalized 0.0 - 1.0 or pixel values).
-    std::chrono::high_resolution_clock::time_point timestamp; ///< Timestamp of when the detection was made.
+    std::chrono::steady_clock::time_point timestamp; ///< Timestamp of when the detection was made.
+    uint64_t t_capture_raw_ms = 0; ///< Inherited from ImageData
     int source_frame_id = -1; ///< ID of the source frame that generated this detection.
+};
+
+/**
+ * @brief Black Box Telemetry record for a single frame.
+ */
+struct TelemetryFrame {
+    uint64_t frame_id;
+    uint64_t t_capture;
+    uint64_t t_inf_start;
+    uint64_t t_inf_end;
+    uint64_t t_logic_start;
+    uint64_t t_logic_end;
+    float target_x, target_y, target_z;
+    int state;
+    bool hit_scan;
 };
 
 /**
@@ -143,8 +164,12 @@ public:
      * @brief Commits the current write buffer and swaps it with the 'Latest' slot (Producer only).
      */
     void commit_write() {
-        producer_index_ = latest_index_.exchange(producer_index_, std::memory_order_acq_rel);
-        dirty_.store(true, std::memory_order_release);
+        int old_index = latest_index_.exchange(producer_index_, std::memory_order_acq_rel);
+        producer_index_ = old_index;
+        if (dirty_.exchange(true, std::memory_order_release)) {
+            // If it was already dirty, we just overwrote a frame that was never read
+            drop_count_.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 
     /**
@@ -160,6 +185,20 @@ public:
     }
 
     /**
+     * @brief Gets the number of frames dropped (overwritten) in this buffer.
+     */
+    int64_t get_drop_count() const {
+        return drop_count_.load(std::memory_order_relaxed);
+    }
+
+    /**
+     * @brief Checks if there is a pending (unconsumed) frame in the buffer.
+     */
+    bool has_pending() const {
+        return dirty_.load(std::memory_order_acquire);
+    }
+
+    /**
      * @brief Gets a reference to the current consumer buffer (Consumer only).
      */
     const T& get_read_buffer() const {
@@ -172,6 +211,7 @@ private:
     int producer_index_;
     int consumer_index_;
     std::atomic<bool> dirty_;
+    std::atomic<int64_t> drop_count_{0};
 };
 
 // --- Type aliases for all pipeline queues ---

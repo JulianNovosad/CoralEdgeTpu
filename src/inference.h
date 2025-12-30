@@ -18,6 +18,7 @@
 
 #include "pipeline_structs.h" // Use the new central header for queue types and data structures
 #include "buffer_pool.h"      // For BufferPool
+#include "timing.h"           // Authoritative timing
 
 // WORKAROUND FOR EDGE TPU DELEGATE BUG:
 // There appears to be a memory corruption issue in the Edge TPU delegate where it 
@@ -147,8 +148,20 @@ public:
     mutable std::atomic<long long> avg_inference_time_us_{0}; ///< Average inference time in microseconds
     
     // Public getters for drop counters to be used by Monitor
-    int64_t get_overlay_queue_drop_count() const { return overlay_queue_drop_count_.load(); }
+    int64_t get_overlay_queue_drop_count() const { 
+        if (detection_results_for_overlay_buffer_) {
+            return detection_results_for_overlay_buffer_->get_drop_count();
+        }
+        return overlay_queue_drop_count_.load(); 
+    }
     int64_t get_logic_queue_drop_count() const { return logic_queue_drop_count_.load(); }
+    
+    bool has_overlay_pending() const {
+        if (detection_results_for_overlay_buffer_) {
+            return detection_results_for_overlay_buffer_->has_pending();
+        }
+        return false;
+    }
     
     // Public increment methods for drop counters to be used when draining queues
     void increment_logic_queue_drop_count() { logic_queue_drop_count_.fetch_add(1); }

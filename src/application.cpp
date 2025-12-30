@@ -2,6 +2,7 @@
 #include "pipeline_structs.h"
 #include "util_logging.h"
 #include "queue_monitor.h"
+#include "timing.h"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -12,6 +13,7 @@
 #include <fcntl.h>
 #include <sys/wait.h>  // for waitpid
 #include <cstring>
+#include <future>
 #include <termios.h>  // for terminal settings
 
 // External declaration for terminal settings
@@ -21,10 +23,49 @@ extern struct termios original_termios;
 std::vector<std::string> load_labels(const std::string& path);
 extern std::atomic<bool> shutdown_requested; // Now managed by ApplicationSupervisor
 
+// Utility function for timed thread joins
+static bool timed_join_thread(std::thread& thread, const std::string& thread_name, std::chrono::seconds timeout = std::chrono::seconds(3)) {
+    if (!thread.joinable()) {
+        return true;
+    }
+    
+    std::promise<bool> promise;
+    std::future<bool> future = promise.get_future();
+    
+    std::thread timer_thread([&thread, &promise, timeout, thread_name]() {
+        std::this_thread::sleep_for(timeout);
+        if (thread.joinable()) {
+            APP_LOG_WARNING("Thread '" + thread_name + "' did not join within timeout, forcing exit");
+            promise.set_value(false);
+        } else {
+            promise.set_value(true);
+        }
+    });
+    
+    // Wait for either the thread to join or timeout
+    if (future.wait_for(std::chrono::milliseconds(100)) == std::future_status::timeout) {
+        // If timeout, the timer thread will handle the timeout
+        timer_thread.join();
+        return false;
+    }
+    
+    bool result = future.get();
+    if (result) {
+        thread.join();
+    }
+    if (timer_thread.joinable()) {
+        timer_thread.join();
+    }
+    return result;
+}
+
 Application::Application(int argc, char** argv) : argc_(argc), argv_(argv), recovery_running_(true), recovery_enabled_(false) {
     // Save original terminal settings
     tcgetattr(STDIN_FILENO, &original_termios);
     
+    // Set up signal handlers to restore terminal settings on exit
+    supervisor_.setup_signal_handlers();
+
     // Check for reduced resolution flag in command line arguments
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--reduced-resolution" || std::string(argv[i]) == "-rr") {
@@ -39,14 +80,12 @@ Application::Application(int argc, char** argv) : argc_(argc), argv_(argv), reco
 Application::~Application() {
     // Stop the recovery thread
     recovery_running_ = false;
-    if (recovery_thread_.joinable()) {
-        recovery_thread_.join();
+    if (!timed_join_thread(recovery_thread_, "RecoveryThread", std::chrono::seconds(3))) {
+        APP_LOG_ERROR("Recovery thread failed to join, forcing exit");
     }
     
+    // ApplicationSupervisor handles the graceful shutdown of all registered modules
     supervisor_.initiate_shutdown();
-    
-    // Perform post-shutdown cleanup
-    post_shutdown_cleanup();
     
     // Perform final cleanup of any remaining processes
     supervisor_.final_cleanup();
@@ -56,19 +95,8 @@ Application::~Application() {
 }
 
 void Application::post_shutdown_cleanup() {
-    APP_LOG_INFO("Performing post-shutdown cleanup...");
-    
-    // Ensure all threads are properly stopped and joined
-    // This is already handled by the supervisor_.initiate_shutdown() call
-    
-    // Release camera and Edge TPU delegates
-    release_edge_tpu_resources();
-    release_camera_resources();
-    
-    // Close telemetry sockets and remove temporary files
-    clear_telemetry_sockets();
-    
-    APP_LOG_INFO("Post-shutdown cleanup completed.");
+    // This method is now effectively empty as cleanup is handled by modules and supervisor
+    APP_LOG_INFO("Post-shutdown cleanup phase completed.");
 }
 
 void Application::setup_pools_and_queues() {
@@ -139,6 +167,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             config_loader_.get_tpu_stream_pixel_format(), // Pass configured format
             inf_w, inf_h); // Pass target width/height for TPU processing
         image_processor_->set_skip_factor(1); // Process every frame (Mandate: Zero Skip)
+        image_processor_->set_application_ref(this);
         APP_LOG_INFO("ImageProcessor created.");
 
         APP_LOG_INFO("Creating ImageProcessor for visualization with overlays...");
@@ -354,9 +383,9 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("LogicModule", [&]() { logic_module_->stop(); });
     supervisor_.register_module_stop("OrientationSensor", [&]() { orientation_sensor_->stop(); });
     supervisor_.register_module_stop("CameraCapture", [&]() { primary_camera_->stop(); });
-    supervisor_.register_module_stop("H264Encoder", [&]() { h264_encoder_->stop(); }); // Register H264 encoder for shutdown
-    supervisor_.register_module_stop("ImageProcessor", [&]() { image_processor_->stop(); }); // Register ImageProcessor for TPU inference
-    supervisor_.register_module_stop("VisualizationProcessor", [&]() { visualization_processor_->stop(); }); // Register VisualizationProcessor for shutdown
+    supervisor_.register_module_stop("H264Encoder", [&]() { h264_encoder_->stop(); }); 
+    supervisor_.register_module_stop("ImageProcessor", [&]() { image_processor_->stop(); }); 
+    supervisor_.register_module_stop("VisualizationProcessor", [&]() { visualization_processor_->stop(); }); 
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
     supervisor_.register_module_stop("KeyboardMonitor", [&]() { keyboard_monitor_->stop(); });
     // supervisor_.register_module_stop("HttpStreamer", [&]() { http_streamer_->stop(); }); // Register HTTP streamer for shutdown
@@ -367,14 +396,14 @@ void Application::register_shutdown_handlers() {
     }); // Register UDP streamer for shutdown
     supervisor_.register_module_stop("OverlayConsumer", [&]() {
         overlay_consumer_running_ = false;
-        if (overlay_consumer_thread_.joinable()) {
-            overlay_consumer_thread_.join();
+        if (!timed_join_thread(overlay_consumer_thread_, "OverlayConsumerThread", std::chrono::seconds(3))) {
+            APP_LOG_ERROR("Overlay consumer thread failed to join within timeout");
         }
     });
     supervisor_.register_module_stop("H264Consumer", [&]() {
         h264_consumer_running_ = false;
-        if (h264_consumer_thread_.joinable()) {
-            h264_consumer_thread_.join();
+        if (!timed_join_thread(h264_consumer_thread_, "H264ConsumerThread", std::chrono::seconds(3))) {
+            APP_LOG_ERROR("H264 consumer thread failed to join within timeout");
         }
     });
     supervisor_.register_module_stop("Monitor", [&]() { monitor_->stop(); });
@@ -906,31 +935,6 @@ void Application::h264_queue_consumer_thread_func() {
 int Application::run() {
     APP_LOG_INFO("Application starting...");
     
-    // Start a shutdown watchdog thread to force exit if stuck during startup/shutdown
-    // This ensures that commands like 'timeout' work even if the main thread is blocked
-    std::thread shutdown_watchdog([]() {
-        // Wait for shutdown signal
-        while (!shutdown_requested.load(std::memory_order_acquire)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        
-        // Signal received, waiting for graceful shutdown
-        // Use raw cout/cerr to avoid Logger dependency issues during shutdown
-        std::cout << "Watchdog: Shutdown signal received. Waiting 5s for graceful shutdown..." << std::endl;
-        
-        // Wait 5 seconds for graceful shutdown
-        for (int i = 0; i < 50; i++) { 
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        
-        std::cerr << "Watchdog: Shutdown timed out (blocked main thread). Forcing exit." << std::endl;
-        _exit(1);
-    });
-    shutdown_watchdog.detach();
-    
-    // Set up signal handlers to restore terminal settings on exit
-    supervisor_.setup_signal_handlers();
-    
     // Pre-launch cleanup to ensure a clean state
     pre_launch_cleanup();
     
@@ -1011,21 +1015,21 @@ int Application::run() {
     
     // Stop the recovery thread
     recovery_running_ = false;
-    if (recovery_thread_.joinable()) {
-        recovery_thread_.join();
+    if (!timed_join_thread(recovery_thread_, "RecoveryThread", std::chrono::seconds(3))) {
+        APP_LOG_ERROR("Recovery thread failed to join, forcing exit");
     }
     
     supervisor_.initiate_shutdown();
     
     // Join the consumer threads
     overlay_consumer_running_ = false;
-    if (overlay_consumer_thread_.joinable()) {
-        overlay_consumer_thread_.join();
+    if (!timed_join_thread(overlay_consumer_thread_, "OverlayConsumerThread", std::chrono::seconds(3))) {
+        APP_LOG_ERROR("Overlay consumer thread failed to join within timeout");
     }
     
     h264_consumer_running_ = false;
-    if (h264_consumer_thread_.joinable()) {
-        h264_consumer_thread_.join();
+    if (!timed_join_thread(h264_consumer_thread_, "H264ConsumerThread", std::chrono::seconds(3))) {
+        APP_LOG_ERROR("H264 consumer thread failed to join within timeout");
     }
     
     // Perform post-shutdown cleanup
@@ -1447,13 +1451,8 @@ void Application::run_debugging_pipeline() {
     APP_LOG_INFO("Completed debugging pipeline test for 30 seconds.");
     
     // Join the monitoring threads
-    if (queue_monitor_thread.joinable()) {
-        queue_monitor_thread.join();
-    }
-    
-    if (pool_monitor_thread.joinable()) {
-        pool_monitor_thread.join();
-    }
+    timed_join_thread(queue_monitor_thread, "QueueMonitorThread", std::chrono::seconds(1));
+    timed_join_thread(pool_monitor_thread, "PoolMonitorThread", std::chrono::seconds(1));
 }
 
 // Detector supervision implementation

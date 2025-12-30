@@ -5,6 +5,7 @@
 #include "orientation_sensor.h"
 #include "config_loader.h" // Include de config loader
 #include "pca9685_controller.h" // PCA9685 LED controller
+#include "timing.h"         // Authoritative timing
 #include <chrono>
 #include <thread>
 #include <vector>
@@ -89,6 +90,15 @@ struct Uncertainty {
 };
 
 /**
+ * @brief Enumeration for the Fire-Control Interlock status.
+ */
+enum InterlockStatus {
+    INTERLOCK_GATE_FAIL,
+    INTERLOCK_GATE_PASS_READY,
+    INTERLOCK_GATE_PASS_COOLDOWN
+};
+
+/**
  * @brief Representeert een enkel gevolgd object.
  */
 struct TrackedObject {
@@ -98,8 +108,9 @@ struct TrackedObject {
     Vec3 position; // Gebruikt nu Vec3
     Vec3 velocity; // Gebruikt nu Vec3
     Vec3 acceleration; // Nieuw: versnelling voor betere voorspellingen
+    float prev_distance = 0.0f; // Track D_{n-1} for spatial gating
 
-    std::chrono::high_resolution_clock::time_point last_update_time;
+    std::chrono::steady_clock::time_point last_update_time;
     int hit_streak;
     int missed_frames;
     bool associated_this_frame;
@@ -117,7 +128,8 @@ struct TrackedObject {
           position({initial_x, initial_y, initial_distance}), // Init positie
           velocity({0.0f, 0.0f, 0.0f}),
           acceleration({0.0f, 0.0f, 0.0f}),
-          last_update_time(detection.timestamp),
+          prev_distance(initial_distance),
+          last_update_time(std::chrono::steady_clock::now()),
           hit_streak(1), missed_frames(0), associated_this_frame(true),
           position_uncertainty({0.1f, 0.1f, 0.1f}), // Initiële onzekerheid
           velocity_uncertainty({0.1f, 0.1f, 0.1f}),
@@ -173,6 +185,13 @@ private:
 };
 
 
+enum class ServoState {
+    IDLE,
+    ENGAGED,    // Forward stroke
+    RETRACTING, // Backward stroke
+    COOLDOWN    // Waiting for 300ms
+};
+
 /**
  * @brief De centrale logica-module.
  */
@@ -191,7 +210,7 @@ private:
     void process(const std::vector<DetectionResult>& detections);
     void update_object_tracks(const std::vector<DetectionResult>& detections);
     SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, const Uncertainty& uncertainty, std::string& safety_status_message);
-    void issue_servo_commands(float target_x, float target_y, float target_z, float confidence);
+    void issue_servo_commands(float target_x, float target_y, float target_z, float confidence, uint64_t t_capture);
     void execute_servo_command(float target_x, float target_y, float target_z, float confidence); // New function to actually execute servo commands
     float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
     void perform_sensor_fusion();
@@ -204,15 +223,23 @@ private:
     float estimate_target_distance(const DetectionResult& detection);
     float calculate_impact_point_distance(const Vec3& impact_point, const Vec3& crosshair_point);
     
-    // Removed incorrect function:
-    // float calculate_angular_error_degrees(const Vec3& impact_point, const Vec3& crosshair_point, float target_distance);
+    // Logic Execution Tracking
+    Vec3 last_target_pos_ = {0.0f, 0.0f, 0.0f};
+    bool last_hit_scan_ = false;
+
+    // Telemetry Ring Buffer (Black Box)
+    static constexpr size_t TELEMETRY_BUFFER_SIZE = 10000;
+    std::array<TelemetryFrame, TELEMETRY_BUFFER_SIZE> telemetry_buffer_;
+    std::atomic<size_t> telemetry_idx_{0};
+    std::thread telemetry_worker_thread_;
+    void telemetry_worker_thread_func();
 
     DetectionResultsQueue& detection_input_queue_;
     std::atomic<bool> running_ = false;
     
     // Freshness indicators
 public:
-    std::atomic<long long> last_logic_timestamp_{0}; ///< Timestamp of the last logic processing
+    std::atomic<int64_t> last_logic_timestamp_ns_{0}; ///< Nanoseconds since steady_clock epoch
     std::atomic<int> logic_rate_{0}; ///< Current logic processing rate
 private:
     std::thread worker_thread_;
@@ -249,27 +276,28 @@ private:
     // Application reference for updating counters
     class Application* app_ref_ = nullptr;
     
-    // Servo control variables for thread safety
-    float servo_position_ = 0.0f;
-    bool servo_direction_ = true;
-    std::chrono::steady_clock::time_point last_direction_change_;
-    mutable std::mutex last_direction_change_mutex_;  // Mutex for last_direction_change_
+    // Interlock Gates and Timing (Deterministic)
+    static constexpr uint64_t MAX_FRAME_BUDGET_RAW_MS{25}; // Photon-to-PWM 25ms hard limit
+    static constexpr uint64_t ACTUATION_DWELL_MS{50};    // 50ms dwell for stroke
+    static constexpr uint64_t ACTUATION_COOLDOWN_MS{300}; // 300ms hard cooldown
     
+    // Servo State Machine
+    ServoState servo_state_ = ServoState::IDLE;
+    uint64_t state_start_ms_ = 0;
+
     // Servo command queue for decoupled actuation
     struct ServoCommand {
         float target_x;
         float target_y;
         float target_z;
         float confidence;
-        std::chrono::steady_clock::time_point timestamp;
+        uint64_t t_capture; // Frame capture time for latency audit
     };
     std::queue<ServoCommand> servo_command_queue_;
     std::mutex servo_queue_mutex_;
     std::thread servo_worker_thread_;
     std::atomic<bool> servo_worker_running_ = false;
-    
-    
-    
+
     // Per-class distance tracking for multi-class smoothing
     static const size_t CLASS_DISTANCE_WINDOW_SIZE = 10;
     struct ClassDistanceHistory {

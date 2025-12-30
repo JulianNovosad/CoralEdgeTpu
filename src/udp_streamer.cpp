@@ -34,19 +34,18 @@ bool UDPStreamer::start() {
         g_main_loop_run(loop_);
     });
     
-    APP_LOG_INFO("UDPStreamer: Started TCP stream on port 5004");
+    APP_LOG_INFO("UDPStreamer: Started UDP stream on port 5000");
     return true;
 }
 
 void UDPStreamer::setup_pipeline() {
-    // Pipeline: appsrc (raw) -> x264enc -> h264parse -> mpegtsmux -> tcpserversink
+    // Pipeline: appsrc (h264) -> h264parse -> mpegtsmux -> udpsink
     std::string pipeline_string = 
         "appsrc name=src is-live=true format=time ! "
         "queue leaky=downstream max-size-buffers=2 ! "
-        "x264enc tune=zerolatency speed-preset=ultrafast key-int-max=30 byte-stream=true ! "
         "h264parse ! "
         "mpegtsmux ! "
-        "tcpserversink host=0.0.0.0 port=5000 sync=false";
+        "udpsink host=192.168.178.255 port=5000 sync=false";
 
     APP_LOG_INFO("UDPStreamer: Pipeline: " + pipeline_string);
 
@@ -67,9 +66,9 @@ void UDPStreamer::setup_pipeline() {
             return;
         }
 
-        // Set caps on appsrc to indicate raw I420 video
+        // Set caps on appsrc to indicate H.264 video
         std::stringstream caps_ss;
-        caps_ss << "video/x-raw,format=I420,width=" << width_ << ",height=" << height_ << ",framerate=" << (int)fps_ << "/1";
+        caps_ss << "video/x-h264,width=" << width_ << ",height=" << height_ << ",framerate=" << (int)fps_ << "/1,stream-format=byte-stream,alignment=au";
         GstCaps* caps = gst_caps_from_string(caps_ss.str().c_str());
         gst_app_src_set_caps(GST_APP_SRC(appsrc_), caps);
         gst_caps_unref(caps);
@@ -78,7 +77,7 @@ void UDPStreamer::setup_pipeline() {
     // Create main loop
     loop_ = g_main_loop_new(NULL, FALSE);
     
-    APP_LOG_INFO("UDPStreamer: Pipeline configured successfully (Raw -> x264enc -> TCP)");
+    APP_LOG_INFO("UDPStreamer: Pipeline configured successfully (Raw -> x264enc -> UDP)");
 }
 
 void UDPStreamer::stop() {

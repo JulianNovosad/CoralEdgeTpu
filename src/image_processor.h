@@ -8,6 +8,9 @@
 
 #include "pipeline_structs.h"
 #include <libcamera/pixel_format.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <map>
 
 class ImageProcessor {
 public:
@@ -63,6 +66,25 @@ public:
         // Caching for sticky detections
         DetectionResults last_detections_;
         std::chrono::steady_clock::time_point last_detection_time_;
+
+        // Zero-Copy FD Cache
+        struct MappedBuffer {
+            void* start;
+            size_t length;
+            int internal_fd; // Duplicated FD to ensure ownership and validity
+        };
+        
+        struct BufferKey {
+            dev_t dev;
+            ino_t ino;
+            bool operator<(const BufferKey& other) const {
+                if (dev != other.dev) return dev < other.dev;
+                return ino < other.ino;
+            }
+        };
+
+        std::map<BufferKey, MappedBuffer> fd_map_; 
+        std::mutex fd_map_mutex_;
 
         // Application reference for updating counters
         class Application* app_ref_ = nullptr;

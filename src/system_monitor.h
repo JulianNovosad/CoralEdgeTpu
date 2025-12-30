@@ -5,6 +5,8 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <mutex>
+#include <condition_variable>
 
 #include "util_logging.h"
 
@@ -31,6 +33,8 @@ private:
     float read_cpu_usage();    // Returns CPU usage percentage
 
     std::atomic<bool> running_ = false;
+    std::mutex stop_mutex_;
+    std::condition_variable stop_cv_;
     std::thread worker_thread_;
     std::chrono::seconds interval_s_;
 

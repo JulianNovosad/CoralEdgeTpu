@@ -66,7 +66,8 @@ public:
 private:
     std::vector<std::pair<std::string, std::function<void()>>> registered_modules_;
     std::set<pid_t> child_pids_;
-    static bool shutdown_in_progress_;
+    std::atomic<bool> shutdown_in_progress_{false};
+    std::atomic<bool> cleanup_completed_{false};
 };
 
 #endif // APPLICATION_SUPERVISOR_H

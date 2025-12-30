@@ -20,8 +20,12 @@ struct PooledBuffer {
     std::vector<T> data;
     // Add any other metadata you need, e.g., size, timestamp.
     size_t size = 0;
+    bool valid = true;                 // Heartbeat validity flag
     // Timestamp for video frames to enable proper PTS calculation
     long long timestamp_epoch_ms = 0;  // Timestamp in milliseconds since epoch
+    uint64_t t_capture_raw_ms = 0;     // Deterministic capture time
+    uint64_t t_inf_start = 0;          // Inference start
+    uint64_t t_inf_end = 0;            // Inference end
     int frame_id = -1;                 // Frame ID to track frame sequence
     int64_t encoder_frame_count = -1;  // Frame count from encoder for PTS calculation
     

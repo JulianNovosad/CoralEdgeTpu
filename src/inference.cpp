@@ -161,7 +161,7 @@ void InferenceEngine::stop() {
     if (running_.exchange(false)) {
         APP_LOG_INFO("Stopping InferenceEngine...");
         // Push dummy data to wake up any threads blocked on pop operations
-        ImageData dummy_data(0, -1); // Initialize with default values
+        ImageData dummy_data(std::chrono::steady_clock::now(), -1); // Initialize with default values
         dummy_data.buffer = nullptr; // Mark as dummy
         dummy_data.width = 0;
         dummy_data.height = 0;
@@ -245,15 +245,72 @@ void InferenceEngine::worker_thread_func() {
     int inference_count = 0;
     const int RECREATE_INTERVAL = 1000000; // Disable periodic resets (recreate only on error)
     
-    ImageData input_image;
+    // RAII FrameAccountingGuard to ensure P=C+D accounting
+    struct FrameAccountingGuard {
+        InferenceEngine* engine;
+        bool inference_produced = false;
+        
+        FrameAccountingGuard(InferenceEngine* e) : engine(e) {
+            // Only increment consumed counter for valid items popped from queue
+            // to maintain synchronicity with producer's count (poison pills not counted)
+            engine->frames_consumed_.fetch_add(1);
+            if (engine->app_ref_) {
+                engine->app_ref_->increment_camera_frames_consumed_by_inference();
+            }
+        }
+        
+        ~FrameAccountingGuard() {
+            // Account for inference results: either produced or dropped
+            if (inference_produced) {
+                if (engine->app_ref_) {
+                    engine->app_ref_->increment_inference_results_produced(1);
+                }
+                engine->results_produced_.fetch_add(1);
+            } else {
+                // Try to push empty results to maintain heartbeat for P=C+D with downstream consumers
+                auto empty_results = engine->detection_result_pool_->acquire();
+                if (empty_results) {
+                    empty_results->size = 0;
+                    empty_results->valid = false;
+                    empty_results->t_inf_start = get_time_raw_ms();
+                    empty_results->t_inf_end = empty_results->t_inf_start;
+                    
+                    // Push to both logic and overlay to maintain sync
+                    engine->detection_results_for_logic_queue_.push(empty_results);
+                    if (engine->detection_results_for_overlay_buffer_) {
+                         DetectionResults& overlay_results = engine->detection_results_for_overlay_buffer_->get_write_buffer();
+                         overlay_results.clear();
+                         engine->detection_results_for_overlay_buffer_->commit_write();
+                    }
+                    
+                    // Since we pushed a (heartbeat) result, this frame is PRODUCED, not dropped
+                    if (engine->app_ref_) {
+                        engine->app_ref_->increment_inference_results_produced(1);
+                    }
+                    engine->results_produced_.fetch_add(1);
+                } else {
+                    // Pool exhausted, this is a true drop
+                    if (engine->app_ref_) {
+                        engine->app_ref_->increment_inference_results_dropped();
+                    }
+                    engine->logic_queue_drop_count_.fetch_add(1);
+                    engine->overlay_queue_drop_count_.fetch_add(1);
+                }
+            }
+        }
+    };
+
     while (running_) {
+        ImageData input_image;
         // Use blocking wait_pop instead of polling to eliminate micro-stutter
         if (input_queue_.wait_pop(input_image, std::chrono::milliseconds(10))) {
-            // CRITICAL: Always ensure buffer is released if it's a dummy or if interpreter is null
+            // Check for poison pill first before creating guard to avoid counting it
             if (!input_image.buffer) {
                 if (!running_) return;
                 continue;
             }
+            
+            FrameAccountingGuard guard(this);
 
             if (!interpreter) {
                 // No interpreter available, just release the buffer and continue
@@ -261,12 +318,7 @@ void InferenceEngine::worker_thread_func() {
                 continue;
             }
             
-            frames_consumed_.fetch_add(1);
-            if (app_ref_) {
-                app_ref_->increment_camera_frames_consumed_by_inference();
-            }
-            
-            long long call_ts = input_image.timestamp_epoch_ms;
+            long long call_ts = input_image.t_capture_raw_ms;
 
             // 2. Set input tensor
             try {
@@ -278,13 +330,13 @@ void InferenceEngine::worker_thread_func() {
             input_image.buffer.reset();
             
             // 3. Invoke interpreter
-            auto invoke_start_time = std::chrono::high_resolution_clock::now();
+            auto invoke_start_time = std::chrono::steady_clock::now();
             TfLiteStatus invoke_status;
             {
                 std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
                 invoke_status = interpreter->Invoke();
             }
-            auto invoke_end_time = std::chrono::high_resolution_clock::now();
+            auto invoke_end_time = std::chrono::steady_clock::now();
             
             if (invoke_status != kTfLiteOk) {
                 // Recreate logic remains but with zero hot-path logging
@@ -296,12 +348,12 @@ void InferenceEngine::worker_thread_func() {
                     interpreter = create_interpreter();
                     if (!interpreter) continue;
                     
-                    invoke_start_time = std::chrono::high_resolution_clock::now();
+                    invoke_start_time = std::chrono::steady_clock::now();
                     {
                         std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
                         invoke_status = interpreter->Invoke();
                     }
-                    invoke_end_time = std::chrono::high_resolution_clock::now();
+                    invoke_end_time = std::chrono::steady_clock::now();
                     
                     if (invoke_status == kTfLiteOk) {
                         recreate_success = true;
@@ -349,20 +401,44 @@ void InferenceEngine::worker_thread_func() {
             // 4. Get output tensor
             auto results_buffer = get_output_tensor(interpreter.get(), input_image);
 
-            // 5. Push results to output buffers/queues
-            if (detection_results_for_overlay_buffer_) {
-                DetectionResults& overlay_results = detection_results_for_overlay_buffer_->get_write_buffer();
-                if (results_buffer && results_buffer->size > 0) {
-                    overlay_results.assign(results_buffer->data.data(), results_buffer->data.data() + results_buffer->size);
-                }
-                else {
-                    overlay_results.clear();
-                }
-                detection_results_for_overlay_buffer_->commit_write();
-            }
+            // Telemetry Logging
+            CsvLogEntry entry;
+            entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            
+            // Reconstruct capture epoch time
+            auto now_steady = std::chrono::steady_clock::now();
+            auto since_capture = std::chrono::duration_cast<std::chrono::milliseconds>(now_steady - input_image.capture_time).count();
+            entry.call_ts_epoch_ms = entry.produced_ts_epoch_ms - since_capture;
+
+            copy_to_array(entry.module, "Inference");
+            copy_to_array(entry.event, "inference_done");
+            entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+            entry.cam_frame_id = input_image.frame_id;
+            entry.tpu_inference_ms = static_cast<float>(duration_us) / 1000.0f;
+            entry.tpu_temp_c = tpu_temperature_.load();
 
             if (results_buffer && results_buffer->size > 0) {
+                 const auto& best_det = results_buffer->data[0];
+                 entry.tpu_model_score = best_det.score;
+                 entry.tpu_class_id = best_det.class_id;
+            }
+            Logger::getInstance().log_csv(entry);
+
+            // 5. Push results to output buffers/queues
+            if (results_buffer) {
+                if (detection_results_for_overlay_buffer_) {
+                    DetectionResults& overlay_results = detection_results_for_overlay_buffer_->get_write_buffer();
+                    if (results_buffer->size > 0) {
+                        overlay_results.assign(results_buffer->data.data(), results_buffer->data.data() + results_buffer->size);
+                    }
+                    else {
+                        overlay_results.clear();
+                    }
+                    detection_results_for_overlay_buffer_->commit_write();
+                }
+                
                 detection_results_for_logic_queue_.push(results_buffer);
+                guard.inference_produced = true;  // Mark as successfully produced (even if size=0, we still produced a result)
             }
         }
     }
@@ -476,7 +552,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
 
     size_t num_outputs = interpreter->outputs().size();
     std::vector<DetectionResult> raw_detections;
-    auto timestamp = std::chrono::high_resolution_clock::now();
+    auto timestamp = std::chrono::steady_clock::now();
 
     // -------------------------------------------------------------------------
     // STRATEGY A: Standard SSD MobileNet (4 outputs)
@@ -721,11 +797,6 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
         results_buffer->data[result_count++] = det;
     }
     results_buffer->size = result_count;
-
-    if (result_count > 0) {
-        results_produced_.fetch_add(result_count);
-        if (app_ref_) app_ref_->increment_inference_results_produced(result_count);
-    }
 
     return results_buffer;
 }

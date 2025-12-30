@@ -15,7 +15,7 @@ OrientationSensor::OrientationSensor(unsigned short yaw_port, unsigned short pit
     latest_orientation_data_.yaw = 0.0f;
     latest_orientation_data_.pitch = 0.0f;
     latest_orientation_data_.roll = 0.0f;
-    latest_orientation_data_.timestamp = std::chrono::high_resolution_clock::now();
+    latest_orientation_data_.timestamp = std::chrono::steady_clock::now();
 }
 
 OrientationSensor::~OrientationSensor() {
@@ -147,7 +147,7 @@ void OrientationSensor::worker_thread_func() {
             // Update timestamp if any data was received
             if (data_updated) {
                 std::lock_guard<std::mutex> lock(orientation_data_mutex_);
-                latest_orientation_data_.timestamp = std::chrono::high_resolution_clock::now();
+                latest_orientation_data_.timestamp = std::chrono::steady_clock::now();
                 APP_LOG_DEBUG("Orientation data updated - Yaw: " + std::to_string(latest_orientation_data_.yaw) +
                               ", Pitch: " + std::to_string(latest_orientation_data_.pitch) +
                               ", Roll: " + std::to_string(latest_orientation_data_.roll));

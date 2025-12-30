@@ -41,6 +41,11 @@ struct SubsystemLogConfig {
 
 // Forward declare CsvLogger to avoid circular dependency
 class CsvLogger;
+class ConfigLoader;
+struct TelemetryFrame;
+
+// Telemetry CSV Janitor
+void write_telemetry_trace(const TelemetryFrame* buffer, size_t start_idx, size_t end_idx);
 
 // Function to set thread name (for easier debugging)
 void set_thread_name(const std::string& name);
@@ -84,121 +89,70 @@ struct LogEntry {
 };
 
 /**
- * @brief Structure to hold a single structured CSV log entry for performance metrics.
+ * @brief Unified "Wide Row" CSV Log Entry Schema.
  *
- * Each entry includes module, stage, and various performance statistics.
+ * Populates Common fields for every event. Subsystem fields are sparsely populated (defaults to -1).
  */
 struct CsvLogEntry {
-    long long produced_ts_epoch_ms; ///< Timestamp when this log line was produced (epoch ms, UTC)
-    std::array<char, 32> module;    ///< Module name: camera|tpu|encoder|logic|sysmon
-    long long thread_id;            ///< Numeric OS thread id (TID)
-    std::array<char, 64> event;     ///< Short label (e.g. frame_captured, inference_done, encode_done)
-    long long call_ts_epoch_ms;     ///< Timestamp when the module was *called/issued* to start work (epoch ms, UTC)
+    // --- A. Common (System & Time) ---
+    long long produced_ts_epoch_ms = -1;  ///< Wall clock time when log was created
+    long long call_ts_epoch_ms = -1;      ///< Trigger time (e.g. frame capture time)
+    std::array<char, 32> module = {};     ///< camera|tpu|logic|encoder|sysmon
+    std::array<char, 64> event = {};      ///< frame_captured, inference_done, etc.
+    long long thread_id = -1;             ///< OS Thread ID
 
-    // Camera-specific metrics
-    long long camera_frame_id = -1;
-    int camera_width = -1;
-    int camera_height = -1;
-    float camera_exposure_ms = -1.0f;
-    float camera_copy_time_ms = -1.0f;
+    // --- B. Camera & ISP (Input) ---
+    long long cam_frame_id = -1;
+    float cam_exposure_ms = -1.0f;
+    float cam_isp_latency_ms = -1.0f;     ///< Copy/Conversion time
+    float cam_buffer_usage_percent = -1.0f;
 
-    // TPU-specific metrics
+    // --- C. Inference (TPU) ---
     float tpu_inference_ms = -1.0f;
-    int tpu_input_w = -1;
-    int tpu_input_h = -1;
     float tpu_temp_c = -1.0f;
+    float tpu_model_score = -1.0f;        ///< Confidence
+    int tpu_class_id = -1;
 
-    // Encoder-specific metrics
-    float encoder_encode_ms = -1.0f;
-    long long encoder_total_encoded_frames = -1;
-    float encoder_average_fps = -1.0f;
+    // --- D. Logic & Ballistics ---
+    float logic_target_dist_m = -1.0f;
+    float logic_ballistic_drop_m = -1.0f;
+    float logic_windage_m = -1.0f;
+    float logic_servo_x_cmd = -1.0f;      ///< Normalized 0.0-1.0
+    float logic_servo_y_cmd = -1.0f;      ///< Normalized 0.0-1.0
+    float logic_solution_time_ms = -1.0f;
 
-    // Logic-specific metrics (placeholders for now)
-    float logic_metric_ballistics = -1.0f;
-    float logic_metric_hit_scan = -1.0f;
-    float logic_metric_servo_actuation = -1.0f;
+    // --- E. Encoder (Output) ---
+    float enc_process_ms = -1.0f;
+    float enc_bitrate_mbps = -1.0f;
+    int enc_queue_depth = -1;
 
-    // System Monitor-specific metrics
-    float sysmon_cpu_temp_c = -1.0f;
-    float sysmon_cpu_usage_percent = -1.0f;
-    float sysmon_mem_usage_percent = -1.0f;
+    // --- F. System Health ---
+    float sys_cpu_temp_c = -1.0f;
+    float sys_cpu_usage_pct = -1.0f;
+    float sys_ram_usage_pct = -1.0f;
+    float sys_voltage_v = -1.0f;          ///< Optional
 
-    // Generic Performance Metrics (for PerformanceMetrics event type)
-    float p50_latency_ms = -1.0f;
-    float p95_latency_ms = -1.0f;
-    float p99_latency_ms = -1.0f;
-    float average_fps = -1.0f;
-    long long total_frames_processed_or_inferences = -1;
-    float average_latency_ms = -1.0f;
-
-    std::array<char, 1024> details; ///< Optional: Any additional details as a string (e.g., error messages, JSON if necessary for very complex data)
-
-    CsvLogEntry() = default; // Default constructor
-
-    // Constructor to safely copy string parts
-    CsvLogEntry(long long ts_prod, const std::string& mod, long long tid, const std::string& evt, long long ts_call)
-        : produced_ts_epoch_ms(ts_prod), thread_id(tid), call_ts_epoch_ms(ts_call) {
-        strncpy(module.data(), mod.c_str(), module.size() - 1);
-        module[module.size() - 1] = '\0';
-        strncpy(event.data(), evt.c_str(), event.size() - 1);
-        event[event.size() - 1] = '\0';
-        details[0] = '\0'; // Initialize details to empty string
-    }
-
-    // Full constructor for convenience (can be extended as needed)
-    CsvLogEntry(long long ts_prod, const std::string& mod, long long tid, const std::string& evt, long long ts_call,
-                long long cam_frame_id, int cam_w, int cam_h, float cam_exp_ms, float cam_copy_ms,
-                float tpu_inf_ms, int tpu_in_w, int tpu_in_h, float tpu_temp,
-                float enc_ms, long long enc_frames, float enc_fps,
-                float logic_ballistics, float logic_hit_scan, float logic_servo,
-                float sysmon_cpu_temp, float sysmon_cpu_usage, float sysmon_mem_usage,
-                float p50_lat, float p95_lat, float p99_lat, float avg_fps, long long total_frames, float avg_lat,
-                const std::string& det)
-        : produced_ts_epoch_ms(ts_prod), thread_id(tid), call_ts_epoch_ms(ts_call),
-          camera_frame_id(cam_frame_id), camera_width(cam_w), camera_height(cam_h),
-          camera_exposure_ms(cam_exp_ms), camera_copy_time_ms(cam_copy_ms),
-          tpu_inference_ms(tpu_inf_ms), tpu_input_w(tpu_in_w), tpu_input_h(tpu_in_h),
-          tpu_temp_c(tpu_temp), encoder_encode_ms(enc_ms), encoder_total_encoded_frames(enc_frames),
-          encoder_average_fps(enc_fps), logic_metric_ballistics(logic_ballistics),
-          logic_metric_hit_scan(logic_hit_scan), logic_metric_servo_actuation(logic_servo),
-          sysmon_cpu_temp_c(sysmon_cpu_temp), sysmon_cpu_usage_percent(sysmon_cpu_usage),
-          sysmon_mem_usage_percent(sysmon_mem_usage), p50_latency_ms(p50_lat),
-          p95_latency_ms(p95_lat), p99_latency_ms(p99_lat), average_fps(avg_fps),
-          total_frames_processed_or_inferences(total_frames), average_latency_ms(avg_lat) {
-        strncpy(module.data(), mod.c_str(), module.size() - 1);
-        module[module.size() - 1] = '\0';
-        strncpy(event.data(), evt.c_str(), event.size() - 1);
-        event[event.size() - 1] = '\0';
-        strncpy(details.data(), det.c_str(), details.size() - 1);
-        details[details.size() - 1] = '\0';
-    }
+    CsvLogEntry() = default; // Default constructor sets defaults
 };
 
 /**
- * @brief Manages a single CSV log file for a specific module, including rotation.
+ * @brief Manages the single Unified Session Log file.
  */
 class CsvLogger {
 public:
-    CsvLogger(const std::string& module_name, const std::string& log_dir, int max_log_files);
+    CsvLogger(const std::string& log_file_path);
     ~CsvLogger();
 
     void write_header();
     void write_entry(const CsvLogEntry& entry);
-    void rotate_log_file();
     void flush_buffer_to_disk();
 
-    int get_current_log_minute() const { return current_log_minute_; }
-    bool is_file_open() const { return current_log_file_.is_open(); }
-
 private:
-    std::string module_name_;
-    std::string log_dir_;
-    int max_log_files_;
+    std::string log_file_path_;
     std::ofstream current_log_file_;
-    std::recursive_mutex file_mutex_; // Protects access to the file
-    int current_log_minute_; // New member to store the minute of the current log file
-    std::vector<CsvLogEntry> buffer_; // RAM buffer for log entries
-    std::mutex buffer_mutex_; // Protects access to the buffer
+    std::recursive_mutex file_mutex_; 
+    std::vector<CsvLogEntry> buffer_; 
+    std::mutex buffer_mutex_; 
 };
 
 
@@ -212,15 +166,13 @@ private:
 class Logger {
 public:
     /**
-     * @brief Initializes the singleton Logger instance with logging parameters.
-     *
-     * This method should be called once at the application's startup.
+     * @brief Initializes the singleton Logger instance with logging parameters and config for metadata.
      *
      * @param log_file_prefix The prefix for standard log filenames (e.g., "run").
      * @param base_log_dir The base directory where log files will be stored (e.g., "/home/pi/logs").
-     * @param csv_configs A vector of configurations for subsystem-specific CSV logs.
+     * @param config_loader Pointer to ConfigLoader for dumping metadata.json (optional/can be passed here).
      */
-    static void init(const std::string& log_file_prefix, const std::string& base_log_dir, const std::vector<SubsystemLogConfig>& csv_configs);
+    static void init(const std::string& log_file_prefix, const std::string& base_log_dir, const ConfigLoader* config_loader = nullptr);
 
     /**
      * @brief Retrieves the singleton instance of the Logger.
@@ -307,9 +259,9 @@ private:
      *
      * @param log_file_prefix The prefix for log filenames.
      * @param base_log_dir The base directory for log files.
-     * @param csv_configs A vector of configurations for subsystem-specific CSV logs.
+     * @param config_loader Pointer to ConfigLoader for dumping metadata.json.
      */
-    Logger(const std::string& log_file_prefix, const std::string& base_log_dir, const std::vector<SubsystemLogConfig>& csv_configs);
+    Logger(const std::string& log_file_prefix, const std::string& base_log_dir, const ConfigLoader* config_loader);
 
 public: // Changed to public
     /**
@@ -347,6 +299,18 @@ public: // Changed to public
      * @return A string representing the current time in ISO 8601 format.
      */
     std::string get_current_iso_time();
+    
+    /**
+     * @brief Prunes old session directories to keep only the latest ones.
+     */
+    void prune_session_directories();
+
+    /**
+     * @brief Writes the metadata.json file to the current session directory.
+     *
+     * @param config The ConfigLoader instance to get metadata from.
+     */
+    void write_metadata_json(const ConfigLoader* config);
 
 
     // Static member for the singleton instance
@@ -355,6 +319,7 @@ public: // Changed to public
 
     // Standard log members
     std::string base_log_dir_;                   ///< The base directory where log files are stored.
+    std::string current_session_dir_;            ///< The dedicated directory for this run (logs/session_XXX)
     std::string log_file_prefix_;                ///< The prefix used for standard log filenames.
     std::ofstream standard_log_file_;            ///< Output file stream for standard logs.
 
@@ -366,9 +331,8 @@ public: // Changed to public
 
     // CSV log members
     std::thread log_flusher_thread_;              ///< Dedicated thread for periodically flushing CSV log messages.
-    std::map<std::string, CsvLogger> csv_loggers_; ///< Map to manage CsvLogger instances per module.
-    std::vector<SubsystemLogConfig> csv_subsystem_configs_; ///< Store CSV subsystem configurations
-
+    std::unique_ptr<CsvLogger> unified_logger_;   ///< Single Unified Logger instance
+    
     std::atomic<bool> running_ = false;          ///< Atomic flag to control writer threads' running state.
 };
 

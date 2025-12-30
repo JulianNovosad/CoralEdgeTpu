@@ -2,6 +2,8 @@
 #include "application.h"
 #include <x264.h>
 #include <iostream> // Added for std::cerr/cout
+#include <future>
+#include <thread>
 
 H264Encoder::H264Encoder(ImageQueue& input_queue, 
                          H264Queue& output_queue, 
@@ -51,8 +53,34 @@ void H264Encoder::stop() {
     }
 
     running_.store(false);
+    // Poison Pill: Wake up worker thread blocked on wait_pop
+    input_queue_.push(ImageData{});
+    // Use timed join to prevent indefinite blocking
     if (worker_thread_ && worker_thread_->joinable()) { // Check if optional holds a thread and if it's joinable
-        worker_thread_->join();
+        std::promise<bool> promise;
+        std::future<bool> future = promise.get_future();
+        
+        std::thread timer_thread([this, &promise]() {
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+            if (worker_thread_ && worker_thread_->joinable()) {
+                APP_LOG_WARNING("H264Encoder worker thread did not join within timeout");
+                promise.set_value(false);
+            } else {
+                promise.set_value(true);
+            }
+        });
+        
+        if (future.wait_for(std::chrono::milliseconds(100)) == std::future_status::timeout) {
+            timer_thread.join();
+        } else {
+            future.get();
+            if (worker_thread_ && worker_thread_->joinable()) {
+                worker_thread_->join();
+            }
+        }
+        if (timer_thread.joinable()) {
+            timer_thread.join();
+        }
     }
     
     if (encoder_) { // Check if encoder was successfully opened
@@ -220,100 +248,86 @@ void H264Encoder::worker_thread_func() {
 
     x264_picture_init(&picture_out_); // Initialize picture_out_
 
-    while (running_.load()) {
+    while (running_.load() && !shutdown_requested.load(std::memory_order_acquire)) {
         ImageData image_data;
-        // 1. Pop from input queue with blocking wait_pop to eliminate micro-stutter
-        if (!input_queue_.wait_pop(image_data, std::chrono::milliseconds(10))) {
-            continue; 
-        }
-        
-        // Record queue pop time
-        image_data.encode_start_time = std::chrono::high_resolution_clock::now();
-        
-        // Calculate and log input latency if capture time is available
-        if (image_data.capture_time.time_since_epoch().count() > 0) {
-            auto input_latency_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                image_data.encode_start_time - image_data.capture_time).count();
-            (void)input_latency_us; // Suppress unused variable warning in release builds
-            APP_LOG_DEBUG("H264Encoder: Input latency (capture to encode start): " + std::to_string(input_latency_us) + " us");
-        }
+        // 1. Pop from input queue with 100ms timeout to ensure shutdown_requested is checked
+        if (input_queue_.wait_pop(image_data, std::chrono::milliseconds(100))) {
+            if (!image_data.isValid()) break;
+            
+            // Record queue pop time
+            image_data.encode_start_time = std::chrono::steady_clock::now();
+            
+            // Calculate and log input latency if capture time is available
+            if (image_data.capture_time.time_since_epoch().count() > 0) {
+                auto input_latency_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                    image_data.encode_start_time - image_data.capture_time).count();
+                (void)input_latency_us; // Suppress unused variable warning in release builds
+                APP_LOG_DEBUG("H264Encoder: Input latency (capture to encode start): " + std::to_string(input_latency_us) + " us");
+            }
 
-        if (!image_data.buffer) {
-            APP_LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
-            continue;
-        }
-
-        // Log input frame information before processing
-        static int input_frame_counter = 0;
-        if (input_frame_counter < 5) {  // Log first 5 input frames
-            auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            APP_LOG_INFO("INPUT FRAME #" + std::to_string(input_frame_counter) + 
-                        ": Width=" + std::to_string(image_data.width) + 
-                        ", Height=" + std::to_string(image_data.height) +
-                        ", Buffer Size=" + std::to_string(image_data.buffer ? image_data.buffer->data.size() : 0) +
-                        ", Format=" + std::to_string(image_data.format.fourcc()) +  // This will show the libcamera format
-                        ", Timestamp=" + std::to_string(timestamp) + "ms" +
-                        ", Frame ID=" + std::to_string(image_data.frame_id));
-            input_frame_counter++;
-        }
-
-        // 2. Color conversion (Ensure proper format for x264 encoding)
-        [[maybe_unused]] auto cvtcolor_start = std::chrono::high_resolution_clock::now();
-        
-        // Check if buffer is valid before creating cv::Mat
-        if (!image_data.buffer || image_data.buffer->data.data() == nullptr) {
-            APP_LOG_WARNING("H264Encoder: Invalid buffer data. Skipping frame.");
-            continue;
-        }
-        
-        cv::Mat frame_bgr, frame_yuv;
-        
-        // Based on the pipeline, the overlaid video should be in the format from VisualizationProcessor
-        // Let's be explicit about the expected format and handle it properly
-        size_t expected_bgr_size = image_data.width * image_data.height * 3;  // BGR: 3 bytes per pixel
-        size_t actual_size = image_data.buffer->data.size();
-        
-        if (actual_size >= expected_bgr_size) {
-            // Create OpenCV matrix with the expected BGR format
-            cv::Mat frame_bgr_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
-            if (frame_bgr_raw.empty()) {
-                APP_LOG_ERROR("H264Encoder: Failed to create OpenCV matrix from buffer data. Skipping frame.");
+            if (!image_data.buffer) {
+                APP_LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
                 continue;
             }
-            // Convert BGR to YUV420p directly without intermediate BGR copy to improve performance
-            cv::cvtColor(frame_bgr_raw, frame_yuv, cv::COLOR_BGR2YUV_I420);
-        } else {
-            APP_LOG_WARNING("H264Encoder: Buffer size (" + std::to_string(actual_size) + 
-                           ") is smaller than expected BGR size (" + std::to_string(expected_bgr_size) + 
-                           "). Attempting to use available data.");
+
+            // Log input frame information before processing
+            static int input_frame_counter = 0;
+            if (input_frame_counter < 5) {  // Log first 5 input frames
+                APP_LOG_INFO("INPUT FRAME #" + std::to_string(input_frame_counter) + 
+                            ": Width=" + std::to_string(image_data.width) + 
+                            ", Height=" + std::to_string(image_data.height) +
+                            ", Buffer Size=" + std::to_string(image_data.buffer ? image_data.buffer->data.size() : 0) +
+                            ", Format=" + std::to_string(image_data.format.fourcc()) +  // This will show the libcamera format
+                            ", T_Capture=" + std::to_string(image_data.t_capture_raw_ms) + "ms" +
+                            ", Frame ID=" + std::to_string(image_data.frame_id));
+                input_frame_counter++;
+            }
+
+            // 2. Color conversion (Ensure proper format for x264 encoding)
+            [[maybe_unused]] auto cvtcolor_start = std::chrono::steady_clock::now();
             
-            // Try to work with what we have - could be different format from VisualizationProcessor
-            size_t expected_yuyv_size = image_data.width * image_data.height * 2;  // YUYV: 2 bytes per pixel
-            size_t expected_gray_size = image_data.width * image_data.height;      // Grayscale: 1 byte per pixel
+            // Check if buffer is valid before creating cv::Mat
+            if (!image_data.buffer || image_data.buffer->data.data() == nullptr) {
+                APP_LOG_WARNING("H264Encoder: Invalid buffer data. Skipping frame.");
+                continue;
+            }
             
-            if (actual_size == expected_yuyv_size) {
-                // Input is YUYV format from camera
-                cv::Mat frame_yuyv(image_data.height, image_data.width, CV_8UC2, image_data.buffer->data.data());
-                if (frame_yuyv.empty()) {
-                    APP_LOG_ERROR("H264Encoder: Failed to create YUYV matrix from buffer data. Skipping frame.");
+            cv::Mat frame_bgr, frame_yuv;
+            
+            // Based on the pipeline, the overlaid video should be in the format from VisualizationProcessor
+            // Let's be explicit about the expected format and handle it properly
+            size_t expected_bgr_size = image_data.width * image_data.height * 3;  // BGR: 3 bytes per pixel
+            size_t actual_size = image_data.buffer->data.size();
+            
+            if (actual_size >= expected_bgr_size) {
+                // Create OpenCV matrix with the expected BGR format
+                cv::Mat frame_bgr_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
+                if (frame_bgr_raw.empty()) {
+                    APP_LOG_ERROR("H264Encoder: Failed to create OpenCV matrix from buffer data. Skipping frame.");
                     continue;
                 }
-                cv::cvtColor(frame_yuyv, frame_bgr, cv::COLOR_YUV2BGR_YUYV);
-                cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
-            } else if (actual_size == expected_gray_size) {
-                // Input is grayscale
-                cv::Mat frame_gray(image_data.height, image_data.width, CV_8UC1, image_data.buffer->data.data());
-                if (frame_gray.empty()) {
-                    APP_LOG_ERROR("H264Encoder: Failed to create grayscale matrix from buffer data. Skipping frame.");
-                    continue;
-                }
-                cv::cvtColor(frame_gray, frame_bgr, cv::COLOR_GRAY2BGR);
-                cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
+                // Convert BGR to YUV420p directly without intermediate BGR copy to improve performance
+                cv::cvtColor(frame_bgr_raw, frame_yuv, cv::COLOR_BGR2YUV_I420);
             } else {
-                // Unknown format, try to interpret as grayscale and convert to BGR
-                APP_LOG_WARNING("H264Encoder: Unknown format, attempting to interpret as grayscale and convert to BGR.");
-                if (actual_size >= (image_data.width * image_data.height)) {
+                APP_LOG_WARNING("H264Encoder: Buffer size (" + std::to_string(actual_size) + 
+                               ") is smaller than expected BGR size (" + std::to_string(expected_bgr_size) + 
+                               "). Attempting to use available data.");
+                
+                // Try to work with what we have - could be different format from VisualizationProcessor
+                size_t expected_yuyv_size = image_data.width * image_data.height * 2;  // YUYV: 2 bytes per pixel
+                size_t expected_gray_size = image_data.width * image_data.height;      // Grayscale: 1 byte per pixel
+                
+                if (actual_size == expected_yuyv_size) {
+                    // Input is YUYV format from camera
+                    cv::Mat frame_yuyv(image_data.height, image_data.width, CV_8UC2, image_data.buffer->data.data());
+                    if (frame_yuyv.empty()) {
+                        APP_LOG_ERROR("H264Encoder: Failed to create YUYV matrix from buffer data. Skipping frame.");
+                        continue;
+                    }
+                    cv::cvtColor(frame_yuyv, frame_bgr, cv::COLOR_YUV2BGR_YUYV);
+                    cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
+                } else if (actual_size == expected_gray_size) {
+                    // Input is grayscale
                     cv::Mat frame_gray(image_data.height, image_data.width, CV_8UC1, image_data.buffer->data.data());
                     if (frame_gray.empty()) {
                         APP_LOG_ERROR("H264Encoder: Failed to create grayscale matrix from buffer data. Skipping frame.");
@@ -322,51 +336,79 @@ void H264Encoder::worker_thread_func() {
                     cv::cvtColor(frame_gray, frame_bgr, cv::COLOR_GRAY2BGR);
                     cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
                 } else {
-                    APP_LOG_ERROR("H264Encoder: Buffer size too small. Skipping frame.");
-                    continue;
+                    // Unknown format, try to interpret as grayscale and convert to BGR
+                    APP_LOG_WARNING("H264Encoder: Unknown format, attempting to interpret as grayscale and convert to BGR.");
+                    if (actual_size >= (image_data.width * image_data.height)) {
+                        cv::Mat frame_gray(image_data.height, image_data.width, CV_8UC1, image_data.buffer->data.data());
+                        if (frame_gray.empty()) {
+                            APP_LOG_ERROR("H264Encoder: Failed to create grayscale matrix from buffer data. Skipping frame.");
+                            continue;
+                        }
+                        cv::cvtColor(frame_gray, frame_bgr, cv::COLOR_GRAY2BGR);
+                        cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
+                    } else {
+                        APP_LOG_ERROR("H264Encoder: Buffer size too small. Skipping frame.");
+                        continue;
+                    }
                 }
             }
+            [[maybe_unused]] auto cvtcolor_end = std::chrono::steady_clock::now();
+            APP_LOG_DEBUG("H264Encoder: Time for cvtColor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(cvtcolor_end - cvtcolor_start).count()) + " us");
+
+            image_data.buffer.reset(); // Release buffer after conversion
+
+            // 3. Encode I420 frame using x264
+            [[maybe_unused]] auto encode_start = std::chrono::steady_clock::now();
+
+            // Increment frame count and set PTS
+            frame_count_++;
+            picture_in_.i_pts = frame_count_;
+
+            // Map I420 planes from cv::Mat to x264_picture_t
+            // cv::cvtColor(..., COLOR_BGR2YUV_I420) returns I420 layout (Y, then U, then V)
+            int y_size = width_ * height_;
+            int uv_size = y_size / 4;
+            std::memcpy(picture_in_.img.plane[0], frame_yuv.data, y_size);
+            std::memcpy(picture_in_.img.plane[1], frame_yuv.data + y_size, uv_size);
+            std::memcpy(picture_in_.img.plane[2], frame_yuv.data + y_size + uv_size, uv_size);
+
+            x264_nal_t* nals;
+            int i_nals;
+            int encoded_frame_size = x264_encoder_encode(encoder_, &nals, &i_nals, &picture_in_, &picture_out_);
+
+            if (encoded_frame_size > 0) {
+                auto h264_buffer = h264_buffer_pool_->acquire();
+                if (h264_buffer) {
+                    if (static_cast<size_t>(encoded_frame_size) > h264_buffer->data.capacity()) {
+                        APP_LOG_ERROR("H264Encoder: Encoded size " + std::to_string(encoded_frame_size) + 
+                                      " exceeds buffer capacity " + std::to_string(h264_buffer->data.capacity()));
+                    } else {
+                        // Copy NAL units to buffer (nals[0].p_payload contains all NALs concatenated)
+                        std::memcpy(h264_buffer->data.data(), nals[0].p_payload, encoded_frame_size);
+                        h264_buffer->size = encoded_frame_size;
+                        h264_buffer->t_capture_raw_ms = image_data.t_capture_raw_ms;
+                        h264_buffer->frame_id = image_data.frame_id;
+                        h264_buffer->encoder_frame_count = frame_count_;
+
+                        output_queue_.push(std::move(h264_buffer));
+                        if (app_) app_->increment_h264_output_queue_in();
+                    }
+                } else {
+                    APP_LOG_WARNING("H264Encoder: Failed to acquire buffer. Dropping frame.");
+                    // Try to free up buffers
+                    std::shared_ptr<H264Buffer> old_buffer;
+                    if (output_queue_.pop(old_buffer)) {
+                        old_buffer.reset(); 
+                    }
+                }
+            } else if (encoded_frame_size < 0) {
+                APP_LOG_ERROR("H264Encoder: x264_encoder_encode failed.");
+            }
+
+            image_data.encode_end_time = std::chrono::steady_clock::now();
+            last_frame_processed_time_ = std::chrono::steady_clock::now();
+            last_frame_id_ = image_data.frame_id;
         }
-        [[maybe_unused]] auto cvtcolor_end = std::chrono::high_resolution_clock::now();
-        APP_LOG_DEBUG("H264Encoder: Time for cvtColor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(cvtcolor_end - cvtcolor_start).count()) + " us");
-
-        image_data.buffer.reset(); // Release buffer after conversion
-
-        // 3. Pass raw I420 data to output queue (for GStreamer encoding)
-        [[maybe_unused]] auto memcpy_start = std::chrono::high_resolution_clock::now();
-
-        // Increment frame count
-        frame_count_++;
-
-        auto h264_buffer = h264_buffer_pool_->acquire();
-        if (h264_buffer) {
-             size_t frame_size = frame_yuv.total() * frame_yuv.elemSize();
-             if (frame_size > h264_buffer->data.capacity()) {
-                 APP_LOG_ERROR("H264Encoder: Frame size " + std::to_string(frame_size) + 
-                               " exceeds buffer capacity " + std::to_string(h264_buffer->data.capacity()));
-             } else {
-                 memcpy(h264_buffer->data.data(), frame_yuv.data, frame_size);
-                 h264_buffer->size = frame_size;
-                 h264_buffer->timestamp_epoch_ms = image_data.timestamp_epoch_ms;
-                 h264_buffer->frame_id = image_data.frame_id;
-                 h264_buffer->encoder_frame_count = frame_count_;
-
-                 output_queue_.push(std::move(h264_buffer));
-                 if (app_) app_->increment_h264_output_queue_in();
-             }
-             }
-        } else {
-             APP_LOG_WARNING("H264Encoder: Failed to acquire buffer. Dropping frame.");
-             // Try to free up buffers
-             std::shared_ptr<H264Buffer> old_buffer;
-             if (output_queue_.pop(old_buffer)) {
-                 old_buffer.reset(); 
-             }
-        }
-
-        image_data.encode_end_time = std::chrono::high_resolution_clock::now();
-        last_frame_processed_time_ = std::chrono::high_resolution_clock::now();
-        last_frame_id_ = image_data.frame_id;
     }
     APP_LOG_INFO("H264Encoder worker thread stopped.");
 }
@@ -376,7 +418,7 @@ bool H264Encoder::is_display_starving() const {
         return true; // If encoder isn't running, display is definitely starving
     }
     
-    auto current_time = std::chrono::high_resolution_clock::now();
+    auto current_time = std::chrono::steady_clock::now();
     auto time_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(
         current_time - last_frame_processed_time_
     ).count();

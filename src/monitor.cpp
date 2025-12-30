@@ -311,7 +311,7 @@ void Monitor::monitor_thread_func() {
             }
             std::cout << "  Logic Rate: " << logic_cps << " CPS" << std::endl;
             // Calculate relative time for last logic timestamp
-            long long last_logic_absolute = app_.get_logic_module()->last_logic_timestamp_;
+            long long last_logic_absolute = app_.get_logic_module()->last_logic_timestamp_ns_.load() / 1000000;
             long long relative_logic_time = last_logic_absolute - reference_time_since_run_start;
             std::cout << "  Last Logic: +" << relative_logic_time << " ms (relative to run start)" << std::endl;
             std::cout << "  Throughput: In: " << logic_module_in << " | Out: " << logic_module_out << std::endl;
@@ -350,7 +350,7 @@ void Monitor::monitor_thread_func() {
         if (app_.get_primary_camera()) {
             int64_t camera_produced = app_.get_camera_frames_produced();
             int64_t camera_consumed = app_.get_camera_frames_consumed_by_inference();
-            int64_t camera_dropped = app_.get_primary_camera()->get_main_stream_drop_count() + app_.get_primary_camera()->get_tpu_stream_drop_count();
+            int64_t camera_dropped = app_.get_camera_frames_dropped();
             std::cout << "  Camera Frames - Produced: " << camera_produced
                       << ", Consumed by Inference: " << camera_consumed
                       << ", Dropped: " << camera_dropped << std::endl;
@@ -363,12 +363,31 @@ void Monitor::monitor_thread_func() {
             int64_t inference_produced = app_.get_inference_results_produced();
             int64_t logic_consumed = app_.get_inference_results_consumed_by_logic();
             int64_t overlay_consumed = app_.get_inference_results_consumed_by_overlay();
-            int64_t inference_dropped = app_.get_inference_engine()->get_overlay_queue_drop_count() + app_.get_inference_engine()->get_logic_queue_drop_count();
+            int64_t logic_dropped = app_.get_inference_engine()->get_logic_queue_drop_count();
+            int64_t overlay_dropped = app_.get_inference_engine()->get_overlay_queue_drop_count();
+            
+            // Account for items in flight/queue for invariant check
+            int64_t logic_queue_depth = app_.detection_results_for_logic_queue_.read_available();
+            bool overlay_pending = app_.get_inference_engine()->has_overlay_pending();
+            
             std::cout << "  Inference Results - Produced: " << inference_produced
                       << ", Logic Consumed: " << logic_consumed
                       << ", Overlay Consumed: " << overlay_consumed
-                      << ", Dropped: " << inference_dropped << std::endl;
-            std::cout << "  Inference Invariant Check (P=C+D): " << (inference_produced == logic_consumed + overlay_consumed + inference_dropped ? "PASS" : "FAIL") << std::endl;
+                      << ", Dropped: L:" << logic_dropped << " O:" << overlay_dropped << std::endl;
+            
+            // Invariant: For each frame produced, it must be either consumed, dropped, or still in queue.
+            bool logic_pass = (inference_produced == logic_consumed + logic_dropped + logic_queue_depth);
+            bool overlay_pass = (inference_produced == overlay_consumed + overlay_dropped + (overlay_pending ? 1 : 0));
+            
+            std::cout << "  Inference Invariant Check (P=C+D): " << (logic_pass && overlay_pass ? "PASS" : "FAIL") << std::endl;
+            if (!logic_pass) {
+                std::cout << "    Logic mismatch: " << inference_produced << " != " << (logic_consumed + logic_dropped + logic_queue_depth) 
+                          << " (P=" << inference_produced << ", C=" << logic_consumed << ", D=" << logic_dropped << ", Q=" << logic_queue_depth << ")" << std::endl;
+            }
+            if (!overlay_pass) {
+                std::cout << "    Overlay mismatch: " << inference_produced << " != " << (overlay_consumed + overlay_dropped + (overlay_pending ? 1 : 0))
+                          << " (P=" << inference_produced << ", C=" << overlay_consumed << ", D=" << overlay_dropped << ", Pnd=" << (overlay_pending ? 1 : 0) << ")" << std::endl;
+            }
         } else {
             std::cout << "  Inference Results - N/A" << std::endl;
         }

@@ -30,6 +30,10 @@ bool SystemMonitor::start() {
 void SystemMonitor::stop() {
     if (running_.exchange(false)) {
         APP_LOG_INFO("Stopping SystemMonitor...");
+        {
+            std::lock_guard<std::mutex> lock(stop_mutex_);
+            stop_cv_.notify_all();
+        }
         if (worker_thread_.joinable()) {
             worker_thread_.join();
         }
@@ -39,26 +43,29 @@ void SystemMonitor::stop() {
 
 void SystemMonitor::worker_thread_func() {
     APP_LOG_INFO("SystemMonitor worker thread started.");
-    while (running_) {
-        long long call_ts = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              std::chrono::system_clock::now().time_since_epoch()).count();
-
+    auto next_tick = std::chrono::steady_clock::now();
+    while (running_.load(std::memory_order_acquire)) {
         float cpu_temp = read_cpu_temperature();
         float memory_usage_percent = read_memory_usage();
         float cpu_usage = read_cpu_usage();
 
         CsvLogEntry entry;
-        entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
         copy_to_array(entry.module, "SystemMonitor");
         entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
         copy_to_array(entry.event, "sysmon_metrics");
-        entry.call_ts_epoch_ms = call_ts;
-        entry.sysmon_cpu_temp_c = cpu_temp;
-        entry.sysmon_cpu_usage_percent = cpu_usage;
-        entry.sysmon_mem_usage_percent = memory_usage_percent;
+        entry.call_ts_epoch_ms = entry.produced_ts_epoch_ms;
+        entry.sys_cpu_temp_c = cpu_temp;
+        entry.sys_cpu_usage_pct = cpu_usage;
+        entry.sys_ram_usage_pct = memory_usage_percent;
         Logger::getInstance().log_csv(entry);
 
-        std::this_thread::sleep_for(interval_s_);
+        next_tick += interval_s_;
+        std::unique_lock<std::mutex> lock(stop_mutex_);
+        if (stop_cv_.wait_until(lock, next_tick, [this] { return !running_.load(std::memory_order_acquire); })) {
+            break; // Shutdown requested
+        }
     }
     APP_LOG_INFO("SystemMonitor worker thread stopped.");
 }
@@ -173,9 +180,9 @@ void SystemMonitor::get_performance_metrics() {
     entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
     copy_to_array(entry.event, "PerformanceMetrics");
     entry.call_ts_epoch_ms = current_time_ms; // Use current_time_ms as call_ts for summary metrics
-    entry.sysmon_cpu_temp_c = cpu_temp;
-    entry.sysmon_cpu_usage_percent = cpu_usage;
-    entry.sysmon_mem_usage_percent = memory_usage_percent;
+    entry.sys_cpu_temp_c = cpu_temp;
+    entry.sys_cpu_usage_pct = cpu_usage;
+    entry.sys_ram_usage_pct = memory_usage_percent;
     // No specific 'details' string as individual metrics are now logged directly.
     Logger::getInstance().log_csv(entry);
     APP_LOG_INFO("--- SystemMonitor Performance Metrics ---");

@@ -175,12 +175,11 @@ private:
     // Application reference for updating counters
     class Application* app_ref_ = nullptr;
 
-    std::chrono::time_point<std::chrono::high_resolution_clock> last_frame_time_; ///< Tijdstip van het laatst verwerkte frame.
+    std::chrono::steady_clock::time_point last_frame_time_; ///< Tijdstip van het laatst verwerkte frame.
     int frame_count_ = 0; ///< Teller voor het aantal verwerkte frames.
     
     // FPS measurement variables
-    std::chrono::time_point<std::chrono::high_resolution_clock> first_frame_time_; ///< Tijdstip van het eerste frame voor FPS calculation
-    std::vector<long long> frame_intervals_us_; ///< Vector to store frame intervals for histogram
+    std::chrono::steady_clock::time_point first_frame_time_; ///< Tijdstip van het eerste frame voor FPS calculation
     int fps_measurement_frames_ = 0; ///< Counter for FPS measurement frames
 
     std::unique_ptr<cv::VideoWriter> video_writer_;  ///< H.264 encoder (momenteel niet gebruikt).
@@ -197,10 +196,10 @@ private:
 
 private:
     void request_processor_thread_func(); // New thread function
-    // New helper to process raw TPU frames
-    bool process_tpu_raw_frame_buffer(const libcamera::FrameBuffer* fb,
+    // New helper to process processed TPU frames
+    bool process_tpu_processed_frame_buffer(const libcamera::FrameBuffer* fb,
                                       const libcamera::StreamConfiguration& cfg,
-                                      long long call_ts_epoch_ms,
+                                      std::chrono::steady_clock::time_point capture_time,
                                       long long frame_id,
                                       long long exposure_ms);
 };

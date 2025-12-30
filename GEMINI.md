@@ -75,6 +75,16 @@
 
 * **Invariant:** `Produced = Consumed + Dropped` at all times.
 * **Heartbeat:** If the TPU returns zero detections, the InferenceEngine **must still produce** an empty result buffer and increment Consumed.
+* **Manual Increments Forbidden**: No raw fetch_add on counters within hot-path logic.
+* **RAII Accounting**: All frame processing must use a FrameContext or AccountingGuard object.
+* **Invariant**: The destruction of the FrameContext must automatically increment either Consumed (on success) or Dropped (on failure).
+* **Zero-Leak Policy**: Any continue, break, or return that bypasses the accounting guard is a terminal "Hard No."
+
+### V.2. Scope-Locked Accounting (Mechanical Enforcement)
+All frame processing must utilize an RAII `AccountingGuard`. Increments of `Produced` or `Dropped` must happen automatically upon the guard's destruction. Manual `fetch_add` in hot-paths is forbidden.
+
+### V.3. Ballistic Hit-Scan Invariant
+Actuations are discrete ballistic events. They must never use `sleep()`. Total Latency (Photon-to-PWM) must be measured per-trigger. If latency exceeds **25ms**, the system must log a `TIMING_VIOLATION`.
 
 ---
 
