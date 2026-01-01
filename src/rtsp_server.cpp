@@ -10,7 +10,7 @@
 #include <atomic>
 #include <sstream>
 
-extern std::atomic<bool> shutdown_requested;
+extern std::atomic<bool> g_running;
 
 // Static member definitions
 std::mutex RTSPServerWrapper::port_binding_mutex_;

@@ -1,22 +1,28 @@
-#include "application.h"
+// Standard C++ Library Includes
 #include <fstream>
 #include <vector>
 #include <string>
 #include <iostream>
-#include "util_logging.h"
+#include <atomic>
+#include <thread>
+#include <chrono> // For std::chrono::milliseconds
+
+// C System Headers
 #include <signal.h>
 #include <pthread.h>
 #include <termios.h>
-#include <unistd.h>
-#include <atomic>
-#include <thread>
+#include <unistd.h> // For _exit
+
+// Project-specific Headers
+#include "application.h"
+#include "util_logging.h"
 
 // Global variable to store original terminal settings
 struct termios original_termios;
 
 // Global flag checked by the main loop and modules.
 // Access with memory_order_acquire/release for consistency.
-std::atomic<bool> shutdown_requested(false);
+extern std::atomic<bool> g_running;
 
 std::vector<std::string> load_labels(const std::string& path) {
     std::vector<std::string> labels;
@@ -33,6 +39,9 @@ std::vector<std::string> load_labels(const std::string& path) {
 }
 
 int main(int argc, char** argv) {
+    // Save original terminal settings
+    tcgetattr(STDIN_FILENO, &original_termios);
+
     // Initialize Logger
     Logger::init("run", "logs", nullptr);
     Logger::getInstance().start_writer_thread();
@@ -48,12 +57,12 @@ int main(int argc, char** argv) {
 
     // Start a hard-kill watchdog thread
     std::thread hard_kill_watchdog([]() {
-        while (!shutdown_requested.load(std::memory_order_acquire)) {
+        while (g_running.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
         // Shutdown requested, wait 3 seconds then force exit
         std::this_thread::sleep_for(std::chrono::seconds(3));
-        if (shutdown_requested.load()) {
+        if (!g_running.load()) {
             std::cerr << "\n[WATCHDOG] Graceful shutdown timed out (3s). Forcing termination via _exit(1)." << std::endl;
             _exit(1);
         }

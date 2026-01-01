@@ -12,6 +12,7 @@
 
 #include "util_logging.h" // Include logging utilities
 #include <iostream>
+#include <boost/lockfree/queue.hpp>
 
 
 // A generic buffer object that can be pooled.
@@ -26,7 +27,7 @@ struct PooledBuffer {
     uint64_t t_capture_raw_ms = 0;     // Deterministic capture time
     uint64_t t_inf_start = 0;          // Inference start
     uint64_t t_inf_end = 0;            // Inference end
-    int frame_id = -1;                 // Frame ID to track frame sequence
+    int frame_id = 0;                 // Frame ID to track frame sequence
     int64_t encoder_frame_count = -1;  // Frame count from encoder for PTS calculation
     
     // Zero-copy related fields
@@ -77,19 +78,18 @@ public:
                             [this]{ return !available_buffers_.empty(); })) {
             // Log detailed information about the state when acquisition fails
             size_t available = available_buffers_.size();
-            size_t in_use = total_buffers_ - available;
+            size_t in_use = current_in_use_.load();
             APP_LOG_WARNING(name_ + ": Failed to acquire buffer within timeout. Available: " + std::to_string(available) + 
-                           ", In use: " + std::to_string(in_use) + ", Peak: " + std::to_string(peak_in_use_));
+                           ", In use: " + std::to_string(in_use) + ", Peak: " + std::to_string(peak_in_use_.load()));
             return nullptr; // Timeout
         }
         PooledBuffer<T>* buffer_ptr = available_buffers_.front();
         available_buffers_.pop();
         
         // Update usage tracking
-        current_in_use_ = total_buffers_ - available_buffers_.size();
-        if (current_in_use_ > peak_in_use_) {
-            peak_in_use_ = current_in_use_;
-        }
+        size_t current = current_in_use_.fetch_add(1) + 1;
+        size_t peak = peak_in_use_.load();
+        while (current > peak && !peak_in_use_.compare_exchange_weak(peak, current));
         
         lock.unlock();
 
@@ -105,7 +105,7 @@ public:
                 this->available_buffers_.push(b); // Push the raw pointer back to the queue
                 
                 // Update usage tracking on release
-                this->current_in_use_ = this->total_buffers_ - this->available_buffers_.size();
+                this->current_in_use_.fetch_sub(1);
                 
                 local_lock.unlock();
                 this->cond_.notify_one();
@@ -159,6 +159,20 @@ public:
         return std::make_pair(available_buffers_.size(), total_buffers_);
     }
 
+    /**
+     * @brief Manually release a raw buffer pointer back to the pool.
+     * @warning Use only when the buffer was acquired from this pool and 
+     *          is no longer managed by any shared_ptr.
+     */
+    void release_raw(PooledBuffer<T>* buffer) {
+        if (!buffer) return;
+        std::unique_lock<std::mutex> lock(mutex_);
+        available_buffers_.push(buffer);
+        current_in_use_.fetch_sub(1);
+        lock.unlock();
+        cond_.notify_one();
+    }
+
 private:
     std::string name_;
     size_t total_buffers_;
@@ -168,8 +182,94 @@ private:
     std::vector<PooledBuffer<T>> buffers_storage_; // Store actual buffer objects
     
     // Usage tracking
-    mutable size_t current_in_use_;
-    mutable size_t peak_in_use_;
+    mutable std::atomic<size_t> current_in_use_;
+    mutable std::atomic<size_t> peak_in_use_;
 };
+
+/**
+
+ * @brief A simple, thread-safe pool for managing reusable objects of type T.
+
+ */
+
+template <typename T>
+
+class ObjectPool {
+
+public:
+
+    ObjectPool(size_t size, const std::string& name) : name_(name), total_size_(size), pool_(size + 10) {
+
+        for (size_t i = 0; i < size; ++i) {
+
+            pool_.push(new T());
+
+        }
+
+        APP_LOG_INFO("ObjectPool '" + name_ + "' created with " + std::to_string(size) + " objects.");
+
+    }
+
+
+
+    ~ObjectPool() {
+
+        T* obj;
+
+        while (pool_.pop(obj)) {
+
+            delete obj;
+
+        }
+
+    }
+
+
+
+    T* acquire() {
+
+        T* obj = nullptr;
+
+        if (pool_.pop(obj)) {
+
+            return obj;
+
+        }
+
+        return nullptr;
+
+    }
+
+
+
+    void release(T* obj) {
+
+        if (obj) {
+
+            if (!pool_.push(obj)) {
+
+                delete obj; // Safety: if pool is somehow full (shouldn't happen with pointers)
+
+            }
+
+        }
+
+    }
+
+
+
+private:
+
+    std::string name_;
+
+    size_t total_size_;
+
+    boost::lockfree::queue<T*, boost::lockfree::fixed_sized<true>> pool_;
+
+};
+
+
+
+
 
 #endif // BUFFER_POOL_H

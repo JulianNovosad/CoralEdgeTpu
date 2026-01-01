@@ -5,6 +5,8 @@
 #include <regex> // For regex parsing of /proc/meminfo
 #include <iostream>
 
+extern std::atomic<bool> g_running;
+
 SystemMonitor::SystemMonitor(std::chrono::seconds interval_s)
     : interval_s_(interval_s) {
     // Initialize CPU usage stats by calling it once
@@ -44,26 +46,21 @@ void SystemMonitor::stop() {
 void SystemMonitor::worker_thread_func() {
     APP_LOG_INFO("SystemMonitor worker thread started.");
     auto next_tick = std::chrono::steady_clock::now();
-    while (running_.load(std::memory_order_acquire)) {
+    while (running_.load(std::memory_order_acquire) && g_running.load(std::memory_order_acquire)) {
         float cpu_temp = read_cpu_temperature();
         float memory_usage_percent = read_memory_usage();
         float cpu_usage = read_cpu_usage();
 
-        CsvLogEntry entry;
-        entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        copy_to_array(entry.module, "SystemMonitor");
-        entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-        copy_to_array(entry.event, "sysmon_metrics");
-        entry.call_ts_epoch_ms = entry.produced_ts_epoch_ms;
-        entry.sys_cpu_temp_c = cpu_temp;
-        entry.sys_cpu_usage_pct = cpu_usage;
-        entry.sys_ram_usage_pct = memory_usage_percent;
-        Logger::getInstance().log_csv(entry);
+        // Store latest metrics in atomic variables for access by other modules
+        latest_cpu_temp_.store(cpu_temp);
+        latest_cpu_usage_.store(cpu_usage);
+        latest_memory_usage_.store(memory_usage_percent);
+
+        // Removed CSV logging - only LogicModule logs unified telemetry
 
         next_tick += interval_s_;
         std::unique_lock<std::mutex> lock(stop_mutex_);
-        if (stop_cv_.wait_until(lock, next_tick, [this] { return !running_.load(std::memory_order_acquire); })) {
+        if (stop_cv_.wait_until(lock, next_tick, [this] { return !running_.load(std::memory_order_acquire) || !g_running.load(std::memory_order_acquire); })) {
             break; // Shutdown requested
         }
     }
@@ -170,21 +167,11 @@ void SystemMonitor::get_performance_metrics() {
     float memory_usage_percent = read_memory_usage();
     float cpu_usage = read_cpu_usage();
     
-    // Log using the CSV format (p50 for CPU usage, temp for CPU temp, fps for memory usage percent)
-    // Log using the CSV format (p50 for CPU usage, temp for CPU temp, fps for memory usage percent)
-    long long current_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  std::chrono::system_clock::now().time_since_epoch()).count();
-    CsvLogEntry entry;
-    entry.produced_ts_epoch_ms = current_time_ms;
-    copy_to_array(entry.module, "SystemMonitor");
-    entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    copy_to_array(entry.event, "PerformanceMetrics");
-    entry.call_ts_epoch_ms = current_time_ms; // Use current_time_ms as call_ts for summary metrics
-    entry.sys_cpu_temp_c = cpu_temp;
-    entry.sys_cpu_usage_pct = cpu_usage;
-    entry.sys_ram_usage_pct = memory_usage_percent;
-    // No specific 'details' string as individual metrics are now logged directly.
-    Logger::getInstance().log_csv(entry);
+    // Store latest metrics in atomic variables for access by other modules
+    latest_cpu_temp_.store(cpu_temp);
+    latest_cpu_usage_.store(cpu_usage);
+    latest_memory_usage_.store(memory_usage_percent);
+    
     APP_LOG_INFO("--- SystemMonitor Performance Metrics ---");
     APP_LOG_INFO("  CPU Usage: " + std::to_string(cpu_usage) + "%");
     APP_LOG_INFO("  CPU Temperature: " + std::to_string(cpu_temp) + " C");

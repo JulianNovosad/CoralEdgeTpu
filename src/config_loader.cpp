@@ -57,6 +57,10 @@ int ConfigLoader::get_inference_worker_threads() const {
     return config_data_.value("/application/inference_worker_threads"_json_pointer, 1);
 }
 
+int ConfigLoader::get_target_class_id() const {
+    return config_data_.value("/application/tracking/target_class_id"_json_pointer, -1);
+}
+
 int ConfigLoader::get_jpeg_quality() const {
     return config_data_.value("/application/jpeg_quality"_json_pointer, 90);
 }

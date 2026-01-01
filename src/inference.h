@@ -60,6 +60,8 @@ public:
                     TripleBuffer<DetectionResults>* detection_results_for_overlay_buffer, 
                     DetectionResultsQueue& detection_results_for_logic_queue, 
                     std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool,
+                    std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
+                    std::shared_ptr<ObjectPool<ResultToken>> result_token_pool,
                     float score_threshold,
                     int num_threads = 1);
 
@@ -125,6 +127,8 @@ private:
     TripleBuffer<DetectionResults>* detection_results_for_overlay_buffer_; ///< Pointer to the triple buffer for detection results to overlay.
     DetectionResultsQueue& detection_results_for_logic_queue_; ///< Reference to the output queue for detection results to the logic module.
     std::shared_ptr<BufferPool<DetectionResult>> detection_result_pool_; ///< Pool for detection result buffers.
+    std::shared_ptr<ObjectPool<ImageData>> image_data_pool_; ///< Pool for ImageData objects.
+    std::shared_ptr<ObjectPool<ResultToken>> result_token_pool_; ///< Pool for ResultToken objects.
     int num_threads_; ///< Number of inference worker threads.
     float score_threshold_; ///< Confidence threshold for filtering detections.
 
@@ -193,8 +197,9 @@ private:
     TfLiteDelegate* edgetpu_delegate_ = nullptr; ///< The single Edge TPU delegate.
 
     // Telemetry state
-    std::atomic<int> last_inference_count_{0};
-    std::chrono::steady_clock::time_point last_rate_check_ = std::chrono::steady_clock::now();
+    std::atomic<int> total_inference_count_{0};
+    std::atomic<int> last_inference_count_checkpoint_{0};
+    std::atomic<uint64_t> last_rate_check_ms_{0};
 };
 
 #endif // INFERENCE_H

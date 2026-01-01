@@ -17,13 +17,16 @@ public:
         // Constructor for processors that apply detection overlays
         ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue,
                        TripleBuffer<DetectionResults>* detection_buffer,
+                       TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer,
                        std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
+                       std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                        libcamera::PixelFormat input_pixel_format,
                        int output_width, int output_height);
         
         // Constructor for processors that only do basic processing (like for TPU inference)
         ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue,
                        std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
+                       std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                        libcamera::PixelFormat input_pixel_format,
                        int output_width, int output_height);
         ~ImageProcessor();
@@ -41,6 +44,7 @@ public:
         
         // Method to set application reference for updating counters
         void set_application_ref(class Application* app) { app_ref_ = app; }
+        void set_is_tpu_stream(bool is_tpu) { is_tpu_stream_ = is_tpu; }
     
     private:
         void worker_thread_func();
@@ -49,12 +53,15 @@ public:
         ImageQueue& input_queue_;
         ImageQueue& output_queue_;
         TripleBuffer<DetectionResults>* detection_buffer_ptr_;  // Pointer to triple buffer (null for non-overlay processors)
+        TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer_; // New member for ballistic points
         std::shared_ptr<BufferPool<uint8_t>> buffer_pool_;
+        std::shared_ptr<ObjectPool<ImageData>> image_data_pool_;
         libcamera::PixelFormat input_pixel_format_;
         int output_width_;
         int output_height_;
         int skip_factor_ = 1;
         uint64_t frame_counter_ = 0;
+        bool is_tpu_stream_ = false;
     
         std::atomic<bool> running_{false};
         std::thread worker_thread_;

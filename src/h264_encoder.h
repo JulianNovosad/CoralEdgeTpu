@@ -19,6 +19,7 @@ public:
     H264Encoder(ImageQueue& input_queue, 
                 H264Queue& output_queue, 
                 std::shared_ptr<BufferPool<uint8_t>> h264_buffer_pool,
+                std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                 int width, int height, double fps);
     ~H264Encoder();
 
@@ -38,6 +39,7 @@ private:
     ImageQueue& input_queue_;
     H264Queue& output_queue_;
     std::shared_ptr<BufferPool<uint8_t>> h264_buffer_pool_;
+    std::shared_ptr<ObjectPool<ImageData>> image_data_pool_;
     Application* app_ = nullptr;
     int width_;
     int height_;
@@ -74,6 +76,22 @@ private:
     std::chrono::steady_clock::time_point last_buffer_acquisition_success_;
     bool buffer_acquisition_success_initialized_{false};
     static constexpr std::chrono::seconds BUFFER_EXHAUSTION_THRESHOLD{2};
+    
+    // Encoding queue for decoupled processing
+    struct EncodingJob {
+        cv::Mat frame_yuv;
+        int64_t frame_pts;
+        uint64_t t_capture_raw_ms;
+        int frame_id;
+    };
+    
+    std::queue<EncodingJob> encoding_queue_;
+    std::mutex encoding_queue_mutex_;
+    std::condition_variable encoding_queue_cv_;
+    std::thread encoding_worker_thread_;
+    std::atomic<bool> encoding_worker_running_{false};
+    
+    void encoding_worker_func();
     
     // Method for checking display starvation
     bool is_display_starving() const;

@@ -4,7 +4,7 @@
 #include <sstream>
 #include <cstring>
 
-extern std::atomic<bool> shutdown_requested;
+extern std::atomic<bool> g_running;
 
 UDPStreamer::UDPStreamer(int width, int height, double fps)
     : pipeline_(nullptr), appsrc_(nullptr), loop_(nullptr),

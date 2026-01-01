@@ -3,7 +3,8 @@
 
 #include <atomic>
 #include <thread>
-#include <termios.h> // Include for terminal settings
+#include <termios.h>
+
 
 /**
  * @brief A class to monitor keyboard input in a non-blocking way.

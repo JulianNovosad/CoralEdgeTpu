@@ -1,3 +1,4 @@
+#include <termios.h>
 #include "keyboard_monitor.h"
 #include "util_logging.h"
 #include "application_supervisor.h" // For shutdown_requested
@@ -6,8 +7,8 @@
 #include <unistd.h>  // for read, STDIN_FILENO
 #include <fcntl.h>   // for fcntl, F_GETFL, F_SETFL, O_NONBLOCK
 
-// Forward declaration from application.cpp
-extern std::atomic<bool> shutdown_requested;
+// Forward declaration from global_definitions.cpp
+extern std::atomic<bool> g_running;
 
 KeyboardMonitor::KeyboardMonitor() {
     // Get original terminal settings to restore them on exit
@@ -61,11 +62,11 @@ void KeyboardMonitor::monitor_thread_func() {
     APP_LOG_INFO("Press 'o' to trigger a graceful shutdown.");
 
     char c;
-    while (running_.load()) {
+    while (running_.load() && g_running.load(std::memory_order_acquire)) {
         if (read(STDIN_FILENO, &c, 1) > 0) {
             if (c == 'o') {
                 APP_LOG_INFO("'o' key pressed. Initiating graceful shutdown...");
-                shutdown_requested = true;
+                g_running.store(false, std::memory_order_release);
                 break; // Exit the loop
             }
         }

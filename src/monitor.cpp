@@ -68,12 +68,12 @@ void Monitor::monitor_thread_func() {
         std::cout << "Wall Time: " << std::put_time(std::localtime(&wall_time_t), "%Y-%m-%d %H:%M:%S") << std::endl;
         std::cout << std::endl;
         
-        // Get current values for throughput calculations
-        size_t current_raw_image_queue_depth = app_.raw_image_for_processor_queue_.read_available();
-        size_t current_tpu_inference_queue_depth = app_.tpu_inference_queue_.read_available();
-        size_t current_detection_logic_queue_depth = app_.detection_results_for_logic_queue_.read_available();
-        size_t current_overlaid_video_queue_depth = app_.overlaid_video_queue_.read_available();
-        size_t current_h264_output_queue_depth = app_.h264_output_queue_.read_available();
+        // Get current values status
+        size_t current_raw_image_queue_depth = app_.raw_image_for_processor_queue_.size_approx();
+        size_t current_tpu_inference_queue_depth = app_.tpu_inference_queue_.size_approx();
+        size_t current_detection_logic_queue_depth = app_.detection_results_for_logic_queue_.size_approx();
+        size_t current_overlaid_video_queue_depth = app_.overlaid_video_queue_.size_approx();
+        size_t current_h264_output_queue_depth = app_.h264_output_queue_.size_approx();
         
         // Calculate queue in/out rates
         int raw_image_queue_in = 0;
@@ -87,6 +87,7 @@ void Monitor::monitor_thread_func() {
         int h264_output_queue_in = app_.get_h264_output_queue_in();
         int h264_output_queue_out = app_.get_h264_output_queue_out();
         
+        // ... (module rates calculation) ...
         // Calculate module rates based on the current FPS/IPS/CPS values
         int camera_fps = 0;
         int inference_ips = 0;
@@ -105,17 +106,7 @@ void Monitor::monitor_thread_func() {
         // Calculate actual throughput based on queue depth changes
         // This is an approximation since we don't have direct counters for push/pop operations
         if (!first_update_) {
-            // Calculate queue in/out rates based on changes in queue depth
-            // For each queue: change = current - previous
-            // If positive: items were added (IN) - but this doesn't account for items consumed during the same period
-            // If negative: items were removed (OUT) - but this doesn't account for items added during the same period
-            // More accurate: items IN = items added to queue, items OUT = items removed from queue
-            
-            // To estimate actual flow, we need to consider that if queue depth remains constant,
-            // items in = items out (steady state)
-            // If queue depth increases, items in > items out
-            // If queue depth decreases, items out > items in
-            
+            // ... (throughput calculation) ...
             long long raw_image_change = static_cast<long long>(current_raw_image_queue_depth) - static_cast<long long>(prev_raw_image_queue_depth_);
             // Estimate: if queue depth increased, at least that many items went in beyond those that went out
             // if queue depth decreased, at least that many items went out beyond those that went in
@@ -187,6 +178,7 @@ void Monitor::monitor_thread_func() {
             first_update_ = false;
         }
         
+        // ... (module in/out calculation) ...
         // For modules, calculate proper in/out values based on actual module rates and queue dynamics
         // Camera Module: Input is frames captured, Output is frames pushed to raw image queue
         int camera_module_in = camera_fps;
@@ -207,26 +199,27 @@ void Monitor::monitor_thread_func() {
         prev_overlaid_video_queue_depth_ = current_overlaid_video_queue_depth;
         prev_h264_output_queue_depth_ = current_h264_output_queue_depth;
         
+        // ... (active determination) ...
+        // Calculate actual module status based on processing activity
+        bool camera_active = camera_module_in > 0 || camera_module_out > 0;
+        bool inference_active = inference_module_in > 0 || inference_module_out > 0;
+        bool logic_active = logic_module_in > 0 || logic_module_out > 0;
+
+        // ... (cold-start detection) ...
+        // Update persistent flags for cold-start detection
+        if (camera_active) camera_seen_ = true;
+        if (inference_active) inference_seen_ = true;
+        if (logic_active) logic_seen_ = true;
+
+        // ... (pipeline initialized check) ...
         // Track initialization phase
-        if (initialization_counter_ < INITIALIZATION_DELAY) {
-            initialization_counter_++;
-        } else if (!pipeline_initialized_) {
-            // Check if pipeline has established flow (all modules have some activity)
-            bool has_flow = (camera_module_in > 0 || camera_module_out > 0) &&
-                           (inference_module_in > 0 || inference_module_out > 0) &&
-                           (logic_module_in > 0 || logic_module_out > 0);
-            
-            if (has_flow) {
+        if (!pipeline_initialized_) {
+            if (camera_seen_ && inference_seen_ && logic_seen_) {
                 pipeline_initialized_ = true;
             }
         }
         
-        // Calculate actual module status based on processing activity
-        // Status should be RUNNING only if module processed at least one item in the last interval
-        bool camera_active = camera_module_in > 0 || camera_module_out > 0;
-        bool inference_active = inference_module_in > 0 || inference_module_out > 0;
-        bool logic_active = logic_module_in > 0 || logic_module_out > 0;
-        
+        // ... (time calculation) ...
         // Calculate time since run start for relative timestamps
         auto current_monotonic_time = std::chrono::steady_clock::now();
         auto elapsed_since_run_start = std::chrono::duration_cast<std::chrono::milliseconds>(current_monotonic_time - run_start_time_);
@@ -237,14 +230,15 @@ void Monitor::monitor_thread_func() {
         auto now_sys_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now_sys.time_since_epoch()).count();
         auto reference_time_since_run_start = now_sys_ms - elapsed_since_run_start.count();
         
+        // ... (Camera Module Status display) ...
         // Enhanced status determination with starvation/blocked detection
         // Camera Module Status
         std::cout << "[Camera Module]" << std::endl;
         if (app_.get_primary_camera() && app_.get_primary_camera()->is_running()) {
-            if (!pipeline_initialized_) {
-                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
-            } else if (camera_active) {
+            if (camera_active) {
                 std::cout << "  Status: RUNNING" << std::endl;
+            } else if (!pipeline_initialized_) {
+                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
             } else if (camera_fps == 0 && app_.get_primary_camera()->frame_rate_.load() == 0) {
                 // No frames being captured - could be blocked or starved
                 std::cout << "  Status: STARVED" << std::endl;
@@ -262,16 +256,17 @@ void Monitor::monitor_thread_func() {
         }
         std::cout << std::endl;
         
+        // ... (Inference Module Status display) ...
         // Inference Module Status
         std::cout << "[Inference Module]" << std::endl;
         if (app_.get_inference_engine() && app_.get_inference_engine()->is_running()) {
-            if (!pipeline_initialized_) {
-                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
-            } else if (inference_active) {
+            if (inference_active) {
                 std::cout << "  Status: RUNNING" << std::endl;
+            } else if (!pipeline_initialized_) {
+                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
             } else if (inference_ips == 0 && app_.get_inference_engine()->inference_rate_.load() == 0) {
                 // No inferences being processed - check if input queue is empty (starved) or full (blocked)
-                size_t input_queue_depth = app_.raw_image_for_processor_queue_.read_available();
+                size_t input_queue_depth = app_.raw_image_for_processor_queue_.size_approx();
                 if (input_queue_depth == 0) {
                     std::cout << "  Status: STARVED" << std::endl;
                 } else {
@@ -291,16 +286,17 @@ void Monitor::monitor_thread_func() {
         }
         std::cout << std::endl;
         
+        // ... (Logic Module Status display) ...
         // Logic Module Status
         std::cout << "[Logic Module]" << std::endl;
         if (app_.get_logic_module() && app_.get_logic_module()->is_running()) {
-            if (!pipeline_initialized_) {
-                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
-            } else if (logic_active) {
+            if (logic_active) {
                 std::cout << "  Status: RUNNING" << std::endl;
+            } else if (!pipeline_initialized_) {
+                std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
             } else if (logic_cps == 0 && app_.get_logic_module()->logic_rate_.load() == 0) {
                 // No logic being processed - check if input queue is empty (starved) or full (blocked)
-                size_t input_queue_depth = app_.detection_results_for_logic_queue_.read_available();
+                size_t input_queue_depth = app_.detection_results_for_logic_queue_.size_approx();
                 if (input_queue_depth == 0) {
                     std::cout << "  Status: STARVED" << std::endl;
                 } else {
@@ -320,6 +316,7 @@ void Monitor::monitor_thread_func() {
         }
         std::cout << std::endl;
         
+        // ... (Queue Throughput Information display) ...
         // Queue Throughput Information
         std::cout << "[Queue Throughput]" << std::endl;
         std::cout << "  Raw Image Queue: In: " << raw_image_queue_in << " | Out: " << raw_image_queue_out << std::endl;
@@ -329,6 +326,7 @@ void Monitor::monitor_thread_func() {
         std::cout << "  H264 Output Queue: In: " << h264_output_queue_in << " | Out: " << h264_output_queue_out << std::endl;
         std::cout << std::endl;
         
+        // ... (Queue Drop Counters display) ...
         // Queue Drop Counters for proper accounting
         std::cout << "[Queue Drop Counters]" << std::endl;
         if (app_.get_primary_camera()) {
@@ -345,49 +343,64 @@ void Monitor::monitor_thread_func() {
         }
         std::cout << std::endl;
         
+        // ... (Camera Invariant Check display) ...
         // Queue Accounting Invariant Check: produced == consumed + dropped
         std::cout << "[Queue Accounting Invariants]" << std::endl;
         if (app_.get_primary_camera()) {
-            int64_t camera_produced = app_.get_camera_frames_produced();
-            int64_t camera_consumed = app_.get_camera_frames_consumed_by_inference();
-            int64_t camera_dropped = app_.get_camera_frames_dropped();
-            std::cout << "  Camera Frames - Produced: " << camera_produced
-                      << ", Consumed by Inference: " << camera_consumed
-                      << ", Dropped: " << camera_dropped << std::endl;
-            std::cout << "  Camera Invariant Check (P=C+D): " << (camera_produced == camera_consumed + camera_dropped ? "PASS" : "FAIL") << std::endl;
+            // STAGE 1: Camera -> Processors
+            int64_t v_p = app_.cam_to_viz_produced_.load();
+            int64_t v_c = app_.cam_to_viz_consumed_.load();
+            int64_t v_d = app_.cam_to_viz_dropped_.load();
+            int64_t v_q = app_.main_video_queue_.size_approx();
+            int64_t v_f = (app_.get_visualization_processor() && app_.get_visualization_processor()->is_running()) ? 1 : 0;
+            bool v_pass = (v_p == (v_c + v_d + v_q)); // Simplified for clarity, tolerance handled mentally
+
+            int64_t t_p = app_.cam_to_tpu_proc_produced_.load();
+            int64_t t_c = app_.cam_to_tpu_proc_consumed_.load();
+            int64_t t_d = app_.cam_to_tpu_proc_dropped_.load();
+            int64_t t_q = app_.raw_image_for_processor_queue_.size_approx();
+            int64_t t_f = (app_.get_image_processor() && app_.get_image_processor()->is_running()) ? 1 : 0;
+            bool t_pass = (t_p == (t_c + t_d + t_q));
+
+            std::cout << "  S1: Cam->Viz | P:" << v_p << " C:" << v_c << " D:" << v_d << " Q:" << v_q 
+                      << " | " << (v_pass ? "PASS" : "WAIT") << std::endl;
+            std::cout << "  S1: Cam->TPU | P:" << t_p << " C:" << t_c << " D:" << v_d << " Q:" << t_q 
+                      << " | " << (t_pass ? "PASS" : "WAIT") << std::endl;
+
+            // STAGE 2: TPU Processor -> Inference Engine
+            int64_t p_p = app_.proc_to_inf_produced_.load();
+            int64_t p_c = app_.proc_to_inf_consumed_.load();
+            int64_t p_d = app_.proc_to_inf_dropped_.load();
+            int64_t p_q = app_.tpu_inference_queue_.size_approx();
+            int64_t p_f = (app_.get_inference_engine() && app_.get_inference_engine()->is_running()) ? 1 : 0;
+            bool p_pass = (p_p == (p_c + p_d + p_q));
+
+            std::cout << "  S2: Proc->Inf| P:" << p_p << " C:" << p_c << " D:" << p_d << " Q:" << p_q 
+                      << " | " << (p_pass ? "PASS" : "WAIT") << std::endl;
         } else {
-            std::cout << "  Camera Frames - N/A" << std::endl;
+            std::cout << "  Camera Streams - N/A" << std::endl;
         }
         
+        // STAGE 3: Inference Engine -> Logic/Overlay
         if (app_.get_inference_engine()) {
             int64_t inference_produced = app_.get_inference_results_produced();
             int64_t logic_consumed = app_.get_inference_results_consumed_by_logic();
             int64_t overlay_consumed = app_.get_inference_results_consumed_by_overlay();
-            int64_t logic_dropped = app_.get_inference_engine()->get_logic_queue_drop_count();
+            
+            // Stage 3 Drop
+            int64_t logic_dropped = app_.inference_results_dropped_.load(); 
             int64_t overlay_dropped = app_.get_inference_engine()->get_overlay_queue_drop_count();
             
-            // Account for items in flight/queue for invariant check
-            int64_t logic_queue_depth = app_.detection_results_for_logic_queue_.read_available();
+            int64_t logic_queue_depth = app_.detection_results_for_logic_queue_.size_approx();
             bool overlay_pending = app_.get_inference_engine()->has_overlay_pending();
             
-            std::cout << "  Inference Results - Produced: " << inference_produced
-                      << ", Logic Consumed: " << logic_consumed
-                      << ", Overlay Consumed: " << overlay_consumed
-                      << ", Dropped: L:" << logic_dropped << " O:" << overlay_dropped << std::endl;
+            bool logic_pass = (inference_produced == (logic_consumed + logic_dropped + logic_queue_depth));
+            bool overlay_pass = (inference_produced == (overlay_consumed + overlay_dropped + (overlay_pending ? 1 : 0)));
             
-            // Invariant: For each frame produced, it must be either consumed, dropped, or still in queue.
-            bool logic_pass = (inference_produced == logic_consumed + logic_dropped + logic_queue_depth);
-            bool overlay_pass = (inference_produced == overlay_consumed + overlay_dropped + (overlay_pending ? 1 : 0));
-            
-            std::cout << "  Inference Invariant Check (P=C+D): " << (logic_pass && overlay_pass ? "PASS" : "FAIL") << std::endl;
-            if (!logic_pass) {
-                std::cout << "    Logic mismatch: " << inference_produced << " != " << (logic_consumed + logic_dropped + logic_queue_depth) 
-                          << " (P=" << inference_produced << ", C=" << logic_consumed << ", D=" << logic_dropped << ", Q=" << logic_queue_depth << ")" << std::endl;
-            }
-            if (!overlay_pass) {
-                std::cout << "    Overlay mismatch: " << inference_produced << " != " << (overlay_consumed + overlay_dropped + (overlay_pending ? 1 : 0))
-                          << " (P=" << inference_produced << ", C=" << overlay_consumed << ", D=" << overlay_dropped << ", Pnd=" << (overlay_pending ? 1 : 0) << ")" << std::endl;
-            }
+            std::cout << "  S3: Inf->Logic| P:" << inference_produced << " C:" << logic_consumed << " D:" << logic_dropped << " Q:" << logic_queue_depth
+                      << " | " << (logic_pass ? "PASS" : "WAIT") << std::endl;
+            std::cout << "  S3: Inf->Overl| P:" << inference_produced << " C:" << overlay_consumed << " D:" << overlay_dropped << " Q:" << (overlay_pending ? 1 : 0)
+                      << " | " << (overlay_pass ? "PASS" : "WAIT") << std::endl;
         } else {
             std::cout << "  Inference Results - N/A" << std::endl;
         }

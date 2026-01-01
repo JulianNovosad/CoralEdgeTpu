@@ -122,6 +122,8 @@ struct TrackedObject {
     // Nieuw: voorspelde impact punt en onzekerheid
     Vec3 predicted_impact_point;
     Uncertainty uncertainty;
+    OrientationData initial_orientation;
+    OrientationData latest_orientation;
 
     TrackedObject(long _id, const DetectionResult& detection, float initial_distance, float initial_x = 0.0f, float initial_y = 0.0f)
         : id(_id), last_detection(detection), 
@@ -134,7 +136,9 @@ struct TrackedObject {
           position_uncertainty({0.1f, 0.1f, 0.1f}), // Initiële onzekerheid
           velocity_uncertainty({0.1f, 0.1f, 0.1f}),
           predicted_impact_point({0.0f, 0.0f, 0.0f}),
-          uncertainty() {}
+          uncertainty() {
+              // Initial orientation will be set when the track is created in LogicModule
+          }
 };
 
 /**
@@ -197,7 +201,11 @@ enum class ServoState {
  */
 class LogicModule {
 public:
-    LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor, const ConfigLoader& config);
+    LogicModule(DetectionResultsQueue& detection_input_queue, 
+                std::shared_ptr<ObjectPool<ResultToken>> result_token_pool,
+                std::shared_ptr<OrientationSensor> orientation_sensor, 
+                const ConfigLoader& config,
+                TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer);
     ~LogicModule();
 
     bool start();
@@ -207,7 +215,7 @@ public:
 private:
     void worker_thread_func();
     void servo_worker_thread_func(); // New servo worker thread function
-    void process(const std::vector<DetectionResult>& detections);
+    void process(const std::vector<DetectionResult>& detections, CsvLogEntry& entry);
     void update_object_tracks(const std::vector<DetectionResult>& detections);
     SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, const Uncertainty& uncertainty, std::string& safety_status_message);
     void issue_servo_commands(float target_x, float target_y, float target_z, float confidence, uint64_t t_capture);
@@ -267,25 +275,19 @@ private:
     
     // PCA9685 LED controller
     std::unique_ptr<PCA9685Controller> led_controller_;
+
+    TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer_ = nullptr;
     
 public:
     // Method to set application reference for updating counters
     void set_application_ref(class Application* app) { app_ref_ = app; }
     
 private:
-    // Application reference for updating counters
-    class Application* app_ref_ = nullptr;
-    
-    // Interlock Gates and Timing (Deterministic)
-    static constexpr uint64_t MAX_FRAME_BUDGET_RAW_MS{25}; // Photon-to-PWM 25ms hard limit
-    static constexpr uint64_t ACTUATION_DWELL_MS{50};    // 50ms dwell for stroke
-    static constexpr uint64_t ACTUATION_COOLDOWN_MS{300}; // 300ms hard cooldown
-    
     // Servo State Machine
     ServoState servo_state_ = ServoState::IDLE;
     uint64_t state_start_ms_ = 0;
 
-    // Servo command queue for decoupled actuation
+    // Servo command queue for decoupled actuation (Lock-Free)
     struct ServoCommand {
         float target_x;
         float target_y;
@@ -293,8 +295,18 @@ private:
         float confidence;
         uint64_t t_capture; // Frame capture time for latency audit
     };
-    std::queue<ServoCommand> servo_command_queue_;
-    std::mutex servo_queue_mutex_;
+
+    // Application reference for updating counters
+    class Application* app_ref_ = nullptr;
+    std::shared_ptr<ObjectPool<ResultToken>> result_token_pool_;
+    std::shared_ptr<ObjectPool<ServoCommand>> servo_command_pool_;
+    
+    // Interlock Gates and Timing (Deterministic)
+    static constexpr uint64_t MAX_FRAME_BUDGET_RAW_MS{100}; // Photon-to-PWM 100ms (DEBUG RELAXED)
+    static constexpr uint64_t ACTUATION_DWELL_MS{50};    // 50ms dwell for stroke
+    static constexpr uint64_t ACTUATION_COOLDOWN_MS{300}; // 300ms hard cooldown
+    
+    LockFreeQueue<ServoCommand*> servo_command_queue_;
     std::thread servo_worker_thread_;
     std::atomic<bool> servo_worker_running_ = false;
 
@@ -340,7 +352,6 @@ private:
     
     // New method for camera-space angular error calculation
     float camera_cone_error_degrees_from_pixels(float radial_px) const;
-
 };
 
 #endif // LOGIC_H

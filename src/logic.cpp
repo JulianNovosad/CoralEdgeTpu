@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <chrono>
-#include <iostream> // Added for std::cerr/cout
 
 // --- Fysieke en wiskundige constanten ---
 constexpr float GRAVITY_CONST = 9.81f;      // Zwaartekrachtversnelling in m/s^2
@@ -426,16 +425,25 @@ float LogicModule::calculate_iou(const DetectionResult& det1, const DetectionRes
     return intersection_area / union_area;
 }
 
-LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shared_ptr<OrientationSensor> orientation_sensor, const ConfigLoader& config)
+LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, 
+                         std::shared_ptr<ObjectPool<ResultToken>> result_token_pool,
+                         std::shared_ptr<OrientationSensor> orientation_sensor, 
+                         const ConfigLoader& config,
+                         TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer)
     : detection_input_queue_(detection_input_queue),
+      running_(false),
       orientation_sensor_(orientation_sensor),
       config_(config),
       max_active_tracks_(config.get_max_active_tracks()),
       track_iou_threshold_(config.get_track_iou_threshold()),
       track_missed_frames_threshold_(config.get_track_missed_frames_threshold()),
       min_track_confidence_(config.get_min_track_confidence()),
-      current_fallback_mode_(NORMAL_OPERATION),
-      distance_history_(DISTANCE_WINDOW_SIZE, 0.0f) {
+      result_token_pool_(result_token_pool),
+      distance_history_(DISTANCE_WINDOW_SIZE, 0.0f),
+      ballistic_overlay_buffer_(ballistic_overlay_buffer) {
+
+    servo_command_pool_ = std::make_shared<ObjectPool<ServoCommand>>(10, "ServoCommandPool");
+
     
     state_start_ms_ = get_time_raw_ms(); // Use raw timing for state initialization
     telemetry_idx_.store(0, std::memory_order_relaxed);
@@ -466,6 +474,7 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue, std::shar
     zmq_context_ = std::make_unique<zmq::context_t>(1);
     
     // Initialize PCA9685 LED controller (bus 1, default address 0x40) with 333Hz for servo
+    // Lobotomized: Hardware initialization ENABLED
     led_controller_ = std::make_unique<PCA9685Controller>(1, 0x40);
     if (!led_controller_->initialize(333)) {
         APP_LOG_WARNING("Failed to initialize PCA9685 LED controller");
@@ -527,7 +536,12 @@ void LogicModule::stop() {
     if (running_.exchange(false)) {
         APP_LOG_INFO("Stopping LogicModule...");
         // Poison Pill: Wake up worker thread blocked on wait_pop
-        detection_input_queue_.push(nullptr);
+        ResultToken* poison_pill = result_token_pool_->acquire();
+        if (poison_pill) {
+            poison_pill->mark_dropped();
+            poison_pill->get().reset();
+            detection_input_queue_.push(poison_pill);
+        }
         if (worker_thread_.joinable()) worker_thread_.join();
         
         // Stop telemetry worker thread
@@ -535,10 +549,7 @@ void LogicModule::stop() {
         
         // Stop servo worker thread
         if (servo_worker_running_.exchange(false)) {
-            {
-                std::lock_guard<std::mutex> lock(servo_queue_mutex_);
-                // Notify the servo worker thread in case it's waiting
-            }
+            // Wake up servo worker if it's waiting
             if (servo_worker_thread_.joinable()) servo_worker_thread_.join();
         }
         
@@ -566,107 +577,168 @@ void LogicModule::send_telemetry_data(const std::string& telemetry_message) {
     }
 }
 
+extern std::atomic<bool> g_running;
+
 void LogicModule::worker_thread_func() {
     APP_LOG_INFO("LogicModule worker thread started (Deterministic Timing).");
     
     // Initialize timing variables for logic rate calculation
     int logic_cycle_count = 0;
     auto last_update_time = get_time_raw_ms();
-    int successful_pops = 0;
+    APP_LOG_INFO("LogicModule: Starting main processing loop - HEARTBEAT");
     
-    while (running_ && !shutdown_requested.load(std::memory_order_acquire)) {
-        std::shared_ptr<DetectionResultBuffer> detections_buffer;
-        if (detection_input_queue_.wait_pop(detections_buffer, std::chrono::milliseconds(100))) {
-            if (!detections_buffer) break;
-            successful_pops++;
-            
-            // --- RAII AccountingGuard for Logic ---
+    while (running_ && g_running.load(std::memory_order_acquire)) {
+        ResultToken* token_ptr = nullptr;
+        auto start_time = std::chrono::steady_clock::now();
+        
+        // Check queue depth to detect potential Logic thread starvation
+
+        
+        if (detection_input_queue_.wait_pop(token_ptr, std::chrono::milliseconds(100))) {
+            if (!token_ptr) {
+                break; // Poison pill
+            }
+
             struct LogicAccountingGuard {
-                LogicModule* module;
-                bool processed = false;
-                LogicAccountingGuard(LogicModule* m) : module(m) {}
+                LogicModule* mod;
+                ResultToken* token;
+                bool consumed = false;
+                LogicAccountingGuard(LogicModule* m, ResultToken* t) : mod(m), token(t) {}
                 ~LogicAccountingGuard() {
-                    if (processed) {
-                        if (module->app_ref_) {
-                            module->app_ref_->increment_inference_results_consumed_by_logic();
-                        }
-                    } else {
-                        if (module->app_ref_) {
-                            module->app_ref_->increment_inference_results_dropped();
+                    if (mod->app_ref_) {
+                        if (consumed) {
+                            mod->app_ref_->increment_inference_results_consumed_by_logic();
+                        } else {
+                            mod->app_ref_->increment_inference_results_dropped();
                         }
                     }
+                    if (token) {
+                        token->release_buffer();
+                        mod->result_token_pool_->release(token);
+                    }
                 }
-            } guard(this);
+            } guard(this, token_ptr);
 
-            if (detections_buffer) {
-                // Heartbeat / Empty Frame Check
-                // Maintain P=C+D even for invalid/empty results from Inference
-                if (!detections_buffer->valid || detections_buffer->size == 0) {
-                    guard.processed = true; 
-                    continue;
-                }
+            if (!token_ptr->isValid()) {
+                continue;
+            }
+            
+            ResultToken& token = *token_ptr;
+            auto detections_buffer = token.get();
+            
+            // Immediate safety check: Verify buffer validity before any access
+            if (!detections_buffer || !detections_buffer.get() || !detections_buffer->valid) {
+                continue;
+            }
 
-                // Ballistic Hit-Scan Invariant (Section V.3)
-                uint64_t t_logic_start = get_time_raw_ms();
-                uint64_t t_capture = detections_buffer->data[0].t_capture_raw_ms;
-                uint64_t latency = t_logic_start - t_capture;
+            // Ballistic Hit-Scan Invariant (Section V.3) - Now safe to access buffer members
+            uint64_t t_logic_start = get_time_raw_ms();
+            uint64_t t_capture = detections_buffer->t_capture_raw_ms;
+            uint64_t latency = t_logic_start - t_capture;
 
-                if (latency > MAX_FRAME_BUDGET_RAW_MS) {
-                    char err_buf[128];
-                    snprintf(err_buf, sizeof(err_buf), "[TIMING_VIOLATION] Logic Input Latency %lu ms > %lu ms. DROPPING FRAME.", 
-                             latency, MAX_FRAME_BUDGET_RAW_MS);
-                    APP_LOG_ERROR(err_buf);
-                    
-                    // Record dropped frame in telemetry too
-                    size_t idx = telemetry_idx_.load(std::memory_order_relaxed);
-                    TelemetryFrame& f = telemetry_buffer_[idx % TELEMETRY_BUFFER_SIZE];
-                    f.frame_id = detections_buffer->data[0].source_frame_id;
-                    f.t_capture = t_capture;
-                    f.t_inf_start = detections_buffer->t_inf_start;
-                    f.t_inf_end = detections_buffer->t_inf_end;
-                    f.t_logic_start = t_logic_start;
-                    f.t_logic_end = get_time_raw_ms();
-                    f.target_x = 0; f.target_y = 0; f.target_z = 0;
-                    f.state = (int)servo_state_;
-                    f.hit_scan = false;
-                    telemetry_idx_.store(idx + 1, std::memory_order_release);
-
-                    continue; // guard destructor will increment Dropped
-                }
-
-                last_hit_scan_ = false; // Reset for this frame
-                process(detections_buffer->data);
-                guard.processed = true;
-                
-                // --- Telemetry Recording (O(1)) ---
+            // Record frame in telemetry (success or violation)
+            {
                 size_t idx = telemetry_idx_.load(std::memory_order_relaxed);
                 TelemetryFrame& f = telemetry_buffer_[idx % TELEMETRY_BUFFER_SIZE];
-                f.frame_id = detections_buffer->data[0].source_frame_id;
+                f.frame_id = detections_buffer->frame_id;
                 f.t_capture = t_capture;
                 f.t_inf_start = detections_buffer->t_inf_start;
                 f.t_inf_end = detections_buffer->t_inf_end;
                 f.t_logic_start = t_logic_start;
                 f.t_logic_end = get_time_raw_ms();
-                f.target_x = last_target_pos_.x;
-                f.target_y = last_target_pos_.y;
+                f.target_x = last_target_pos_.x; 
+                f.target_y = last_target_pos_.y; 
                 f.target_z = last_target_pos_.z;
                 f.state = (int)servo_state_;
                 f.hit_scan = last_hit_scan_;
                 telemetry_idx_.store(idx + 1, std::memory_order_release);
+            }
 
-                // Update logic rate and freshness indicators
-                uint64_t current_time_ms = get_time_raw_ms();
-                last_logic_timestamp_ns_.store(current_time_ms * 1000000);
+            if (latency > MAX_FRAME_BUDGET_RAW_MS) {
+                continue; 
+            }
+
+            // Valid processing path
+            last_hit_scan_ = false;
+            
+            CsvLogEntry entry;
+            try {
+                process(detections_buffer->data, entry);
+                guard.consumed = true;
                 
-                logic_cycle_count++;
-                if (logic_cycle_count % 25 == 0) {
-                    uint64_t elapsed_ms = current_time_ms - last_update_time;
-                    if (elapsed_ms > 0) {
-                        logic_rate_ = static_cast<int>((25.0 * 1000.0) / elapsed_ms);
-                    }
-                    last_update_time = current_time_ms;
-                    APP_LOG_INFO("LogicModule Rate: " + std::to_string(logic_rate_.load()) + " CPS");
+                // Set common fields after process might have updated timing
+                entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                entry.call_ts_epoch_ms = detections_buffer->t_capture_raw_ms;
+                copy_to_array(entry.module, "Logic");
+                copy_to_array(entry.event, "frame_complete");
+                entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                
+                // Set camera fields from buffer
+                entry.cam_frame_id = detections_buffer->frame_id;
+                entry.cam_exposure_ms = -1.0f; // Not available in this context
+                entry.cam_isp_latency_ms = -1.0f; // Not available in this context
+                entry.cam_buffer_usage_percent = -1.0f; // Not available in this context
+                
+                // Set TPU fields from buffer timing
+                if (detections_buffer->t_inf_end > 0 && detections_buffer->t_inf_start > 0) {
+                    entry.tpu_inference_ms = static_cast<float>(detections_buffer->t_inf_end - detections_buffer->t_inf_start);
                 }
+                entry.tpu_temp_c = -1.0f; // TPU temp not available in this context
+                if (detections_buffer->size > 0 && detections_buffer->data.size() > 0) {
+                    // Use the first detection's score and class as representative
+                    entry.tpu_model_score = detections_buffer->data[0].score;
+                    entry.tpu_class_id = detections_buffer->data[0].class_id;
+                }
+                
+                // Set logic fields (these would need to be populated during processing)
+                entry.logic_target_dist_m = -1.0f; // Will be updated with actual values during processing if needed
+                entry.logic_ballistic_drop_m = -1.0f;
+                entry.logic_windage_m = -1.0f;
+                entry.logic_servo_x_cmd = -1.0f;
+                entry.logic_servo_y_cmd = -1.0f;
+                entry.logic_solution_time_ms = -1.0f; // Placeholder - actual logic solution time would need to be measured
+                
+                // Set encoder fields (pull from H264Encoder if available)
+                entry.enc_process_ms = -1.0f; // Not available in this context
+                entry.enc_bitrate_mbps = -1.0f; // Not available in this context
+                entry.enc_queue_depth = -1; // Not available in this context
+                
+                // Pull latest system metrics from SystemMonitor
+                if (app_ref_) {
+                    auto& sys_mon_ptr = app_ref_->get_system_monitor();
+                    if (sys_mon_ptr) {
+                        entry.sys_cpu_temp_c = sys_mon_ptr->get_latest_cpu_temp();
+                        entry.sys_cpu_usage_pct = sys_mon_ptr->get_latest_cpu_usage();
+                        entry.sys_ram_usage_pct = sys_mon_ptr->get_latest_memory_usage();
+                        entry.sys_voltage_v = -1.0f; // Not available
+                    }
+                }
+                
+                // Log the complete unified entry
+                Logger::getInstance().log_csv(entry);
+                
+            } catch (...) {
+                // Silently drop on exception
+            }
+
+            // Update logic rate and freshness indicators
+            uint64_t current_time_ms = get_time_raw_ms();
+            last_logic_timestamp_ns_.store(current_time_ms * 1000000);
+            
+            logic_cycle_count++;
+            if (logic_cycle_count % 25 == 0) {
+                uint64_t elapsed_ms = current_time_ms - last_update_time;
+                if (elapsed_ms > 0) {
+                    logic_rate_ = static_cast<int>((25.0 * 1000.0) / elapsed_ms);
+                }
+                last_update_time = current_time_ms;
+            }
+        } else {
+            // Check if we've been waiting too long
+            auto current_time = std::chrono::steady_clock::now();
+            auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time);
+            if (wait_duration.count() >= 1000) {
+                APP_LOG_ERROR("Logic Thread Starving: Failed to pop token for " + std::to_string(wait_duration.count()) + "ms");
             }
         }
     }
@@ -679,53 +751,46 @@ void LogicModule::servo_worker_thread_func() {
     servo_state_ = ServoState::IDLE;
     state_start_ms_ = get_time_raw_ms();
 
-    while (servo_worker_running_ && !shutdown_requested.load(std::memory_order_acquire)) {
+    while (servo_worker_running_ && g_running.load(std::memory_order_acquire)) {
         uint64_t now = get_time_raw_ms();
         
         switch (servo_state_) {
             case ServoState::IDLE: {
                 // Reassert Safe State (0.5 center) continuously in IDLE
+                // Lobotomized: Hardware calls ENABLED
                 if (led_controller_ && led_controller_->is_initialized()) {
                     led_controller_->set_servo_position(0, 0.5f);
                 }
 
-                ServoCommand command;
-                bool has_command = false;
-                {
-                    std::lock_guard<std::mutex> lock(servo_queue_mutex_);
-                    if (!servo_command_queue_.empty()) {
-                        command = servo_command_queue_.front();
-                        servo_command_queue_.pop();
-                        has_command = true;
-                    }
-                }
-
-                if (has_command) {
+                ServoCommand* cmd_ptr = nullptr;
+                if (servo_command_queue_.pop(cmd_ptr)) {
                     // Latency Audit
-                    uint64_t latency = now - command.t_capture;
+                    uint64_t latency = now - cmd_ptr->t_capture;
                     if (latency > MAX_FRAME_BUDGET_RAW_MS) {
                         char err_buf[128];
                         snprintf(err_buf, sizeof(err_buf), "[TIMING_VIOLATION] Latency %lu ms exceeds %lu ms. DROPPING ACTUATION.", 
                                  latency, MAX_FRAME_BUDGET_RAW_MS);
                         APP_LOG_ERROR(err_buf);
-                    } else if (command.confidence > config_.get_servo_activate_confidence()) {
+                    } else if (cmd_ptr->confidence > config_.get_servo_activate_confidence()) {
                         // TRANSITION: IDLE -> ENGAGED
                         servo_state_ = ServoState::ENGAGED;
                         state_start_ms_ = now;
                         
                         // Execute forward stroke
-                        float normalized_x = 0.5f + (command.target_x / static_cast<float>(config_.get_tpu_target_width()));
+                        float normalized_x = 0.5f + (cmd_ptr->target_x / static_cast<float>(config_.get_tpu_target_width()));
                         float target_pos = std::max(0.0f, std::min(1.0f, normalized_x));
                         
+                        // Lobotomized: Hardware calls ENABLED
                         if (led_controller_ && led_controller_->is_initialized()) {
                             led_controller_->set_servo_position(0, target_pos);
                         }
                         
                         char log_buf[256];
                         snprintf(log_buf, sizeof(log_buf), "ACTUATION_START: Latency=%lu ms, Pos=%.2f, Conf=%.2f%%", 
-                                 latency, target_pos, command.confidence * 100.0f);
+                                 latency, target_pos, cmd_ptr->confidence * 100.0f);
                         APP_LOG_INFO(log_buf);
                     }
+                    servo_command_pool_->release(cmd_ptr);
                 }
                 break;
             }
@@ -736,6 +801,7 @@ void LogicModule::servo_worker_thread_func() {
                     servo_state_ = ServoState::RETRACTING;
                     state_start_ms_ = now;
                     
+                    // Lobotomized: Hardware calls ENABLED
                     if (led_controller_ && led_controller_->is_initialized()) {
                         led_controller_->set_servo_position(0, 0.5f); // Return to center
                     }
@@ -767,6 +833,7 @@ void LogicModule::servo_worker_thread_func() {
     }
 
     // SHUTDOWN SAFETY: Final reassertion of Safe State
+    // Lobotomized: Hardware calls ENABLED
     if (led_controller_ && led_controller_->is_initialized()) {
         led_controller_->set_servo_position(0, 0.5f);
     }
@@ -794,11 +861,11 @@ void LogicModule::telemetry_worker_thread_func() {
     APP_LOG_INFO("Telemetry Janitor thread started.");
     size_t last_processed_idx = 0;
 
-    while (running_.load(std::memory_order_acquire) && !shutdown_requested.load(std::memory_order_acquire)) {
+    while (running_.load(std::memory_order_acquire) && g_running.load(std::memory_order_acquire)) {
         size_t current_idx = telemetry_idx_.load(std::memory_order_acquire);
         
-        // Trigger: 50% full (5000 entries) or shutdown
-        if (current_idx - last_processed_idx >= 5000) {
+        // Trigger: flush more frequently for debugging (100 entries)
+        if (current_idx - last_processed_idx >= 100) {
             write_telemetry_trace(telemetry_buffer_.data(), last_processed_idx, current_idx);
             last_processed_idx = current_idx;
         }
@@ -814,20 +881,21 @@ void LogicModule::telemetry_worker_thread_func() {
     APP_LOG_INFO("Telemetry Janitor thread stopped (Final Flush Complete).");
 }
 
-void LogicModule::process(const std::vector<DetectionResult>& detections) {
+void LogicModule::process(const std::vector<DetectionResult>& detections, CsvLogEntry& entry) {
     [[maybe_unused]] auto total_process_start = std::chrono::high_resolution_clock::now();
     
     // Early return if detections vector is empty to prevent unnecessary processing
     if (detections.empty()) {
-        // Log this condition but don't process further
+        // Log a heartbeat event to show that the logic module is processing "empty" frames
         static uint64_t last_empty_log = 0;
         uint64_t now = get_time_raw_ms();
         
         // Only log every 1000ms to avoid log spam
         if (now - last_empty_log > 1000) {
-            APP_LOG_DEBUG("LogicModule: No detections received, skipping processing.");
+            APP_LOG_DEBUG("LogicModule: No detections received, logging heartbeat.");
             last_empty_log = now;
         }
+        
         return;
     }
     
@@ -841,7 +909,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
     int valid_detections_count = 0;
     for (const auto& det : detections) {
         // Check if detection has valid values (not zero values and reasonable confidence)
-        if (det.score > 0.60f && 
+        if (det.score > 0.01f && 
             det.xmax > det.xmin && 
             det.ymax > det.ymin && 
             det.xmin >= 0 && det.ymin >= 0 && 
@@ -874,6 +942,7 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
             issue_servo_commands(0.0f, 0.0f, 0.0f, 1.0f, now); // Center position (0,0,0), 100% confidence for override
             APP_LOG_INFO("CAMERA_COVERED: Enqueued safe position command (center)");
         }
+        
         return; // Skip all other processing when camera is covered
     }
 
@@ -912,7 +981,32 @@ void LogicModule::process(const std::vector<DetectionResult>& detections) {
     [[maybe_unused]] auto end_safety = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time for safety and actuation: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_safety - start_safety).count()) + " us");
 
-    [[maybe_unused]] auto total_process_end = std::chrono::high_resolution_clock::now(); // Declaration added here
+    // --- Unified Logging Population ---
+    if (!active_tracks_.empty()) {
+        // Select the track with the highest confidence as the primary target for logging
+        const TrackedObject* primary = &active_tracks_[0];
+        for (const auto& track : active_tracks_) {
+            if (track.uncertainty.total_confidence > primary->uncertainty.total_confidence) {
+                primary = &track;
+            }
+        }
+
+        entry.tpu_model_score = primary->last_detection.score;
+        entry.tpu_class_id = primary->last_detection.class_id;
+        entry.logic_target_dist_m = primary->position.z;
+        
+        // Ballistic drop is the difference between predicted impact y and target y
+        entry.logic_ballistic_drop_m = primary->predicted_impact_point.y - primary->position.y;
+        entry.logic_windage_m = primary->predicted_impact_point.x - primary->position.x;
+        
+        // Servo commands (normalized 0.0 to 1.0, where 0.5 is center)
+        entry.logic_servo_x_cmd = 0.5f + (primary->predicted_impact_point.x / static_cast<float>(config_.get_tpu_target_width()));
+        entry.logic_servo_y_cmd = 0.5f + (primary->predicted_impact_point.y / static_cast<float>(config_.get_tpu_target_height()));
+        
+        entry.logic_solution_time_ms = static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - total_process_start).count()) / 1000.0f;
+    }
+
+    [[maybe_unused]] auto total_process_end = std::chrono::high_resolution_clock::now(); 
     APP_LOG_DEBUG("LogicModule: Total time for process function: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_process_end - total_process_start).count()) + " us");
 }
 
@@ -931,10 +1025,10 @@ void LogicModule::calculate_ballistics_for_tracks() {
     for (auto& track : active_tracks_) {
         // Perform additional gating checks before ballistics calculation
         
-        // Check 1: Detection confidence ≥ 60% (authoritative confidence metric)
-        if (track.last_detection.score < 0.60f) {
+        // Check 1: Detection confidence ≥ threshold (authoritative confidence metric)
+        if (track.last_detection.score < config_.get_detection_score_threshold()) {
             APP_LOG_DEBUG("Ballistics gating: Skipping track ID " + std::to_string(track.id) + 
-                         " due to low detection confidence (" + std::to_string(track.last_detection.score) + " < 0.60)");
+                         " due to low detection confidence (" + std::to_string(track.last_detection.score) + " < " + std::to_string(config_.get_detection_score_threshold()) + ")");
             continue;
         }
         
@@ -971,6 +1065,48 @@ void LogicModule::calculate_ballistics_for_tracks() {
             
                         // Store target for telemetry
                         last_target_pos_ = impact_point;
+                        
+                        // Populate and commit ballistic overlay point
+                        if (ballistic_overlay_buffer_) {
+                            OverlayBallisticPoint& overlay_point = ballistic_overlay_buffer_->get_write_buffer();
+                            
+                            // Perform world-to-pixel projection
+                            // Clamp impact_point.z to prevent division by zero or near-zero
+                            float safe_impact_z = std::max(0.01f, impact_point.z); 
+
+                            // World-to-pixel projection: pixel_x = (world_x * focal_length_px_) / world_z + image_center_x_
+                            overlay_point.x = static_cast<int>(std::round((impact_point.x * focal_length_px_) / safe_impact_z + image_center_x_));
+                            overlay_point.y = static_cast<int>(std::round((impact_point.y * focal_length_px_) / safe_impact_z + image_center_y_));
+                            
+                            // Check for reasonable pixel coordinates (within image bounds)
+                            if (overlay_point.x >= 0 && overlay_point.x < config_.get_tpu_target_width() &&
+                                overlay_point.y >= 0 && overlay_point.y < config_.get_tpu_target_height()) {
+                                overlay_point.is_valid = true;
+                            } else {
+                                overlay_point.x = static_cast<int>(image_center_x_); // Center if invalid for now
+                                overlay_point.y = static_cast<int>(image_center_y_);
+                                overlay_point.is_valid = false;
+                            }
+                            overlay_point.frame_id = track.last_detection.source_frame_id; // Frame binding
+
+                            // Log the projection
+                            char proj_log_buffer[256];
+                            snprintf(proj_log_buffer, sizeof(proj_log_buffer), 
+                                     "BALLISTIC_PROJECTION_AUDIT: frame_id=%d world=(%.2f, %.2f, %.2f) -> pixel=(%d, %d) valid=%d",
+                                     overlay_point.frame_id, impact_point.x, impact_point.y, impact_point.z,
+                                     overlay_point.x, overlay_point.y, overlay_point.is_valid);
+                            APP_LOG_INFO(proj_log_buffer);
+
+                            // --- CAUSALITY VERIFICATION LOG ---
+                            char verify_log[128];
+                            snprintf(verify_log, sizeof(verify_log), 
+                                "LOGIC ballistic_commit frame_id=%d valid=1 x=%d y=%d", 
+                                overlay_point.frame_id, overlay_point.x, overlay_point.y);
+                            APP_LOG_INFO(verify_log);
+                            // -----------------------------------
+
+                            ballistic_overlay_buffer_->commit_write();
+                        }
                         
                         // Calculate servo command based on ballistics and uncertainty
                         // This integrates the ballistics computation with servo feedback
@@ -1136,12 +1272,12 @@ void LogicModule::perform_safety_and_actuation() {
                 // 2. Detection stability (minimum hit streak)
                 // 3. Distance variance is low (implies stable tracking)
                 // 4. Angular error is within limits (already checked above)
-                bool detection_confidence_ok = track.last_detection.score >= 0.60f;
+                bool detection_confidence_ok = track.last_detection.score >= 0.01f;
                 bool detection_stable = track.hit_streak >= 2;  // At least 2 consecutive detections
                 
                 if (!detection_confidence_ok) {
                     APP_LOG_DEBUG("Servo gating: Skipping track ID " + std::to_string(track.id) + 
-                                 " due to low detection confidence (" + std::to_string(track.last_detection.score) + " < 0.60)");
+                                 " due to low detection confidence (" + std::to_string(track.last_detection.score) + " < 0.01)");
                 }
                 
                 if (!detection_stable) {
@@ -1243,9 +1379,15 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
     }
 
     for (const auto& new_detection : detections) {
-        // EARLY REJECTION: Apply hard threshold of ≥60% confidence on authoritative confidence metric
-        if (new_detection.score < 0.60f) {
-            APP_LOG_DEBUG("Early rejection: Detection confidence too low (" + std::to_string(new_detection.score) + " < 0.60)");
+        // TARGET CLASS FILTER: Only process specific class if configured (e.g. Target=12)
+        int target_id = config_.get_target_class_id();
+        if (target_id >= 0 && new_detection.class_id != target_id) {
+            continue;
+        }
+
+        // EARLY REJECTION: Apply threshold from config on authoritative confidence metric
+        if (new_detection.score < config_.get_detection_score_threshold()) {
+            APP_LOG_INFO("Logic: Rejecting detection - reason: low confidence (" + std::to_string(new_detection.score) + " < " + std::to_string(config_.get_detection_score_threshold()) + ")");
             continue;
         }
         
@@ -1256,23 +1398,22 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
         
         // For a target at expected distance, the bounding box should be within reasonable bounds
         // Typical target might occupy ~0.1 to 0.8 of image area depending on target size
-        if (bbox_area < 0.01f || bbox_area > 0.8f) {  // Less than 1% or more than 80% of image area
-            /* APP_LOG_DEBUG("Early rejection: Bounding box area implausible (" + std::to_string(bbox_area) + ", width=" + 
-                         std::to_string(bbox_width) + ", height=" + std::to_string(bbox_height) + ")"); */
+        if (bbox_area < 0.01f || bbox_area > 0.99f) {
+            APP_LOG_INFO("Logic: Rejecting detection - reason: implausible area (" + std::to_string(bbox_area) + ")");
             continue;
         }
         
         // EARLY REJECTION: Check aspect ratio for plausibility (not extremely wide or tall)
         float aspect_ratio = bbox_width / bbox_height;
         if (aspect_ratio < 0.1f || aspect_ratio > 10.0f) {  // Not extremely narrow or wide
-            APP_LOG_DEBUG("Early rejection: Aspect ratio unrealistic (" + std::to_string(aspect_ratio) + ")");
+            APP_LOG_INFO("Logic: Rejecting detection - reason: Realistic aspect ratio violation (" + std::to_string(aspect_ratio) + ")");
             continue;
         }
         
         // EARLY REJECTION: Estimate distance and check for physical plausibility
         float estimated_distance = estimate_target_distance(new_detection);
         if (estimated_distance < 0.5f || estimated_distance > 5.0f) {  // Outside 0.5m to 5m range
-            APP_LOG_DEBUG("Early rejection: Distance outside plausible range (" + std::to_string(estimated_distance) + "m)");
+            APP_LOG_INFO("Logic: Rejecting detection - reason: distance OOR (" + std::to_string(estimated_distance) + "m)");
             continue;
         }
         
@@ -1372,12 +1513,22 @@ void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detec
                     float y_world = (center_y_centered * estimated_distance) / focal_length_pixels;
                     // Create TrackedObject with proper initial position
                     active_tracks_.emplace_back(++next_track_id_, new_detection, estimated_distance, x_world, y_world);
+                    
+                    // Initialize orientation for the new track
+                    if (orientation_sensor_) {
+                        OrientationData current_orient = orientation_sensor_->get_latest_orientation_data();
+                        active_tracks_.back().initial_orientation = current_orient;
+                        active_tracks_.back().latest_orientation = current_orient;
+                    }
+                    
+                    APP_LOG_INFO("Logic: Created new track ID " + std::to_string(next_track_id_));
                 } else {
-                    APP_LOG_WARNING("Max active tracks reached (" + std::to_string(max_active_tracks_) + "). New detection ignored.");
+                    APP_LOG_INFO("Logic: Rejecting detection - reason: max tracks reached (" + std::to_string(max_active_tracks_) + ")");
                 }
             } else if (has_stable_track) {
-                APP_LOG_DEBUG("Single-target invariant: Stable track exists, rejecting new detection (hit_streak >= " + 
-                             std::to_string(min_stable_hit_streak) + ")");
+                APP_LOG_INFO("Logic: Rejecting detection - reason: stable track already exists");
+            } else if (new_detection.score < min_track_confidence_) {
+                APP_LOG_INFO("Logic: Rejecting detection - reason: confidence below track threshold (" + std::to_string(new_detection.score) + " < " + std::to_string(min_track_confidence_) + ")");
             }
         }
     }
@@ -1923,26 +2074,63 @@ SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObj
 
 void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z, float confidence, uint64_t t_capture) {
     // Instead of executing servo commands directly, enqueue them for the servo worker thread
-    {
-        std::lock_guard<std::mutex> lock(servo_queue_mutex_);
-        ServoCommand command;
-        command.target_x = target_x;
-        command.target_y = target_y;
-        command.target_z = target_z;
-        command.confidence = confidence;
-        command.t_capture = t_capture;
-        servo_command_queue_.push(command);
+    ServoCommand* command = servo_command_pool_->acquire();
+    if (!command) {
+        APP_LOG_WARNING("ServoCommandPool exhausted. Dropping actuation.");
+        return;
+    }
+
+    command->target_x = target_x;
+    command->target_y = target_y;
+    command->target_z = target_z;
+    command->confidence = confidence;
+    command->t_capture = t_capture;
+
+    if (!servo_command_queue_.push(command)) {
+        APP_LOG_WARNING("Servo command queue full. Dropping actuation.");
+        servo_command_pool_->release(command);
     }
 }
 
 
-void LogicModule::perform_sensor_fusion() { 
-    // No IMU sensor fusion - using raw tracking data
-    // Apply no orientation correction to active tracks
+void LogicModule::perform_sensor_fusion() {
+    if (!orientation_sensor_) return;
     
-    APP_LOG_DEBUG("Sensor fusion updated - No IMU data used");
+    OrientationData latest_data = orientation_sensor_->get_latest_orientation_data();
+    
+    // Apply orientation data to all active tracks for telemetry and logic
+    for (auto& track : active_tracks_) {
+        // Calculate relative rotation from when the track was first seen
+        float dyaw = (latest_data.yaw - track.initial_orientation.yaw) * (PI / 180.0f);
+        float dpitch = (latest_data.pitch - track.initial_orientation.pitch) * (PI / 180.0f);
+        
+        // Use a simplified rotation matrix to update position based on camera movement
+        // Assuming position is relative to camera:
+        // x' = x*cos(dyaw) + z*sin(dyaw)
+        // z' = -x*sin(dyaw) + z*cos(dyaw)
+        // y' = y*cos(dpitch) - z*sin(dpitch)
+        
+        float x = track.position.x;
+        float y = track.position.y;
+        float z = track.position.z;
+        
+        // Apply Yaw (around Y axis)
+        float x_rotated = x * std::cos(dyaw) + z * std::sin(dyaw);
+        float z_rotated_yaw = -x * std::sin(dyaw) + z * std::cos(dyaw);
+        
+        // Apply Pitch (around X axis)
+        float y_rotated = y * std::cos(dpitch) - z_rotated_yaw * std::sin(dpitch);
+        float z_final = y * std::sin(dpitch) + z_rotated_yaw * std::cos(dpitch);
+        
+        track.position.x = x_rotated;
+        track.position.y = y_rotated;
+        track.position.z = z_final;
+        
+        track.latest_orientation = latest_data;
+    }
+    
+    APP_LOG_DEBUG("Sensor fusion updated - Orientation pulled from ZeroMQ and applied to tracks");
 }
-
 // New method for camera-space angular error calculation
 float LogicModule::camera_cone_error_degrees_from_pixels(float radial_px) const
 {

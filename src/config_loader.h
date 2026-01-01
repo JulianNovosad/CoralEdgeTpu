@@ -36,6 +36,7 @@ public:
     unsigned int get_reduced_res_height() const;
     std::chrono::seconds get_camera_watchdog_timeout() const;
     int get_inference_worker_threads() const;
+    int get_target_class_id() const;
     int get_jpeg_quality() const;
     double get_camera_fps() const;
     float get_detection_score_threshold() const;

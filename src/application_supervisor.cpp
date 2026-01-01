@@ -7,24 +7,40 @@
 #include <stdlib.h>
 #include <atomic>
 
-// External declaration of the global atomic flag defined in main.cpp
-extern std::atomic<bool> shutdown_requested;
+// External declaration of the global atomic flag defined in global_definitions.cpp
+extern std::atomic<bool> g_running;
 
 // External declaration for terminal settings (defined in main.cpp)
 extern struct termios original_termios;
 
 static void signal_handler(int signum) {
-    if (shutdown_requested.load(std::memory_order_acquire)) {
+    if (!g_running.load(std::memory_order_acquire)) {
         // Force exit if signal is received again during shutdown
         _exit(signum);
     }
-    shutdown_requested.store(true, std::memory_order_release);
+    g_running.store(false, std::memory_order_release);
 }
 
 static void crash_handler(int signum) {
-    // Restore terminal settings on crash
+    // Restore terminal settings on crash (tcsetattr is generally signal-safe)
     tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
-    std::cerr << "\nFATAL: Program crashed with signal " << signum << std::endl;
+    
+    // POSIX async-signal-safe error reporting
+    const char* msg = "\nFATAL: Program crashed with signal: ";
+    write(STDERR_FILENO, msg, 37);
+
+    if (signum == SIGSEGV) {
+        write(STDERR_FILENO, "SIGSEGV (Segmentation Fault)\n", 29);
+    } else if (signum == SIGABRT) {
+        write(STDERR_FILENO, "SIGABRT (Abort)\n", 16);
+    } else if (signum == SIGILL) {
+        write(STDERR_FILENO, "SIGILL (Illegal Instruction)\n", 29);
+    } else if (signum == SIGFPE) {
+        write(STDERR_FILENO, "SIGFPE (Arithmetic Exception)\n", 30);
+    } else {
+        write(STDERR_FILENO, "UNKNOWN\n", 8);
+    }
+    
     _exit(signum);
 }
 

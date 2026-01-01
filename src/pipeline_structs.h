@@ -12,7 +12,9 @@
 #include <functional> // For std::function
 #include "buffer_pool.h" // For BufferPool
 #include <boost/lockfree/spsc_queue.hpp> // For lock-free SPSC queues
+#include <boost/lockfree/queue.hpp>      // For lock-free MPMC queues
 #include <libcamera/pixel_format.h> // Include for libcamera::PixelFormat
+#include <thread>
 
 // --- Generic Data Structures ---
 
@@ -28,7 +30,7 @@ struct ImageData {
     size_t height;                                 ///< Height of the image in pixels.
     size_t stride;                                 ///< Stride (bytes per line) of the image data.
     libcamera::PixelFormat format;                 ///< Pixel format of the image data.
-    int frame_id = -1;                             ///< Monotonically increasing frame ID.
+    int frame_id = 0;                             ///< Monotonically increasing frame ID.
     
     // Zero-copy fields
     int fd = -1;                                   ///< File descriptor for zero-copy access to frame buffer.
@@ -64,8 +66,8 @@ struct ImageData {
     static std::atomic<int> global_frame_counter;
 
     // Constructor to initialize capture_time and frame_id
-    ImageData(std::chrono::steady_clock::time_point ts = std::chrono::steady_clock::now(), int f_id = -1)
-        : stride(0), frame_id(f_id), capture_time(ts) {}
+    ImageData(std::chrono::steady_clock::time_point ts = std::chrono::steady_clock::now(), int f_id = 0)
+        : buffer(nullptr), width(0), height(0), stride(0), frame_id(f_id), fd(-1), offset(0), length(0), t_capture_raw_ms(0), capture_time(ts) {}
 };
 
 /**
@@ -86,18 +88,31 @@ struct OrientationData {
 
 /**
  * @brief Represents a single object detection result.
- * *
+ *
  * Stores the class ID, confidence score, and bounding box coordinates
  * for a detected object within an image frame.
  */
 struct DetectionResult {
-    int class_id;   ///< The ID of the detected class.
-    float score;    ///< The confidence score of the detection (0.0 - 1.0, normalized).
-    float raw_score; ///< Raw dequantized model output for debugging.
-    float xmin, ymin, xmax, ymax; ///< Bounding box coordinates (normalized 0.0 - 1.0 or pixel values).
-    std::chrono::steady_clock::time_point timestamp; ///< Timestamp of when the detection was made.
-    uint64_t t_capture_raw_ms = 0; ///< Inherited from ImageData
-    int source_frame_id = -1; ///< ID of the source frame that generated this detection.
+    int class_id;                      ///< The ID of the detected class.
+    float score;                        ///< Confidence score (0.0 - 1.0, normalized).
+    float raw_score;                    ///< Raw dequantized model output for debugging.
+    float xmin, ymin, xmax, ymax;       ///< Bounding box coordinates (normalized 0.0 - 1.0 or pixel values).
+    std::chrono::steady_clock::time_point timestamp; ///< Timestamp of when detection was made.
+    uint64_t t_capture_raw_ms = 0;      ///< Monotonic capture time inherited from ImageData (ms since boot).
+    int source_frame_id = 0;            ///< ID of the source frame that generated this detection.
+};
+
+/**
+ * @brief Represents a ballistic impact point in overlay pixel coordinates.
+ *
+ * For visual validation only; overlay-space only (no world coords).
+ * Coordinate origin: top-left of image.
+ */
+struct OverlayBallisticPoint {
+    int x = 0;                 ///< X-coordinate in pixels.
+    int y = 0;                 ///< Y-coordinate in pixels.
+    bool is_valid = false;     ///< True if point is valid and should be drawn.
+    int frame_id = 0;          ///< Frame ID that this point is bound to.
 };
 
 /**
@@ -118,12 +133,11 @@ struct TelemetryFrame {
 /**
  * @brief Combines ImageData with associated DetectionResults.
  *
- * This struct could be used if there's a need to pass the original image
- * along with its detections in a single unit through the pipeline.
+ * Use if passing the original image with its detections through the pipeline.
  */
 struct InferenceFrame {
-    ImageData image;                    ///< The raw image data.
-    std::vector<DetectionResult> detections; ///< Vector of detection results for this image.
+    ImageData image;                        ///< The raw image data.
+    std::vector<DetectionResult> detections;///< Vector of detection results for this image.
 };
 
 /// @brief Type alias for a collection of detection results.
@@ -217,70 +231,160 @@ private:
 // --- Type aliases for all pipeline queues ---
 
 /**
- * @brief A thread-safe, Multi-Producer Multi-Consumer queue.
+ * @brief A non-blocking, lock-free Multi-Producer Multi-Consumer queue.
+ * 
+ * Uses boost::lockfree::queue. Requirements:
+ * 1. T must be trivially copyable (usually a pointer).
+ * 2. Fixed capacity to avoid heap allocation in hot paths.
  */
-template<typename T>
-class MPMCQueue {
+template<typename T, size_t Capacity = 1024>
+class LockFreeQueue {
+private:
+    mutable std::atomic<size_t> item_count_{0};  // Track approximate item count for monitoring
+    
 public:
-    MPMCQueue() = default;
+    LockFreeQueue() : queue_(Capacity) {}
 
-    void push(const T& data) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        queue_.push(data);
-        lock.unlock();
-        cond_.notify_all();
-    }
-
-    void push(T&& data) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        queue_.push(std::move(data));
-        lock.unlock();
-        cond_.notify_all();
-    }
-
-    bool pop(T& data) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (queue_.empty()) return false;
-        data = std::move(queue_.front());
-        queue_.pop();
-        return true;
-    }
-
-    bool wait_pop(T& data, std::chrono::milliseconds timeout) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (!cond_.wait_for(lock, timeout, [this] { return !queue_.empty(); })) {
-            return false;
+    /**
+     * @brief Pushes an item onto the queue. Non-blocking.
+     * @return True if successful, false if queue is full.
+     */
+    bool push(const T& data) {
+        bool result = queue_.push(data);
+        if (result) {
+            item_count_.fetch_add(1, std::memory_order_relaxed);
         }
-        data = std::move(queue_.front());
-        queue_.pop();
+        return result;
+    }
+
+    /**
+     * @brief Pops an item from the queue. Non-blocking.
+     * @return True if successful, false if queue is empty.
+     */
+    bool pop(T& data) {
+        bool result = queue_.pop(data);
+        if (result) {
+            item_count_.fetch_sub(1, std::memory_order_relaxed);
+        }
+        return result;
+    }
+
+    /**
+     * @brief Compatibility method for wait_pop (polls with yield).
+     * @warning Polling in hot paths should be minimized.
+     */
+    bool wait_pop(T& data, std::chrono::milliseconds timeout) {
+        auto start = std::chrono::steady_clock::now();
+        while (!queue_.pop(data)) {
+            if (std::chrono::steady_clock::now() - start > timeout) return false;
+            std::this_thread::yield();
+        }
+        item_count_.fetch_sub(1, std::memory_order_relaxed);
         return true;
     }
 
-    size_t read_available() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return queue_.size();
+    size_t write_available() const { return Capacity; }
+    bool empty() const { return queue_.empty(); }
+    bool full() const { return queue_.write_available() == 0; } // Check if queue is full
+    
+    /**
+     * @brief Get approximate size of the queue (for monitoring purposes).
+     * @note This is not thread-safe for exact counts but good for monitoring.
+     */
+    size_t size_approx() const { 
+        return item_count_.load(std::memory_order_relaxed);
     }
 
-    // Dummy for compatibility with spsc_queue calls
-    size_t write_available() { return 100; }
+    /**
+     * @brief Try to pop an item from the queue without blocking.
+     * @return True if successful, false if queue is empty.
+     */
+    bool try_pop(T& data) {
+        bool result = queue_.pop(data);
+        if (result) {
+            item_count_.fetch_sub(1, std::memory_order_relaxed);
+        }
+        return result;
+    }
+
+    /**
+     * @brief Drains all items from the queue.
+     * @param callback Function to call for each item (e.g. for cleanup).
+     */
+    void clear(std::function<void(T&)> callback = nullptr) {
+        T data;
+        size_t count = 0;
+        while (queue_.pop(data)) {
+            if (callback) callback(data);
+            count++;
+        }
+        if (count > 0) {
+            item_count_.fetch_sub(count, std::memory_order_relaxed);
+        }
+    }
 
 private:
-    std::queue<T> queue_;
-    std::mutex mutex_;
-    std::condition_variable cond_;
+    boost::lockfree::queue<T, boost::lockfree::fixed_sized<true>> queue_;
 };
 
-/// @brief Type alias for a thread-safe MPMC queue holding ImageData objects.
-typedef MPMCQueue<ImageData> ImageQueue;
+/// @brief Type alias for a lock-free queue holding ImageData pointers.
+typedef LockFreeQueue<ImageData*, 16> ImageQueue;
 
 // Define a type for a pooled buffer of detection results
 using DetectionResultBuffer = PooledBuffer<DetectionResult>;
-/// @brief Type alias for a thread-safe MPMC queue holding shared pointers to pooled detection result buffers.
-using DetectionResultsQueue = MPMCQueue<std::shared_ptr<DetectionResultBuffer>>;
+
+/**
+ * @brief lifecycle token for an inference result.
+ * 
+ * ResultToken acts as a carrier for the shared_ptr to the detection results
+ * as it moves through the lock-free queues.
+ */
+class ResultToken {
+public:
+    ResultToken() : data_(nullptr) {}
+
+    ResultToken(std::shared_ptr<DetectionResultBuffer> data)
+        : data_(std::move(data)) {}
+
+    // Move only
+    ResultToken(ResultToken&& other) noexcept 
+        : data_(std::move(other.data_)) {}
+
+    ResultToken& operator=(ResultToken&& other) noexcept {
+        if (this != &other) {
+            data_ = std::move(other.data_);
+        }
+        return *this;
+    }
+
+    ResultToken(const ResultToken&) = delete;
+    ResultToken& operator=(const ResultToken&) = delete;
+
+    ~ResultToken() = default;
+
+    void mark_consumed() { /* No-op: handled by external accounting */ }
+    void mark_dropped() { /* No-op: handled by external accounting */ }
+
+    const std::shared_ptr<DetectionResultBuffer>& get() const { return data_; }
+    std::shared_ptr<DetectionResultBuffer>& get() { return data_; }
+    bool isValid() const { return data_ != nullptr; }
+    
+    // Method to release buffer reference (for pooling support)
+    void release_buffer() { data_.reset(); }
+    
+    // Method to explicitly trigger accounting before pooling (No-op now)
+    void trigger_accounting() {}
+
+private:
+    std::shared_ptr<DetectionResultBuffer> data_;
+};
+
+/// @brief Type alias for a thread-safe MPMC queue holding ResultToken pointers.
+using DetectionResultsQueue = LockFreeQueue<ResultToken*>;
 
 // Define a type for a pooled buffer of H.264 NAL units
 using H264Buffer = PooledBuffer<uint8_t>;
-/// @brief Type alias for a thread-safe MPMC queue holding shared pointers to pooled H.264 buffers.
-using H264Queue = MPMCQueue<std::shared_ptr<H264Buffer>>;
+/// @brief Type alias for a thread-safe MPMC queue holding pooled H.264 buffer pointers.
+using H264Queue = LockFreeQueue<H264Buffer*>;
 
 #endif // PIPELINE_STRUCTS_H

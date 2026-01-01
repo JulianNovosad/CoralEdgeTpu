@@ -41,6 +41,17 @@ private:
     // Variables for CPU usage calculation
     long prev_total_cpu_time_ = 0;
     long prev_idle_cpu_time_ = 0;
+    
+    // Atomic variables to store latest metrics for access by other modules
+    mutable std::atomic<float> latest_cpu_temp_{0.0f};
+    mutable std::atomic<float> latest_cpu_usage_{0.0f};
+    mutable std::atomic<float> latest_memory_usage_{0.0f};
+
+public:
+    // Methods to get latest metrics for unified telemetry
+    float get_latest_cpu_temp() const { return latest_cpu_temp_.load(); }
+    float get_latest_cpu_usage() const { return latest_cpu_usage_.load(); }
+    float get_latest_memory_usage() const { return latest_memory_usage_.load(); }
 };
 
 #endif // SYSTEM_MONITOR_H

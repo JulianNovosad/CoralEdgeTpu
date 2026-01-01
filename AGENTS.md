@@ -136,3 +136,5 @@ The Agent **MUST** output this report before any diff. If any answer is NO, disc
 * **Bayer Unpacking:** 10‑bit Raw (5 bytes / 4 pixels); explicit MSB shifting required.
 
 **Reference Baseline:** Commit `a4990fd3a8a286acd2ab7953f6f538de893809a5` (known‑good visualization and VLC feed).
+- remember to never, ever use ./detector. always use ./build/detector
+- do not ever run ./build.sh

@@ -1,6 +1,8 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
+#include <termios.h>
+
 #include "application_supervisor.h"
 #include "camera_capture.h"
 #include "config_loader.h"
@@ -26,6 +28,7 @@
 #include <atomic>
 #include <mutex>
 #include <map>
+#include <future>
 
 // Include EdgeTPU headers for TPU occupancy management
 #include "edgetpu_c.h"
@@ -55,6 +58,7 @@ public:
      * @return 0 bij succes, 1 bij een fout.
      */
     int run();
+    void stop();
 
 public:
     // Expose member variables for Monitor class
@@ -79,6 +83,7 @@ public:
     ImageQueue tpu_inference_queue_;
 
     TripleBuffer<DetectionResults> detection_results_for_overlay_buffer_;
+    TripleBuffer<OverlayBallisticPoint> ballistic_points_for_overlay_buffer_; 
     DetectionResultsQueue detection_results_for_logic_queue_;
     ImageQueue overlaid_video_queue_;
     H264Queue h264_output_queue_;
@@ -143,6 +148,10 @@ private:
     std::shared_ptr<BufferPool<uint8_t>> image_pool_;
     std::shared_ptr<BufferPool<DetectionResult>> detection_pool_;
     std::shared_ptr<BufferPool<uint8_t>> h264_pool_;
+    
+    // Object Pools for queue elements
+    std::shared_ptr<ObjectPool<ImageData>> image_data_pool_;
+    std::shared_ptr<ObjectPool<ResultToken>> result_token_pool_;
 
     // Thread for consuming overlay detection results
     std::thread overlay_consumer_thread_;
@@ -160,6 +169,7 @@ private:
     std::atomic<bool> recovery_enabled_{false}; // New flag to control when recovery is active
     std::thread recovery_thread_;
     std::mutex recovery_mutex_;
+    std::condition_variable recovery_cv_;
     
     // Detector supervision
     std::thread detector_supervisor_thread_;
@@ -178,11 +188,24 @@ private:
 
     std::vector<std::string> labels_;
     
-    // Queue accounting counters to enforce: produced == consumed + dropped invariant
-    std::atomic<int64_t> camera_frames_produced_{0};
-    std::atomic<int64_t> camera_frames_dropped_{0};
-    std::atomic<int64_t> camera_frames_consumed_by_inference_{0};
-    
+public:
+    // --- STAGE 1: Camera -> Processors ---
+    // (One frame from camera produces ONE frame for EACH registered consumer queue)
+    std::atomic<int64_t> cam_to_viz_produced_{0};
+    std::atomic<int64_t> cam_to_viz_dropped_{0};
+    std::atomic<int64_t> cam_to_viz_consumed_{0}; // by Viz Processor
+
+    std::atomic<int64_t> cam_to_tpu_proc_produced_{0};
+    std::atomic<int64_t> cam_to_tpu_proc_dropped_{0};
+    std::atomic<int64_t> cam_to_tpu_proc_consumed_{0}; // by TPU Processor
+
+    // --- STAGE 2: TPU Processor -> Inference Engine ---
+    // (Each frame processed by TPU Processor produces ONE frame for Inference Engine)
+    std::atomic<int64_t> proc_to_inf_produced_{0};
+    std::atomic<int64_t> proc_to_inf_dropped_{0};
+    std::atomic<int64_t> proc_to_inf_consumed_{0}; // by Inference Engine
+
+    // --- STAGE 3: Inference Engine -> Logic/Overlay ---
     std::atomic<int64_t> inference_results_produced_{0};
     std::atomic<int64_t> inference_results_dropped_{0};
     std::atomic<int64_t> inference_results_consumed_by_logic_{0};
@@ -191,7 +214,6 @@ private:
     std::atomic<int64_t> h264_output_queue_in_{0};
     std::atomic<int64_t> h264_output_queue_out_{0};
 
-public:
     // Getter methods for Monitor class
     const std::unique_ptr<ImageProcessor>& get_image_processor() const { return image_processor_; }
     const std::unique_ptr<ImageProcessor>& get_visualization_processor() const { return visualization_processor_; }
@@ -203,10 +225,19 @@ public:
     const std::unique_ptr<SystemMonitor>& get_system_monitor() const { return system_monitor_; }
     const std::unique_ptr<KeyboardMonitor>& get_keyboard_monitor() const { return keyboard_monitor_; }
     
-    // Queue accounting methods for Monitor
-    int64_t get_camera_frames_produced() const { return camera_frames_produced_.load(); }
-    int64_t get_camera_frames_dropped() const { return camera_frames_dropped_.load(); }
-    int64_t get_camera_frames_consumed_by_inference() const { return camera_frames_consumed_by_inference_.load(); }
+    // Stage 1 Getters
+    int64_t get_cam_to_viz_produced() const { return cam_to_viz_produced_.load(); }
+    int64_t get_cam_to_viz_dropped() const { return cam_to_viz_dropped_.load(); }
+    int64_t get_cam_to_viz_consumed() const { return cam_to_viz_consumed_.load(); }
+    int64_t get_cam_to_tpu_proc_produced() const { return cam_to_tpu_proc_produced_.load(); }
+    int64_t get_cam_to_tpu_proc_dropped() const { return cam_to_tpu_proc_dropped_.load(); }
+    int64_t get_cam_to_tpu_proc_consumed() const { return cam_to_tpu_proc_consumed_.load(); }
+    
+    // Stage 2 Getters
+    int64_t get_proc_to_inf_produced() const { return proc_to_inf_produced_.load(); }
+    int64_t get_proc_to_inf_dropped() const { return proc_to_inf_dropped_.load(); }
+    int64_t get_proc_to_inf_consumed() const { return proc_to_inf_consumed_.load(); }
+
     int64_t get_inference_results_produced() const { return inference_results_produced_.load(); }
     int64_t get_inference_results_dropped() const { return inference_results_dropped_.load(); }
     int64_t get_inference_results_consumed_by_logic() const { return inference_results_consumed_by_logic_.load(); }
@@ -216,9 +247,18 @@ public:
     int64_t get_h264_output_queue_out() const { return h264_output_queue_out_.load(); }
 
     // Methods to update counters from modules
-    void increment_camera_frames_produced() { camera_frames_produced_.fetch_add(1); }
-    void increment_camera_frames_dropped() { camera_frames_dropped_.fetch_add(1); }
-    void increment_camera_frames_consumed_by_inference() { camera_frames_consumed_by_inference_.fetch_add(1); }
+    void inc_cam_to_viz_produced() { cam_to_viz_produced_.fetch_add(1); }
+    void inc_cam_to_viz_dropped() { cam_to_viz_dropped_.fetch_add(1); }
+    void inc_cam_to_viz_consumed() { cam_to_viz_consumed_.fetch_add(1); }
+
+    void inc_cam_to_tpu_proc_produced() { cam_to_tpu_proc_produced_.fetch_add(1); }
+    void inc_cam_to_tpu_proc_dropped() { cam_to_tpu_proc_dropped_.fetch_add(1); }
+    void inc_cam_to_tpu_proc_consumed() { cam_to_tpu_proc_consumed_.fetch_add(1); }
+
+    void inc_proc_to_inf_produced() { proc_to_inf_produced_.fetch_add(1); }
+    void inc_proc_to_inf_dropped() { proc_to_inf_dropped_.fetch_add(1); }
+    void inc_proc_to_inf_consumed() { proc_to_inf_consumed_.fetch_add(1); }
+
     void increment_inference_results_produced(int count) { inference_results_produced_.fetch_add(count); }
     void increment_inference_results_dropped() { inference_results_dropped_.fetch_add(1); }
     void increment_inference_results_consumed_by_logic() { inference_results_consumed_by_logic_.fetch_add(1); }

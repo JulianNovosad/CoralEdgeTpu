@@ -42,11 +42,16 @@ private:
     size_t prev_overlaid_video_queue_depth_{0};
     size_t prev_h264_output_queue_depth_{0};
     
+    // Flags to track if modules have ever been seen active
+    bool camera_seen_{false};
+    bool inference_seen_{false};
+    bool logic_seen_{false};
+
     // Flags to track first update
     bool first_update_{true};
     bool pipeline_initialized_{false}; // Track when pipeline has established flow
     int initialization_counter_{0}; // Counter to track initialization phase
-    static const int INITIALIZATION_DELAY = 2; // Wait 2 seconds before showing full status
+    static const int INITIALIZATION_DELAY = 1; // Wait 1 second before showing full status
 };
 
 #endif // MONITOR_H

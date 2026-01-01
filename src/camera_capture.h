@@ -53,6 +53,7 @@ public:
                   unsigned int tpu_fps,
                   unsigned int target_tpu_width, unsigned int target_tpu_height,
                   std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
+                  std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                   std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
                   ImageQueue& image_processor_input_queue,
                   std::chrono::seconds watchdog_timeout);
@@ -128,6 +129,7 @@ private:
     std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_;  ///< Wachtrijen voor BGR-frames bestemd voor de live stream.
     ImageQueue& image_processor_input_queue_;  ///< Wachtrij voor ruwe frames bestemd voor de ImageProcessor.
     std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool_; ///< Pool voor het beheren van image buffers.
+    std::shared_ptr<ObjectPool<ImageData>> image_data_pool_; ///< Pool for ImageData objects.
     std::chrono::seconds watchdog_timeout_; ///< Timeout voor de camera-watchdog.
 
     std::unique_ptr<libcamera::CameraManager> camera_manager_; ///< Beheert de beschikbare camera's.
@@ -195,6 +197,12 @@ private:
     int skip_initial_measurements_ = 20; // Number of initial frames to skip for performance metrics
 
 private:
+    struct MappedBuffer {
+        void* addr;
+        size_t length;
+    };
+    std::map<const libcamera::FrameBuffer*, MappedBuffer> mapped_buffers_;
+
     void request_processor_thread_func(); // New thread function
     // New helper to process processed TPU frames
     bool process_tpu_processed_frame_buffer(const libcamera::FrameBuffer* fb,

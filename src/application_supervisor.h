@@ -22,7 +22,7 @@ class IMUSensor;
 /**
  * @brief Global atomic flag to signal shutdown request across the application.
  */
-extern std::atomic<bool> shutdown_requested;
+extern std::atomic<bool> g_running;
 
 /**
  * @brief Handles global application shutdown and orchestrates module stopping.

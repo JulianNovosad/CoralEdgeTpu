@@ -28,8 +28,11 @@
 void write_telemetry_trace(const TelemetryFrame* buffer, size_t start_idx, size_t end_idx) {
     if (!buffer) return;
 
-    FILE* f = fopen("aurore_trace.csv", "a");
-    if (!f) return;
+    FILE* f = fopen("/tmp/aurore_trace.csv", "a");
+    if (!f) {
+        std::cerr << "[ERROR] Failed to open /tmp/aurore_trace.csv for writing: " << strerror(errno) << std::endl;
+        return;
+    }
 
     // Check if file is empty to write header
     fseek(f, 0, SEEK_END);
@@ -146,7 +149,7 @@ void CsvLogger::flush_buffer_to_disk() {
     }
 
     for (const auto& e : buffer_) {
-        // Format: Common
+        // Format: Common (Always present)
         current_log_file_ << e.produced_ts_epoch_ms << ","
                           << e.call_ts_epoch_ms << ","
                           << e.module.data() << ","
@@ -154,35 +157,35 @@ void CsvLogger::flush_buffer_to_disk() {
                           << e.thread_id << ",";
         
         // Format: Camera
-        if (e.cam_frame_id != -1) current_log_file_ << e.cam_frame_id; current_log_file_ << ",";
-        if (e.cam_exposure_ms != -1.0f) current_log_file_ << e.cam_exposure_ms; current_log_file_ << ",";
-        if (e.cam_isp_latency_ms != -1.0f) current_log_file_ << e.cam_isp_latency_ms; current_log_file_ << ",";
-        if (e.cam_buffer_usage_percent != -1.0f) current_log_file_ << e.cam_buffer_usage_percent; current_log_file_ << ",";
+        if (e.cam_frame_id != -1) { current_log_file_ << e.cam_frame_id << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.cam_exposure_ms != -1.0f) { current_log_file_ << e.cam_exposure_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.cam_isp_latency_ms != -1.0f) { current_log_file_ << e.cam_isp_latency_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.cam_buffer_usage_percent != -1.0f) { current_log_file_ << e.cam_buffer_usage_percent << ","; } else { current_log_file_ << "NaN,"; }
 
         // Format: TPU
-        if (e.tpu_inference_ms != -1.0f) current_log_file_ << e.tpu_inference_ms; current_log_file_ << ",";
-        if (e.tpu_temp_c != -1.0f) current_log_file_ << e.tpu_temp_c; current_log_file_ << ",";
-        if (e.tpu_model_score != -1.0f) current_log_file_ << e.tpu_model_score; current_log_file_ << ",";
-        if (e.tpu_class_id != -1) current_log_file_ << e.tpu_class_id; current_log_file_ << ",";
+        if (e.tpu_inference_ms != -1.0f) { current_log_file_ << e.tpu_inference_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.tpu_temp_c != -1.0f) { current_log_file_ << e.tpu_temp_c << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.tpu_model_score != -1.0f) { current_log_file_ << e.tpu_model_score << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.tpu_class_id != -1) { current_log_file_ << e.tpu_class_id << ","; } else { current_log_file_ << "NaN,"; }
 
         // Format: Logic
-        if (e.logic_target_dist_m != -1.0f) current_log_file_ << e.logic_target_dist_m; current_log_file_ << ",";
-        if (e.logic_ballistic_drop_m != -1.0f) current_log_file_ << e.logic_ballistic_drop_m; current_log_file_ << ",";
-        if (e.logic_windage_m != -1.0f) current_log_file_ << e.logic_windage_m; current_log_file_ << ",";
-        if (e.logic_servo_x_cmd != -1.0f) current_log_file_ << e.logic_servo_x_cmd; current_log_file_ << ",";
-        if (e.logic_servo_y_cmd != -1.0f) current_log_file_ << e.logic_servo_y_cmd; current_log_file_ << ",";
-        if (e.logic_solution_time_ms != -1.0f) current_log_file_ << e.logic_solution_time_ms; current_log_file_ << ",";
+        if (e.logic_target_dist_m != -1.0f) { current_log_file_ << e.logic_target_dist_m << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_ballistic_drop_m != -1.0f) { current_log_file_ << e.logic_ballistic_drop_m << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_windage_m != -1.0f) { current_log_file_ << e.logic_windage_m << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_servo_x_cmd != -1.0f) { current_log_file_ << e.logic_servo_x_cmd << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_servo_y_cmd != -1.0f) { current_log_file_ << e.logic_servo_y_cmd << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.logic_solution_time_ms != -1.0f) { current_log_file_ << e.logic_solution_time_ms << ","; } else { current_log_file_ << "NaN,"; }
 
         // Format: Encoder
-        if (e.enc_process_ms != -1.0f) current_log_file_ << e.enc_process_ms; current_log_file_ << ",";
-        if (e.enc_bitrate_mbps != -1.0f) current_log_file_ << e.enc_bitrate_mbps; current_log_file_ << ",";
-        if (e.enc_queue_depth != -1) current_log_file_ << e.enc_queue_depth; current_log_file_ << ",";
+        if (e.enc_process_ms != -1.0f) { current_log_file_ << e.enc_process_ms << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.enc_bitrate_mbps != -1.0f) { current_log_file_ << e.enc_bitrate_mbps << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.enc_queue_depth != -1) { current_log_file_ << e.enc_queue_depth << ","; } else { current_log_file_ << "NaN,"; }
 
         // Format: System
-        if (e.sys_cpu_temp_c != -1.0f) current_log_file_ << e.sys_cpu_temp_c; current_log_file_ << ",";
-        if (e.sys_cpu_usage_pct != -1.0f) current_log_file_ << e.sys_cpu_usage_pct; current_log_file_ << ",";
-        if (e.sys_ram_usage_pct != -1.0f) current_log_file_ << e.sys_ram_usage_pct; current_log_file_ << ",";
-        if (e.sys_voltage_v != -1.0f) current_log_file_ << e.sys_voltage_v; 
+        if (e.sys_cpu_temp_c != -1.0f) { current_log_file_ << e.sys_cpu_temp_c << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.sys_cpu_usage_pct != -1.0f) { current_log_file_ << e.sys_cpu_usage_pct << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.sys_ram_usage_pct != -1.0f) { current_log_file_ << e.sys_ram_usage_pct << ","; } else { current_log_file_ << "NaN,"; }
+        if (e.sys_voltage_v != -1.0f) { current_log_file_ << e.sys_voltage_v; } else { current_log_file_ << "NaN"; }
         
         current_log_file_ << "\n";
     }
