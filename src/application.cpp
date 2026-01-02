@@ -29,40 +29,42 @@ static bool timed_join_thread(std::thread& thread, const std::string& thread_nam
         return true;
     }
     
-    std::promise<bool> promise;
-    std::future<bool> future = promise.get_future();
+    auto shared_promise = std::make_shared<std::promise<void>>();
+    std::future<void> future = shared_promise->get_future();
     
-    std::thread timer_thread([&thread, &promise, timeout, thread_name]() {
-        std::this_thread::sleep_for(timeout);
-        if (thread.joinable()) {
-            APP_LOG_WARNING("Thread '" + thread_name + "' did not join within timeout, forcing exit");
-            promise.set_value(false);
-        } else {
-            promise.set_value(true);
+    // Spawn a wrapper thread to perform the join
+    // Capture thread by reference but be extremely careful with scope
+    std::thread joiner_thread([&thread, shared_promise]() {
+        try {
+            if (thread.joinable()) {
+                thread.join();
+            }
+            shared_promise->set_value();
+        } catch (...) {
+            // Prevent exception escape from joiner thread
         }
     });
     
-    // Wait for either the thread to join or timeout
-    if (future.wait_for(std::chrono::milliseconds(100)) == std::future_status::timeout) {
-        // If timeout, the timer thread will handle the timeout
-        timer_thread.join();
+    // Wait for the join to complete or timeout
+    if (future.wait_for(timeout) == std::future_status::timeout) {
+        std::cerr << "[SHUTDOWN] Thread '" << thread_name << "' did not join within " << timeout.count() << "s, detaching to prevent SIGABRT." << std::endl;
+        
+        // If we timeout, we MUST detach the original thread to prevent SIGABRT on its destruction
+        if (thread.joinable()) {
+            thread.detach();
+        }
+        // Also detach the joiner_thread because it's blocked on the original thread's join()
+        joiner_thread.detach();
         return false;
     }
     
-    bool result = future.get();
-    if (result) {
-        thread.join();
+    if (joiner_thread.joinable()) {
+        joiner_thread.join();
     }
-    if (timer_thread.joinable()) {
-        timer_thread.join();
-    }
-    return result;
+    return true;
 }
 
 Application::Application(int argc, char** argv) : argc_(argc), argv_(argv), recovery_running_(true), recovery_enabled_(false) {
-    // Save original terminal settings
-    tcgetattr(STDIN_FILENO, &original_termios);
-    
     // Set up signal handlers to restore terminal settings on exit
     supervisor_.setup_signal_handlers();
 
@@ -84,36 +86,58 @@ Application::~Application() {
 }
 
 void Application::stop() {
-    if (!g_running.exchange(false)) {
-        return; // Already stopping
+    static std::atomic<bool> stopping{false};
+    if (stopping.exchange(true)) {
+        return; 
     }
 
-    APP_LOG_INFO("Application::stop() initiated.");
+    g_running.store(false, std::memory_order_release);
+    std::cerr << "[SHUTDOWN] Application::stop() initiated." << std::endl;
 
-    // 1. Wake up all blocked threads with poison pills immediately
+    // 1. Stop the recovery thread first
+    recovery_running_ = false;
+    recovery_cv_.notify_all();
+    std::cerr << "[SHUTDOWN] Joining RecoveryThread..." << std::endl;
+    timed_join_thread(recovery_thread_, "RecoveryThread");
+
+    // 2. Stop ControlModule to prevent new commands
+    std::cerr << "[SHUTDOWN] Stopping ControlModule..." << std::endl;
+    if (control_module_) control_module_->stop();
+
+    // 3. Stop MPEG-TS Server and Encoder first (sink end of pipeline)
+    std::cerr << "[SHUTDOWN] Stopping MpegTsServer and H264Encoder..." << std::endl;
+    if (mpegts_server_) mpegts_server_->stop();
+    if (h264_encoder_) h264_encoder_->stop();
+
+    // 4. Wake up all blocked threads with poison pills
+    std::cerr << "[SHUTDOWN] Pushing poison pills..." << std::endl;
     ImageData* p1 = image_data_pool_->acquire(); if (p1) { p1->buffer = nullptr; raw_image_for_processor_queue_->push(p1); }
     ImageData* p2 = image_data_pool_->acquire(); if (p2) { p2->buffer = nullptr; main_video_queue_->push(p2); }
     ImageData* p3 = image_data_pool_->acquire(); if (p3) { p3->buffer = nullptr; tpu_inference_queue_->push(p3); }
     ResultToken* r1 = result_token_pool_->acquire(); if (r1) { r1->mark_dropped(); r1->get().reset(); detection_results_for_logic_queue_->push(r1); }
     ImageData* p4 = image_data_pool_->acquire(); if (p4) { p4->buffer = nullptr; overlaid_video_queue_->push(p4); }
+    H264Buffer* h1 = h264_pool_->acquire_raw(); if (h1) { h1->size = 0; h264_output_queue_->push(h1); }
 
-    // 2. Stop the recovery thread
-    recovery_running_ = false;
-    recovery_cv_.notify_all();
-    timed_join_thread(recovery_thread_, "RecoveryThread");
-    
-    // 3. ApplicationSupervisor handles the graceful shutdown of all registered modules
+    // 5. ApplicationSupervisor handles the graceful shutdown of all registered modules
+    std::cerr << "[SHUTDOWN] Initiating supervisor shutdown..." << std::endl;
     supervisor_.initiate_shutdown();
     
-    // 4. Join the consumer threads
+    // 6. Join the consumer threads
+    std::cerr << "[SHUTDOWN] Joining consumer threads..." << std::endl;
     overlay_consumer_running_ = false;
     timed_join_thread(overlay_consumer_thread_, "OverlayConsumerThread");
     
     h264_consumer_running_ = false;
     timed_join_thread(h264_consumer_thread_, "H264ConsumerThread");
 
-    // 5. Final cleanup
+    // 7. Drain all queues to release all shared_ptrs and pooled buffers
+    std::cerr << "[SHUTDOWN] Draining queues..." << std::endl;
+    drain_queues();
+
+    // 8. Final cleanup
+    std::cerr << "[SHUTDOWN] Final supervisor cleanup..." << std::endl;
     supervisor_.final_cleanup();
+    std::cerr << "[SHUTDOWN] Application::stop() completed." << std::endl;
 }
 
 void Application::post_shutdown_cleanup() {
@@ -134,8 +158,8 @@ void Application::setup_pools_and_queues() {
     
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
-    // Reduced for Pi stability (avoid OOM) -> Increased to 150 to fix starvation
-    size_t image_pool_count = 150; 
+    // Reduced for Pi stability (avoid OOM) -> Increased to 300 to fix starvation
+    size_t image_pool_count = 300; 
 
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
     APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
@@ -185,12 +209,15 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         main_image_output_queues_.push_back(std::ref(*main_video_queue_)); 
         
         APP_LOG_INFO("Creating CameraCapture...");
-        primary_camera_ = std::make_unique<CameraCapture>(
+        primary_camera_ = std::unique_ptr<CameraCapture>(new CameraCapture(
             cam_w, cam_h, // Main stream width/height
             config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
-            config_loader_.get_tpu_stream_fps(), // TPU stream FPS (from config)
             config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
-            image_pool_, image_data_pool_, main_image_output_queues_, *raw_image_for_processor_queue_, camera_watchdog_timeout);
+            image_pool_, image_data_pool_,
+            *raw_image_for_processor_queue_,
+            config_loader_.get_camera_watchdog_timeout() // Corrected method name
+        ));
+        primary_camera_->set_main_output_queues({main_video_queue_.get()});
         APP_LOG_INFO("CameraCapture created.");
         
         // Set application reference for camera to update counters
@@ -299,24 +326,54 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         
 
 
-        // Create UDP streamer
-        APP_LOG_INFO("Creating UDPStreamer...");
-        udp_streamer_ = std::make_unique<UDPStreamer>(cam_w, cam_h, config_loader_.get_camera_fps());
-        APP_LOG_INFO("UDPStreamer created.");
+        // Create MPEG-TS server
+        APP_LOG_INFO("Creating MpegTsServer...");
+        mpegts_server_ = std::make_unique<MpegTsServer>(cam_w, cam_h, config_loader_.get_camera_fps());
+        APP_LOG_INFO("MpegTsServer created.");
 
         // Create Discovery Module
         APP_LOG_INFO("Creating DiscoveryModule...");
         discovery_module_ = std::make_unique<DiscoveryModule>();
         discovery_module_->on_peer_discovered([this](const DiscoveryModule::PeerInfo& peer) {
             APP_LOG_INFO("Application: Auto-discovered peer " + peer.name + " at " + peer.ip);
+            // Discovery still sets source, but ControlModule can override
             if (orientation_sensor_) {
                 orientation_sensor_->set_source(peer.ip, peer.orientation_port);
             }
-            if (udp_streamer_) {
-                udp_streamer_->set_destination(peer.ip, peer.video_port);
+            if (mpegts_server_) {
+                mpegts_server_->set_destination(peer.ip);
             }
         });
-        APP_LOG_INFO("DiscoveryModule created.");
+
+        APP_LOG_INFO("Creating ControlModule...");
+        control_module_ = std::make_unique<ControlModule>(6005);
+        control_module_->on_start([this](const std::string& phone_ip) {
+            APP_LOG_INFO("Application: START command received from " + phone_ip);
+            if (orientation_sensor_) {
+                orientation_sensor_->set_source(phone_ip, 2001); // Port 2001 per spec
+            }
+            
+            // Start streaming modules
+            if (visualization_processor_) visualization_processor_->start();
+            if (h264_encoder_) h264_encoder_->start();
+            
+            if (mpegts_server_) {
+                mpegts_server_->set_destination(phone_ip);
+                mpegts_server_->start();
+            }
+        });
+        control_module_->on_stop([this]() {
+            APP_LOG_INFO("Application: STOP command received");
+            
+            // Stop streaming modules
+            if (mpegts_server_) mpegts_server_->stop();
+            if (h264_encoder_) h264_encoder_->stop();
+            if (visualization_processor_) visualization_processor_->stop();
+            
+            // Drain queues to prevent stalls after stop
+            drain_queues();
+        });
+        APP_LOG_INFO("ControlModule created.");
 
         APP_LOG_INFO("Creating Monitor...");
         monitor_ = std::make_unique<Monitor>(*this);
@@ -331,134 +388,127 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 }
 
 bool Application::start_modules() {
-    APP_LOG_INFO("Starting all modules...");
+
+    APP_LOG_INFO("Starting stabilization sequence...");
+
     bool start_ok = true;
+
     
-    // Start modules in dependency order
+
+    // 0. Ensure a clean state by draining all queues before starting
+
+    drain_queues();
+
+    APP_LOG_INFO("Startup queue drain complete.");
+
+
+
     // 1. Start low-level services first
+
     start_ok &= system_monitor_->start();
+
     start_ok &= orientation_sensor_->start();
+
     if (discovery_module_) start_ok &= discovery_module_->start();
+
+    if (control_module_) start_ok &= control_module_->start();
+
     
-    // 2. Start processing modules
-    start_ok &= image_processor_->start();
-    start_ok &= inference_engine_->start();
-    
-    // LEGITIMATE ENABLE: visualization_processor_ must be active to process ballistic overlays and provide runtime telemetry.
-    start_ok &= visualization_processor_->start(); 
 
     if (!start_ok) {
-        APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
-        // Stop all modules that were successfully started
-        if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
 
-        if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
-        if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
-        if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
-        if (inference_engine_ && inference_engine_->is_running()) inference_engine_->stop();
-        if (image_processor_ && image_processor_->is_running()) image_processor_->stop();
-        if (visualization_processor_ && visualization_processor_->is_running()) visualization_processor_->stop();  // Add visualization processor to shutdown
-        if (orientation_sensor_ && orientation_sensor_->is_running()) orientation_sensor_->stop();
-        if (system_monitor_ && system_monitor_->is_running()) system_monitor_->stop();
-        if (monitor_) monitor_->stop();
-        
-        // Stop overlay consumer thread
-        overlay_consumer_running_ = false;
-        if (overlay_consumer_thread_.joinable()) {
-            overlay_consumer_thread_.join();
-        }
-        
-        // Stop H264 consumer thread
-        h264_consumer_running_ = false;
-        if (h264_consumer_thread_.joinable()) {
-            h264_consumer_thread_.join();
-        }
-        
+        APP_LOG_ERROR("Base services failed to start.");
+
         return false;
-    }
-    
-    // 3. Start logic module (depends on inference)
-    start_ok &= logic_module_->start();
-    
-    // Start UDP streamer BEFORE camera to ensure appsrc is ready when camera starts
-    if (udp_streamer_) {
-        if (!udp_streamer_->start()) {
-            APP_LOG_ERROR("Failed to start UDP streamer");
-            start_ok = false;
-        } else {
-            APP_LOG_INFO("UDP streamer started successfully");
-        }
-    }
-    
-    // 4. Start camera (this may fail if camera is not available)
-    bool camera_ok = primary_camera_->start();
-    if (!camera_ok) {
-        APP_LOG_WARNING("Camera module failed to start. This may be due to camera hardware not being connected or IPA module issues. RTSP server will start with dummy frames.");
-    } else {
-        APP_LOG_INFO("Camera module started successfully.");
-    }
-    
-    // 5. Start encoder and streaming modules
-    // Only fail if encoder fails, not if camera fails
-    if (!h264_encoder_->start()) {
-        APP_LOG_ERROR("H264 encoder failed to start. This is critical for RTSP streaming.");
-        start_ok = false;
+
     }
 
-    // Start the H264 consumer thread before HTTP streamer to avoid latency
+
+
+    // 2. Start Camera first (Source)
+
+    APP_LOG_INFO("Starting Camera Source...");
+
+    if (!primary_camera_->start()) {
+
+        APP_LOG_ERROR("Critical: Camera module failed to start. Pipeline aborted.");
+
+        return false;
+
+    }
+
+    
+
+    // Wait briefly for camera buffer stability
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+
+
+    // 3. Start processing modules (Middlware)
+
+    APP_LOG_INFO("Starting processing middleware...");
+
+    start_ok &= image_processor_->start();
+
+    start_ok &= inference_engine_->start();
+
+    start_ok &= logic_module_->start();
+
+
+
+    if (!start_ok) {
+
+        APP_LOG_ERROR("One or more processing modules failed to start.");
+
+        stop();
+
+        return false;
+
+    }
+
+
+
+    // Note: visualization_processor_ and h264_encoder_ are started via ControlModule START command
+
+    
+
+    // Start the H264 consumer thread (it waits for encoder output)
+
     h264_consumer_running_ = true;
+
     h264_consumer_thread_ = std::thread(&Application::h264_queue_consumer_thread_func, this);
 
-    // Start the overlay consumer thread
+
+
+    // Start the overlay consumer thread (it waits for inference results)
+
     overlay_consumer_running_ = true;
+
     overlay_consumer_thread_ = std::thread(&Application::overlay_queue_consumer_thread_func, this);
 
-    // Start HTTP streamer after consumer threads are running
-    
-    // 6. Start input monitoring (non-critical)
+
+
+    // 4. Start input monitoring
+
     if (!keyboard_monitor_->start()) {
-        APP_LOG_WARNING("Keyboard monitor failed to start. This is non-critical for RTSP streaming.");
-    } else {
-        APP_LOG_INFO("Keyboard monitor started successfully.");
+
+        APP_LOG_WARNING("Keyboard monitor failed to start.");
+
     }
+
     
-    // 7. Start monitor
+
+    // 5. Start monitor
+
     monitor_->start();
 
-    
 
 
-    if (!start_ok) {
-        APP_LOG_ERROR("One or more modules failed to start. Shutting down.");
-        // Stop all modules that were successfully started
-        if (keyboard_monitor_ && keyboard_monitor_->is_running()) keyboard_monitor_->stop();
+    APP_LOG_INFO("All core modules initialized and stabilized.");
 
-        if (h264_encoder_ && h264_encoder_->is_running()) h264_encoder_->stop();
-        if (primary_camera_ && primary_camera_->is_running()) primary_camera_->stop();
-        if (logic_module_ && logic_module_->is_running()) logic_module_->stop();
-        if (inference_engine_ && inference_engine_->is_running()) inference_engine_->stop();
-        if (image_processor_ && image_processor_->is_running()) image_processor_->stop();
-        if (visualization_processor_ && visualization_processor_->is_running()) visualization_processor_->stop();
-        if (orientation_sensor_ && orientation_sensor_->is_running()) orientation_sensor_->stop();
-        if (system_monitor_ && system_monitor_->is_running()) system_monitor_->stop();
-        if (monitor_) monitor_->stop();
-        
-        // Stop overlay consumer thread
-        overlay_consumer_running_ = false;
-        if (overlay_consumer_thread_.joinable()) {
-            overlay_consumer_thread_.join();
-        }
-        
-        // Stop H264 consumer thread
-        h264_consumer_running_ = false;
-        if (h264_consumer_thread_.joinable()) {
-            h264_consumer_thread_.join();
-        }
-        
-        return false;
-    }
-    APP_LOG_INFO("All modules started successfully.");
     return true;
+
 }
 
 void Application::register_shutdown_handlers() {
@@ -472,11 +522,16 @@ void Application::register_shutdown_handlers() {
     supervisor_.register_module_stop("InferenceEngine", [&]() { inference_engine_->stop(); });
     supervisor_.register_module_stop("KeyboardMonitor", [&]() { keyboard_monitor_->stop(); });
     // supervisor_.register_module_stop("HttpStreamer", [&]() { http_streamer_->stop(); }); // Register HTTP streamer for shutdown
-    supervisor_.register_module_stop("UDPStreamer", [&]() { 
-        if (udp_streamer_) {
-            udp_streamer_->stop();
+    supervisor_.register_module_stop("MpegTsServer", [&]() { 
+        if (mpegts_server_) {
+            mpegts_server_->stop();
         }
-    }); // Register UDP streamer for shutdown
+    }); // Register MPEG-TS server for shutdown
+    supervisor_.register_module_stop("ControlModule", [&]() {
+        if (control_module_) {
+            control_module_->stop();
+        }
+    });
     supervisor_.register_module_stop("OverlayConsumer", [&]() {
         overlay_consumer_running_ = false;
         if (!timed_join_thread(overlay_consumer_thread_, "OverlayConsumerThread", std::chrono::seconds(3))) {
@@ -661,9 +716,8 @@ bool Application::restart_camera_subsystem() {
         primary_camera_ = std::make_unique<CameraCapture>(
             cam_w, cam_h, // Main stream width/height
             config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
-            config_loader_.get_tpu_stream_fps(), // TPU stream FPS (from config)
             config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
-            image_pool_, image_data_pool_, main_image_output_queues_, *raw_image_for_processor_queue_, camera_watchdog_timeout);
+            image_pool_, image_data_pool_, *raw_image_for_processor_queue_, camera_watchdog_timeout);
         
         // Start the camera
         if (!primary_camera_->start()) {
@@ -1007,10 +1061,10 @@ void Application::h264_queue_consumer_thread_func() {
                     }
                 }
                 
-                // Push the H264 data to the UDP streamer
-                if (udp_streamer_) {
-                    // UDPStreamer handles frame delivery to network
-                    udp_streamer_->pushH264Data(h264_buffer);
+                // Push the H264 data to the MPEG-TS server
+                if (mpegts_server_) {
+                    // MpegTsServer handles frame delivery to network
+                    mpegts_server_->pushH264Data(h264_buffer);
                 }
                 
                 frame_counter++;
@@ -1106,30 +1160,8 @@ int Application::run() {
     }
     
     APP_LOG_INFO("Shutdown signal received. Stopping application...");
+    stop();
     
-    // Stop the recovery thread
-    recovery_running_ = false;
-    if (!timed_join_thread(recovery_thread_, "RecoveryThread", std::chrono::seconds(3))) {
-        APP_LOG_ERROR("Recovery thread failed to join, forcing exit");
-    }
-    
-    supervisor_.initiate_shutdown();
-    
-    // Join the consumer threads
-    overlay_consumer_running_ = false;
-    if (!timed_join_thread(overlay_consumer_thread_, "OverlayConsumerThread", std::chrono::seconds(3))) {
-        APP_LOG_ERROR("Overlay consumer thread failed to join within timeout");
-    }
-    
-    h264_consumer_running_ = false;
-    if (!timed_join_thread(h264_consumer_thread_, "H264ConsumerThread", std::chrono::seconds(3))) {
-        APP_LOG_ERROR("H264 consumer thread failed to join within timeout");
-    }
-    
-    // Perform post-shutdown cleanup
-    post_shutdown_cleanup();
-    
-    APP_LOG_INFO("Application stopped.");
     return 0;
 }
 
@@ -1441,6 +1473,38 @@ void Application::drain_queues() {
         }
         if (items_drained > 0) {
             APP_LOG_INFO("DRAIN: Drained " + std::to_string(items_drained) + " items from Detection Logic Queue");
+        }
+    }
+
+    // Drain overlaid video queue (Visualization Processor -> H264 Encoder)
+    {
+        int items_drained = 0;
+        ImageData* ptr = nullptr;
+        while (items_drained < 20 && overlaid_video_queue_->pop(ptr)) {
+            if (ptr) {
+                ptr->buffer.reset();
+                image_data_pool_->release(ptr);
+                items_drained++;
+            }
+        }
+        if (items_drained > 0) {
+            APP_LOG_INFO("DRAIN: Drained " + std::to_string(items_drained) + " items from Overlaid Video Queue");
+        }
+    }
+
+    // Drain H264 output queue (H264 Encoder -> Streamer)
+    {
+        int items_drained = 0;
+        H264Buffer* ptr = nullptr;
+        while (items_drained < 20 && h264_output_queue_->pop(ptr)) {
+            if (ptr) {
+                h264_pool_->release_raw(ptr);
+                increment_h264_output_queue_out();
+                items_drained++;
+            }
+        }
+        if (items_drained > 0) {
+            APP_LOG_INFO("DRAIN: Drained " + std::to_string(items_drained) + " items from H264 Output Queue");
         }
     }
     

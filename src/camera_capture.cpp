@@ -166,23 +166,21 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
 
 CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
                              unsigned int tpu_width, unsigned int tpu_height,
-                             unsigned int tpu_fps,
                              unsigned int target_tpu_width, unsigned int target_tpu_height,
                              std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
                              std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
-                             std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
                              ImageQueue& image_processor_input_queue,
                              std::chrono::seconds watchdog_timeout)
     : width_(main_width), height_(main_height),
       tpu_width_(tpu_width), tpu_height_(tpu_height),
-      tpu_fps_(tpu_fps),
+      tpu_fps_(120),
       target_tpu_width_(target_tpu_width), target_tpu_height_(target_tpu_height),
-      main_output_queues_(main_output_queues),
       image_processor_input_queue_(image_processor_input_queue),
       image_buffer_pool_(image_buffer_pool),
       image_data_pool_(image_data_pool),
       watchdog_timeout_(watchdog_timeout),
-      frame_count_(0) {
+      frame_count_(0),
+      main_output_queues_() { // Initialize as empty vector
     APP_LOG_INFO("CameraCapture constructor called.");
     
     camera_manager_ = std::make_unique<libcamera::CameraManager>();
@@ -253,8 +251,8 @@ bool CameraCapture::start() {
     camera_->requestCompleted.connect(this, &CameraCapture::request_complete_callback);
 
     libcamera::ControlList controls_to_set;
-    // Fix 1: Hard FPS Lock & Exposure (120 FPS Mandate)
-    controls_to_set.set(libcamera::controls::FrameDurationLimits, libcamera::Span<const int64_t, 2>({8333, 8333}));
+    // Hard FPS Lock & Exposure (120 FPS Mandate) - Removed FPS throttling to allow native max FPS
+    // controls_to_set.set(libcamera::controls::FrameDurationLimits, libcamera::Span<const int64_t, 2>({frame_duration_us, frame_duration_us}));
     controls_to_set.set(libcamera::controls::AeEnable, false);
     controls_to_set.set(libcamera::controls::ExposureTime, 8000);
     
@@ -602,11 +600,16 @@ void CameraCapture::request_processor_thread_func() {
                 const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
                 if (video_fb) {
                     // ISP MANDATE: Distribute to ALL registered consumers (Visualization, Encoder, etc.)
-                    for (auto& queue_ref : main_output_queues_) {
-                        if (!process_frame_buffer(video_fb, video_stream_->configuration(), image_buffer_pool_, image_data_pool_, queue_ref.get(), "Main Video Stream", width_, height_, capture_time, t_capture_ms, video_stream_->configuration().pixelFormat, frame_id, exposure_ms, &main_stream_drop_count_, &tpu_stream_drop_count_, nullptr, app_ref_, compat_map)) {
-                            // Drop handled inside process_frame_buffer
+                    // Now iterating through the stored vector of ImageQueue pointers
+                    for (auto* queue_ptr : main_output_queues_) {
+                        if (queue_ptr) { // Check for nullptr in case any queue was not properly set
+                            if (!process_frame_buffer(video_fb, video_stream_->configuration(), image_buffer_pool_, image_data_pool_, *queue_ptr, "Main Video Stream", width_, height_, capture_time, t_capture_ms, video_stream_->configuration().pixelFormat, frame_id, exposure_ms, &main_stream_drop_count_, &tpu_stream_drop_count_, nullptr, app_ref_, compat_map)) {
+                                // Drop handled inside process_frame_buffer
+                            } else {
+                                processed_any_frame = true;
+                            }
                         } else {
-                            processed_any_frame = true;
+                            APP_LOG_ERROR("CameraCapture: Null pointer in main_output_queues_ vector.");
                         }
                     }
                 } else {
@@ -777,3 +780,5 @@ bool CameraCapture::process_tpu_processed_frame_buffer(const libcamera::FrameBuf
     
     return true;
 }
+
+// Set application reference for updating counters
