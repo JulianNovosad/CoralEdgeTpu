@@ -640,7 +640,7 @@ void LogicModule::worker_thread_func() {
                 std::cerr << "LogicModule: detections_buffer INVALID" << std::endl;
                 continue;
             }
-            std::cerr << "LogicModule: detections_buffer valid, frame_id=" << detections_buffer->frame_id << std::endl;
+            std::cerr << "LogicModule: detections_buffer valid, frame_id=" << detections_buffer->frame_id << " detections=" << detections_buffer->size << std::endl;
 
             // Ballistic Hit-Scan Invariant (Section V.3) - Now safe to access buffer members
             uint64_t t_logic_start = get_time_raw_ms();
@@ -679,7 +679,12 @@ void LogicModule::worker_thread_func() {
             
             CsvLogEntry entry;
             try {
-                process(detections_buffer->data, entry);
+                // Pass correctly sized slice or use size member in process()
+                std::vector<DetectionResult> active_detections;
+                if (detections_buffer->size > 0) {
+                    active_detections.assign(detections_buffer->data.begin(), detections_buffer->data.begin() + detections_buffer->size);
+                }
+                process(active_detections, entry);
                 guard.consumed = true;
                 
                 // Set common fields after process might have updated timing

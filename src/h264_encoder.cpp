@@ -206,6 +206,12 @@ void H264Encoder::worker_thread_func() {
             // Record queue pop time
             image_data.encode_start_time = std::chrono::steady_clock::now();
             
+            static bool format_confirmed = false;
+            if (!format_confirmed) {
+                APP_LOG_INFO("ENCODER_FORMAT_CONFIRMATION: frame_id=" + std::to_string(image_data.frame_id) + " format=" + image_data.format.toString());
+                format_confirmed = true;
+            }
+
             if (!image_data.buffer) {
                 APP_LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
                 image_data_pool_->release(input_image_ptr);
@@ -220,9 +226,15 @@ void H264Encoder::worker_thread_func() {
             size_t actual_size = image_data.buffer->data.size();
             
             if (actual_size >= expected_bgr_size) {
-                // ImageProcessor produces RGB888, so we convert RGB to YUV420p
-                cv::Mat frame_rgb_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
-                cv::cvtColor(frame_rgb_raw, frame_yuv, cv::COLOR_RGB2YUV_I420);
+                // Check the format and convert appropriately to YUV420p
+                if (image_data.format == libcamera::formats::BGR888) {
+                    cv::Mat frame_bgr_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
+                    cv::cvtColor(frame_bgr_raw, frame_yuv, cv::COLOR_BGR2YUV_I420);
+                } else {
+                    // Assume RGB format
+                    cv::Mat frame_rgb_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
+                    cv::cvtColor(frame_rgb_raw, frame_yuv, cv::COLOR_RGB2YUV_I420);
+                }
             } else {
                 // Unknown format fallback
                 if (actual_size >= (image_data.width * image_data.height)) {

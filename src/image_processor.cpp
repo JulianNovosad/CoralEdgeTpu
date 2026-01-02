@@ -322,19 +322,25 @@ void ImageProcessor::worker_thread_func() {
                         bool conversion_success = true;
                         
                         if (input_image.format == libcamera::formats::RGB888) {
+                            // AUTHORITY: The stream is labeled RGB888 but contains BGR888 data.
                             input_frame_mat = cv::Mat(input_image.height, input_image.width, CV_8UC3, frame_data_ptr);
                         } else if (input_image.format == libcamera::formats::YUV420) {
                             cv::Mat yuv_mat = cv::Mat(input_image.height * 3 / 2, input_image.width, CV_8UC1, frame_data_ptr);
                             cv::cvtColor(yuv_mat, input_frame_mat, cv::COLOR_YUV2BGR_I420);
-                        } else if (input_image.format == libcamera::formats::YUYV) {
-                            cv::Mat yuyv_mat = cv::Mat(input_image.height, input_image.width, CV_8UC2, frame_data_ptr);
-                            cv::cvtColor(yuyv_mat, input_frame_mat, cv::COLOR_YUV2BGR_YUYV, 3);
                         } else {
                             APP_LOG_ERROR("ImageProcessor: Unsupported format: " + input_image.format.toString());
                             conversion_success = false;
                         }
 
                         if (conversion_success) {
+                            // Ensure input_frame_mat is in the correct format for its destination
+                            if (is_tpu_stream_) {
+                                // TPU expects RGB. Input is BGR.
+                                cv::cvtColor(input_frame_mat, input_frame_mat, cv::COLOR_BGR2RGB);
+                            } else {
+                                // Visualization/Encoder expects BGR. Input is BGR. No swap needed.
+                            }
+
                             cv::Mat processed_mat;
                             if (input_image.width == (unsigned int)output_width_ && input_image.height == (unsigned int)output_height_) {
                                 processed_mat = input_frame_mat;
@@ -369,8 +375,8 @@ void ImageProcessor::worker_thread_func() {
                                         *output_image_data = ImageData(input_image.capture_time, input_image.frame_id);
                                         output_image_data->width = output_width_;
                                         output_image_data->height = output_height_;
-                                        // TPU expects RGB888, ensuring consistency
-                                        output_image_data->format = libcamera::formats::RGB888;
+                                        // Use correct format for the next stage (Inference Engine needs RGB, Encoder needs BGR)
+                                        output_image_data->format = (is_tpu_stream_) ? libcamera::formats::RGB888 : libcamera::formats::BGR888;
                                         output_image_data->buffer = processed_buffer_data;
                                         output_image_data->fd = -1;
                                         output_image_data->t_capture_raw_ms = input_image.t_capture_raw_ms;
@@ -441,13 +447,35 @@ void ImageProcessor::apply_detections_to_frame(cv::Mat& frame, const DetectionRe
     APP_LOG_INFO(log_buffer);
 
     // --- Original detection drawing ---
-    for (const auto& detection : detections) {
-        int x_min = std::max(0, static_cast<int>(detection.xmin * frame_width));
-        int y_min = std::max(0, static_cast<int>(detection.ymin * frame_height));
-        int x_max = std::min(frame_width - 1, static_cast<int>(detection.xmax * frame_width));
-        int y_max = std::min(frame_height - 1, static_cast<int>(detection.ymax * frame_height));
+    // ASPECT RATIO AUTHORITY:
+    // Sensor (Source): 1536x864 = 16:9 (AR = 1.777...)
+    // TPU Stream (Inference): 320x320 = 1:1 (AR = 1.0)
+    // Mapping: TPU is a center-crop of the Sensor.
+    const float sensor_ar = 16.0f / 9.0f;
+    const float tpu_ar = 1.0f / 1.0f;
+    
+    // Calculate the horizontal coverage of the TPU crop relative to the full sensor width.
+    // Since tpu_ar < sensor_ar, the crop is limited by the sensor height.
+    // tpu_width_norm = (tpu_ar / sensor_ar) = (1.0 / 1.777) = 0.5625
+    const float tpu_width_in_sensor = tpu_ar / sensor_ar;
+    const float tpu_x_offset_in_sensor = (1.0f - tpu_width_in_sensor) / 2.0f;
 
-        cv::Scalar box_color(0, 0, 255); // Red color for bounding boxes
+    for (const auto& detection : detections) {
+        // Transform normalized TPU coordinates [0, 1] to normalized Sensor (Main Frame) coordinates.
+        // Horizontal: Map [0, 1] to [offset, offset + width]
+        float x_min_norm = tpu_x_offset_in_sensor + detection.xmin * tpu_width_in_sensor;
+        float x_max_norm = tpu_x_offset_in_sensor + detection.xmax * tpu_width_in_sensor;
+        
+        // Vertical: TPU height matches Sensor height (1.0 coverage, 0 offset)
+        float y_min_norm = detection.ymin;
+        float y_max_norm = detection.ymax;
+
+        int x_min = std::max(0, static_cast<int>(x_min_norm * frame_width));
+        int y_min = std::max(0, static_cast<int>(y_min_norm * frame_height));
+        int x_max = std::min(frame_width - 1, static_cast<int>(x_max_norm * frame_width));
+        int y_max = std::min(frame_height - 1, static_cast<int>(y_max_norm * frame_height));
+
+        cv::Scalar box_color(0, 0, 255); // Red color for bounding boxes (in BGR)
         cv::rectangle(frame, cv::Point(x_min, y_min), cv::Point(x_max, y_max), box_color, 2);
         
         // Draw class ID and confidence score
