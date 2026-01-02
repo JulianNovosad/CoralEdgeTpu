@@ -69,11 +69,11 @@ void Monitor::monitor_thread_func() {
         std::cout << std::endl;
         
         // Get current values status
-        size_t current_raw_image_queue_depth = app_.raw_image_for_processor_queue_.size_approx();
-        size_t current_tpu_inference_queue_depth = app_.tpu_inference_queue_.size_approx();
-        size_t current_detection_logic_queue_depth = app_.detection_results_for_logic_queue_.size_approx();
-        size_t current_overlaid_video_queue_depth = app_.overlaid_video_queue_.size_approx();
-        size_t current_h264_output_queue_depth = app_.h264_output_queue_.size_approx();
+        size_t current_raw_image_queue_depth = app_.raw_image_for_processor_queue_->size_approx();
+        size_t current_tpu_inference_queue_depth = app_.tpu_inference_queue_->size_approx();
+        size_t current_detection_logic_queue_depth = app_.detection_results_for_logic_queue_->size_approx();
+        size_t current_overlaid_video_queue_depth = app_.overlaid_video_queue_->size_approx();
+        size_t current_h264_output_queue_depth = app_.h264_output_queue_->size_approx();
         
         // Calculate queue in/out rates
         int raw_image_queue_in = 0;
@@ -266,7 +266,7 @@ void Monitor::monitor_thread_func() {
                 std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
             } else if (inference_ips == 0 && app_.get_inference_engine()->inference_rate_.load() == 0) {
                 // No inferences being processed - check if input queue is empty (starved) or full (blocked)
-                size_t input_queue_depth = app_.raw_image_for_processor_queue_.size_approx();
+                size_t input_queue_depth = app_.raw_image_for_processor_queue_->size_approx();
                 if (input_queue_depth == 0) {
                     std::cout << "  Status: STARVED" << std::endl;
                 } else {
@@ -296,7 +296,7 @@ void Monitor::monitor_thread_func() {
                 std::cout << "  Status: INITIALIZING" << std::endl;  // Show initializing during startup
             } else if (logic_cps == 0 && app_.get_logic_module()->logic_rate_.load() == 0) {
                 // No logic being processed - check if input queue is empty (starved) or full (blocked)
-                size_t input_queue_depth = app_.detection_results_for_logic_queue_.size_approx();
+                size_t input_queue_depth = app_.detection_results_for_logic_queue_->size_approx();
                 if (input_queue_depth == 0) {
                     std::cout << "  Status: STARVED" << std::endl;
                 } else {
@@ -351,14 +351,14 @@ void Monitor::monitor_thread_func() {
             int64_t v_p = app_.cam_to_viz_produced_.load();
             int64_t v_c = app_.cam_to_viz_consumed_.load();
             int64_t v_d = app_.cam_to_viz_dropped_.load();
-            int64_t v_q = app_.main_video_queue_.size_approx();
+            int64_t v_q = app_.main_video_queue_->size_approx();
             int64_t v_f = (app_.get_visualization_processor() && app_.get_visualization_processor()->is_running()) ? 1 : 0;
             bool v_pass = (v_p == (v_c + v_d + v_q)); // Simplified for clarity, tolerance handled mentally
 
             int64_t t_p = app_.cam_to_tpu_proc_produced_.load();
             int64_t t_c = app_.cam_to_tpu_proc_consumed_.load();
             int64_t t_d = app_.cam_to_tpu_proc_dropped_.load();
-            int64_t t_q = app_.raw_image_for_processor_queue_.size_approx();
+            int64_t t_q = app_.raw_image_for_processor_queue_->size_approx();
             int64_t t_f = (app_.get_image_processor() && app_.get_image_processor()->is_running()) ? 1 : 0;
             bool t_pass = (t_p == (t_c + t_d + t_q));
 
@@ -371,7 +371,7 @@ void Monitor::monitor_thread_func() {
             int64_t p_p = app_.proc_to_inf_produced_.load();
             int64_t p_c = app_.proc_to_inf_consumed_.load();
             int64_t p_d = app_.proc_to_inf_dropped_.load();
-            int64_t p_q = app_.tpu_inference_queue_.size_approx();
+            int64_t p_q = app_.tpu_inference_queue_->size_approx();
             int64_t p_f = (app_.get_inference_engine() && app_.get_inference_engine()->is_running()) ? 1 : 0;
             bool p_pass = (p_p == (p_c + p_d + p_q));
 
@@ -391,7 +391,7 @@ void Monitor::monitor_thread_func() {
             int64_t logic_dropped = app_.inference_results_dropped_.load(); 
             int64_t overlay_dropped = app_.get_inference_engine()->get_overlay_queue_drop_count();
             
-            int64_t logic_queue_depth = app_.detection_results_for_logic_queue_.size_approx();
+            int64_t logic_queue_depth = app_.detection_results_for_logic_queue_->size_approx();
             bool overlay_pending = app_.get_inference_engine()->has_overlay_pending();
             
             bool logic_pass = (inference_produced == (logic_consumed + logic_dropped + logic_queue_depth));

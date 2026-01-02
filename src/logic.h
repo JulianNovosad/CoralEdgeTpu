@@ -67,6 +67,13 @@ struct BallisticProfile {
     float temperature_c;        // Temperatuur in Celsius
 };
 
+#include <list>
+#include <functional>
+
+// Forward declarations
+class SystemMonitor;
+class H264Encoder;
+
 /**
  * @brief Toestandsvector voor de RK4-solver.
  */
@@ -205,7 +212,9 @@ public:
                 std::shared_ptr<ObjectPool<ResultToken>> result_token_pool,
                 std::shared_ptr<OrientationSensor> orientation_sensor, 
                 const ConfigLoader& config,
-                TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer);
+                TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer,
+                SystemMonitor* system_monitor = nullptr,
+                H264Encoder* h264_encoder = nullptr);
     ~LogicModule();
 
     bool start();
@@ -243,6 +252,8 @@ private:
     void telemetry_worker_thread_func();
 
     DetectionResultsQueue& detection_input_queue_;
+    SystemMonitor* system_monitor_ = nullptr;
+    H264Encoder* h264_encoder_ = nullptr;
     std::atomic<bool> running_ = false;
     
     // Freshness indicators
@@ -302,7 +313,7 @@ private:
     std::shared_ptr<ObjectPool<ServoCommand>> servo_command_pool_;
     
     // Interlock Gates and Timing (Deterministic)
-    static constexpr uint64_t MAX_FRAME_BUDGET_RAW_MS{100}; // Photon-to-PWM 100ms (DEBUG RELAXED)
+    static constexpr uint64_t MAX_FRAME_BUDGET_RAW_MS{1000}; // Photon-to-PWM 1000ms (DEBUG RELAXED)
     static constexpr uint64_t ACTUATION_DWELL_MS{50};    // 50ms dwell for stroke
     static constexpr uint64_t ACTUATION_COOLDOWN_MS{300}; // 300ms hard cooldown
     

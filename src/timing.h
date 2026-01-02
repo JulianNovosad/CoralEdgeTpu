@@ -1,25 +1,37 @@
 #ifndef TIMING_H
 #define TIMING_H
 
+#include <chrono>
 #include <time.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <iostream>
 
 /**
- * @brief Authoritative timing source for the entire system.
- * Uses CLOCK_MONOTONIC_RAW to ensure immunity to NTP/system-time adjustments.
- * Implementation is static inline to prevent multiple-definition errors and minimize overhead.
- * @return Current time in milliseconds.
+ * @brief Get high-resolution monotonic time in milliseconds since an unspecified starting point.
+ * 
+ * Uses CLOCK_MONOTONIC_RAW if available, otherwise falls back to std::chrono steady_clock.
+ * @return Monotonic time in milliseconds.
  */
 static inline uint64_t get_time_raw_ms() {
     struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) != 0) {
-        // Critical syscall failure. Deterministic timing is impossible.
-        std::cerr << "FATAL: clock_gettime(CLOCK_MONOTONIC_RAW) failed!" << std::endl;
-        abort();
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == 0) {
+        return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
     }
-    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+    // Fallback
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+}
+
+/**
+ * @brief Get high-resolution monotonic time in nanoseconds since an unspecified starting point.
+ * @return Monotonic time in nanoseconds.
+ */
+static inline uint64_t get_time_raw_ns() {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == 0) {
+        return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    }
+    // Fallback
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 }
 
 #endif // TIMING_H

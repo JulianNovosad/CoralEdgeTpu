@@ -258,6 +258,10 @@ void InferenceEngine::worker_thread_func() {
         return; 
     }
     
+    APP_LOG_INFO("InferenceEngine: Worker thread started - HEARTBEAT");
+    int frames_processed = 0;
+    auto last_heartbeat_time = std::chrono::steady_clock::now();
+    
     while (running_ && g_running.load(std::memory_order_acquire)) {
         ImageData* input_image_ptr = nullptr;
         if (input_queue_.wait_pop(input_image_ptr, std::chrono::milliseconds(10))) {
@@ -302,7 +306,12 @@ void InferenceEngine::worker_thread_func() {
             // 2. Set input tensor
             try {
                 set_input_tensor(interpreter.get(), input_image);
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("InferenceEngine: Exception in set_input_tensor: " + std::string(e.what()));
+                logic_queue_drop_count_.fetch_add(1); 
+                continue;
             } catch (...) {
+                APP_LOG_ERROR("InferenceEngine: Unknown exception in set_input_tensor");
                 logic_queue_drop_count_.fetch_add(1); 
                 continue;
             }
@@ -319,6 +328,7 @@ void InferenceEngine::worker_thread_func() {
                 std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
                 invoke_status = interpreter->Invoke();
             }
+            std::cerr << "InferenceEngine: Invoke() returned " << invoke_status << " for frame " << input_image.frame_id << std::endl;
             auto invoke_end_time = std::chrono::steady_clock::now();
             uint64_t t_inf_end = get_time_raw_ms();
             long long duration_us = std::chrono::duration_cast<std::chrono::microseconds>(invoke_end_time - invoke_start_time).count();
@@ -384,6 +394,36 @@ void InferenceEngine::worker_thread_func() {
                 results_buffer->t_capture_raw_ms = input_image.t_capture_raw_ms;
                 results_buffer->t_inf_start = t_inf_start;
                 results_buffer->t_inf_end = t_inf_end;
+                
+                // Propagate camera telemetry
+                results_buffer->cam_exposure_ms = input_image.cam_exposure_ms;
+                results_buffer->cam_isp_latency_ms = input_image.cam_isp_latency_ms;
+                results_buffer->cam_buffer_usage_percent = input_image.cam_buffer_usage_percent;
+                results_buffer->tpu_temp_c = tpu_temperature_.load();
+                
+                // Propagate ImageProcessor telemetry
+                results_buffer->image_proc_ms = input_image.image_proc_ms;
+
+                // Log to unified CSV
+                CsvLogEntry inf_entry;
+                copy_to_array(inf_entry.module, "InferenceEngine");
+                copy_to_array(inf_entry.event, "inference_complete");
+                inf_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                inf_entry.call_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                inf_entry.cam_frame_id = input_image.frame_id;
+                inf_entry.tpu_inference_ms = static_cast<float>(duration_us) / 1000.0f;
+                inf_entry.tpu_temp_c = results_buffer->tpu_temp_c;
+                inf_entry.image_proc_ms = input_image.image_proc_ms;
+                
+                // Initialize TPU fields to non-NaN defaults
+                inf_entry.tpu_model_score = 0.0f;
+                inf_entry.tpu_class_id = 0;
+
+                if (results_buffer->size > 0) {
+                    inf_entry.tpu_model_score = results_buffer->data[0].score;
+                    inf_entry.tpu_class_id = results_buffer->data[0].class_id;
+                }
+                Logger::getInstance().log_csv(inf_entry);
 
                 if (detection_results_for_overlay_buffer_) {
                     DetectionResults& overlay_results = detection_results_for_overlay_buffer_->get_write_buffer();
@@ -418,6 +458,15 @@ void InferenceEngine::worker_thread_func() {
                     }
                 }
             }
+            
+            // Periodic heartbeat
+            frames_processed++;
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(now - last_heartbeat_time).count() >= 5) {
+                APP_LOG_INFO("InferenceEngine: Processed " + std::to_string(frames_processed) + " frames in last interval");
+                last_heartbeat_time = now;
+                frames_processed = 0;
+            }
         }
     }
 }
@@ -444,7 +493,11 @@ void InferenceEngine::set_input_tensor(tflite::Interpreter* interpreter, const I
 
     // Validate buffer sizes (O(1) checks)
     if (image.buffer->size != input_tensor->bytes) {
-        throw std::runtime_error("Input tensor size mismatch.");
+        char err_buf[128];
+        snprintf(err_buf, sizeof(err_buf), "Input tensor size mismatch: buffer=%zu, tensor=%zu", 
+                 image.buffer->size, input_tensor->bytes);
+        APP_LOG_ERROR(err_buf);
+        throw std::runtime_error(err_buf);
     }
     
     std::memcpy(tensor_data, image.buffer->data.data(), image.buffer->size);
@@ -456,6 +509,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
         APP_LOG_WARNING("Failed to acquire a detection result buffer from the pool. No results will be reported for this frame.");
         return nullptr;
     }
+    std::cerr << "InferenceEngine: get_output_tensor() for frame " << input_image.frame_id << std::endl;
     results_buffer->size = 0; // Reset size
 
     // Manual cleanup function - call this on error paths before returning nullptr
@@ -531,6 +585,15 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
                 res.score = score;
                 res.source_frame_id = input_image.frame_id;
                 res.timestamp = timestamp;
+                res.t_capture_raw_ms = input_image.t_capture_raw_ms;
+
+                // Propagate camera telemetry from ImageData
+                res.cam_exposure_ms = input_image.cam_exposure_ms;
+                res.cam_isp_latency_ms = input_image.cam_isp_latency_ms;
+                res.cam_buffer_usage_percent = input_image.cam_buffer_usage_percent;
+                
+                // Add TPU telemetry
+                res.tpu_temp_c = get_tpu_temperature();
                 
                 res.ymin = (static_cast<float>(boxes[i * 4 + 0]) - box_zp) * box_scale;
                 res.xmin = (static_cast<float>(boxes[i * 4 + 1]) - box_zp) * box_scale;
@@ -704,6 +767,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
 
     // Fill buffer
     size_t result_count = 0;
+    std::cerr << "InferenceEngine: filtered_detections.size()=" << filtered_detections.size() << " for frame " << input_image.frame_id << std::endl;
     for (const auto& det : filtered_detections) {
         if (result_count >= results_buffer->data.size()) break;
         results_buffer->data[result_count++] = det;

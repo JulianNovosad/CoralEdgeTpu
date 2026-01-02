@@ -91,11 +91,11 @@ void Application::stop() {
     APP_LOG_INFO("Application::stop() initiated.");
 
     // 1. Wake up all blocked threads with poison pills immediately
-    ImageData* p1 = image_data_pool_->acquire(); if (p1) { p1->buffer = nullptr; raw_image_for_processor_queue_.push(p1); }
-    ImageData* p2 = image_data_pool_->acquire(); if (p2) { p2->buffer = nullptr; main_video_queue_.push(p2); }
-    ImageData* p3 = image_data_pool_->acquire(); if (p3) { p3->buffer = nullptr; tpu_inference_queue_.push(p3); }
-    ResultToken* r1 = result_token_pool_->acquire(); if (r1) { r1->mark_dropped(); r1->get().reset(); detection_results_for_logic_queue_.push(r1); }
-    ImageData* p4 = image_data_pool_->acquire(); if (p4) { p4->buffer = nullptr; overlaid_video_queue_.push(p4); }
+    ImageData* p1 = image_data_pool_->acquire(); if (p1) { p1->buffer = nullptr; raw_image_for_processor_queue_->push(p1); }
+    ImageData* p2 = image_data_pool_->acquire(); if (p2) { p2->buffer = nullptr; main_video_queue_->push(p2); }
+    ImageData* p3 = image_data_pool_->acquire(); if (p3) { p3->buffer = nullptr; tpu_inference_queue_->push(p3); }
+    ResultToken* r1 = result_token_pool_->acquire(); if (r1) { r1->mark_dropped(); r1->get().reset(); detection_results_for_logic_queue_->push(r1); }
+    ImageData* p4 = image_data_pool_->acquire(); if (p4) { p4->buffer = nullptr; overlaid_video_queue_->push(p4); }
 
     // 2. Stop the recovery thread
     recovery_running_ = false;
@@ -133,13 +133,14 @@ void Application::setup_pools_and_queues() {
     APP_LOG_INFO("Image buffer size per frame (BGR888): " + std::to_string(image_buffer_size) + " bytes.");
     
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
-    // Pi 5 with 4GB RAM: 150 buffers is ~600MB.
+    // Determine pool size for images from config, default to a reasonable value if not set or invalid
+    // Reduced for Pi stability (avoid OOM) -> Increased to 150 to fix starvation
     size_t image_pool_count = 150; 
 
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
     APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
     detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(300, 200, "DetectionPool"); 
-    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(50, 4 * 1024 * 1024, "H264Pool"); 
+    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(20, 4 * 1024 * 1024, "H264Pool"); 
     
     // Object pools for lock-free queue elements
     image_data_pool_ = std::make_shared<ObjectPool<ImageData>>(image_pool_count, "ImageDataPool");
@@ -171,8 +172,17 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         unsigned int inf_w = config_loader_.get_tpu_target_width();
         unsigned int inf_h = config_loader_.get_tpu_target_height();
 
+        // Initialize queues
+        APP_LOG_INFO("Initializing queues...");
+        main_video_queue_ = std::make_shared<ImageQueue>();
+        raw_image_for_processor_queue_ = std::make_shared<ImageQueue>();
+        tpu_inference_queue_ = std::make_shared<ImageQueue>();
+        detection_results_for_logic_queue_ = std::make_shared<DetectionResultsQueue>();
+        overlaid_video_queue_ = std::make_shared<ImageQueue>();
+        h264_output_queue_ = std::make_shared<H264Queue>();
+
         // Send main video frames to main_video_queue_ instead of directly to overlaid_video_queue_
-        main_image_output_queues_.push_back(std::ref(main_video_queue_)); 
+        main_image_output_queues_.push_back(std::ref(*main_video_queue_)); 
         
         APP_LOG_INFO("Creating CameraCapture...");
         primary_camera_ = std::make_unique<CameraCapture>(
@@ -180,7 +190,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
             config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
             config_loader_.get_tpu_stream_fps(), // TPU stream FPS (from config)
             config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
-            image_pool_, image_data_pool_, main_image_output_queues_, raw_image_for_processor_queue_, camera_watchdog_timeout);
+            image_pool_, image_data_pool_, main_image_output_queues_, *raw_image_for_processor_queue_, camera_watchdog_timeout);
         APP_LOG_INFO("CameraCapture created.");
         
         // Set application reference for camera to update counters
@@ -189,9 +199,9 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         APP_LOG_INFO("Creating ImageProcessor for TPU inference...");
         // Create ImageProcessor for TPU inference (no detection overlays needed)
         image_processor_ = std::make_unique<ImageProcessor>(
-            raw_image_for_processor_queue_, tpu_inference_queue_, image_pool_, image_data_pool_,
+            *raw_image_for_processor_queue_, *tpu_inference_queue_, image_pool_, image_data_pool_,
             config_loader_.get_tpu_stream_pixel_format(), // Pass configured format
-            inf_w, inf_h); // Pass target width/height for TPU processing
+            inf_w, inf_h, "ImageProcessor_TPU"); // Pass target width/height for TPU processing
         image_processor_->set_skip_factor(1); // Process every frame (Mandate: Zero Skip)
         image_processor_->set_application_ref(this);
         image_processor_->set_is_tpu_stream(true);
@@ -200,12 +210,12 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         APP_LOG_INFO("Creating ImageProcessor for visualization with overlays...");
         // Create a new ImageProcessor instance for the main video stream with detection overlays
         visualization_processor_ = std::make_unique<ImageProcessor>(
-            main_video_queue_, overlaid_video_queue_, 
+            *main_video_queue_, *overlaid_video_queue_, 
             &detection_results_for_overlay_buffer_, // Connect to triple buffer for overlays
             &ballistic_points_for_overlay_buffer_,  // New argument for ballistic points
             image_pool_, image_data_pool_,
             config_loader_.get_tpu_stream_pixel_format(), // Use same format as TPU stream for consistency
-            cam_w, cam_h); // Use main camera dimensions
+            cam_w, cam_h, "ImageProcessor_Viz"); // Use main camera dimensions
         visualization_processor_->set_skip_factor(1); // Process every frame (120 FPS)
         visualization_processor_->set_application_ref(this);
         visualization_processor_->set_is_tpu_stream(false);
@@ -231,8 +241,8 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         
         // Let's re-verify ImageProcessor pops.
         inference_engine_ = std::make_unique<InferenceEngine>(
-            model_path, tpu_inference_queue_, &detection_results_for_overlay_buffer_, 
-            detection_results_for_logic_queue_, detection_pool_, 
+            model_path, *tpu_inference_queue_, &detection_results_for_overlay_buffer_, 
+            *detection_results_for_logic_queue_, detection_pool_, 
             image_data_pool_, result_token_pool_,
             config_loader_.get_detection_score_threshold(), 
             config_loader_.get_inference_worker_threads());
@@ -258,20 +268,30 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         APP_LOG_INFO("OrientationSensor created.");
 
         APP_LOG_INFO("Creating LogicModule...");
-        logic_module_ = std::make_unique<LogicModule>(detection_results_for_logic_queue_, result_token_pool_, orientation_sensor_, config_loader_, &ballistic_points_for_overlay_buffer_);
-        APP_LOG_INFO("LogicModule created.");
-        
-        // Set application reference for logic module to update counters
-        logic_module_->set_application_ref(this);
-
         APP_LOG_INFO("Creating SystemMonitor...");
         system_monitor_ = std::make_unique<SystemMonitor>();
         APP_LOG_INFO("SystemMonitor created.");
 
         APP_LOG_INFO("Creating H264Encoder...");
-        h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, image_data_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
+        APP_LOG_INFO("Application: overlaid_video_queue_ Address: " + std::to_string((uintptr_t)overlaid_video_queue_.get()));
+        h264_encoder_ = std::make_unique<H264Encoder>(*overlaid_video_queue_, *h264_output_queue_, h264_pool_, image_data_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
         h264_encoder_->set_application_ref(this);
         APP_LOG_INFO("H264Encoder created.");
+
+        APP_LOG_INFO("Creating LogicModule...");
+        logic_module_ = std::make_unique<LogicModule>(
+            *detection_results_for_logic_queue_, 
+            result_token_pool_, 
+            orientation_sensor_, 
+            config_loader_, 
+            &ballistic_points_for_overlay_buffer_,
+            system_monitor_.get(),
+            h264_encoder_.get()
+        );
+        APP_LOG_INFO("LogicModule created.");
+        
+        // Set application reference for logic module to update counters
+        logic_module_->set_application_ref(this);
 
         APP_LOG_INFO("Creating KeyboardMonitor...");
         keyboard_monitor_ = std::make_unique<KeyboardMonitor>();
@@ -282,7 +302,21 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         // Create UDP streamer
         APP_LOG_INFO("Creating UDPStreamer...");
         udp_streamer_ = std::make_unique<UDPStreamer>(cam_w, cam_h, config_loader_.get_camera_fps());
-        APP_LOG_INFO("UDPStreamer created for 192.168.178.255:5000");
+        APP_LOG_INFO("UDPStreamer created.");
+
+        // Create Discovery Module
+        APP_LOG_INFO("Creating DiscoveryModule...");
+        discovery_module_ = std::make_unique<DiscoveryModule>();
+        discovery_module_->on_peer_discovered([this](const DiscoveryModule::PeerInfo& peer) {
+            APP_LOG_INFO("Application: Auto-discovered peer " + peer.name + " at " + peer.ip);
+            if (orientation_sensor_) {
+                orientation_sensor_->set_source(peer.ip, peer.orientation_port);
+            }
+            if (udp_streamer_) {
+                udp_streamer_->set_destination(peer.ip, peer.video_port);
+            }
+        });
+        APP_LOG_INFO("DiscoveryModule created.");
 
         APP_LOG_INFO("Creating Monitor...");
         monitor_ = std::make_unique<Monitor>(*this);
@@ -304,6 +338,7 @@ bool Application::start_modules() {
     // 1. Start low-level services first
     start_ok &= system_monitor_->start();
     start_ok &= orientation_sensor_->start();
+    if (discovery_module_) start_ok &= discovery_module_->start();
     
     // 2. Start processing modules
     start_ok &= image_processor_->start();
@@ -628,7 +663,7 @@ bool Application::restart_camera_subsystem() {
             config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
             config_loader_.get_tpu_stream_fps(), // TPU stream FPS (from config)
             config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
-            image_pool_, image_data_pool_, main_image_output_queues_, raw_image_for_processor_queue_, camera_watchdog_timeout);
+            image_pool_, image_data_pool_, main_image_output_queues_, *raw_image_for_processor_queue_, camera_watchdog_timeout);
         
         // Start the camera
         if (!primary_camera_->start()) {
@@ -663,8 +698,8 @@ bool Application::restart_inference_subsystem() {
         
         // Recreate the inference engine
         inference_engine_ = std::make_unique<InferenceEngine>(
-            model_path, tpu_inference_queue_, &detection_results_for_overlay_buffer_, 
-            detection_results_for_logic_queue_, detection_pool_, 
+            model_path, *tpu_inference_queue_, &detection_results_for_overlay_buffer_, 
+            *detection_results_for_logic_queue_, detection_pool_, 
             image_data_pool_, result_token_pool_,
             config_loader_.get_detection_score_threshold(), 
             config_loader_.get_inference_worker_threads());
@@ -696,7 +731,7 @@ bool Application::restart_logic_subsystem() {
         }
         
         // Recreate the logic module
-        logic_module_ = std::make_unique<LogicModule>(detection_results_for_logic_queue_, result_token_pool_, orientation_sensor_, config_loader_, &ballistic_points_for_overlay_buffer_);
+        logic_module_ = std::make_unique<LogicModule>(*detection_results_for_logic_queue_, result_token_pool_, orientation_sensor_, config_loader_, &ballistic_points_for_overlay_buffer_);
         // Set application reference for logic module to update counters
         logic_module_->set_application_ref(this);
         
@@ -731,9 +766,9 @@ bool Application::restart_image_processor_subsystem() {
         unsigned int inf_h = config_loader_.get_tpu_target_height();
         
         image_processor_ = std::make_unique<ImageProcessor>(
-            raw_image_for_processor_queue_, tpu_inference_queue_, image_pool_, image_data_pool_,
+            *raw_image_for_processor_queue_, *tpu_inference_queue_, image_pool_, image_data_pool_,
             config_loader_.get_tpu_stream_pixel_format(), // Pass configured format
-            inf_w, inf_h); // Pass target width/height
+            inf_w, inf_h, "ImageProcessor_TPU"); // Pass target width/height
         
         // Start the image processor
         if (!image_processor_->start()) {
@@ -769,12 +804,12 @@ bool Application::restart_visualization_subsystem() {
         
                 // Recreate the visualization processor
                 visualization_processor_ = std::make_unique<ImageProcessor>(
-                    main_video_queue_, overlaid_video_queue_, 
+                    *main_video_queue_, *overlaid_video_queue_, 
                     &detection_results_for_overlay_buffer_, // Connect to triple buffer
                     &ballistic_points_for_overlay_buffer_,  // New argument for ballistic points
                     image_pool_, image_data_pool_,
                     config_loader_.get_tpu_stream_pixel_format(),
-                    cam_w, cam_h);        
+                    cam_w, cam_h, "ImageProcessor_Viz");        
         // Set application reference for visualization processor to update counters
         visualization_processor_->set_application_ref(this);
         // Start the visualization processor
@@ -810,7 +845,7 @@ bool Application::restart_encoder_subsystem() {
             config_loader_.get_reduced_res_height() : 
             config_loader_.get_high_res_height();
         
-        h264_encoder_ = std::make_unique<H264Encoder>(overlaid_video_queue_, h264_output_queue_, h264_pool_, image_data_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
+        h264_encoder_ = std::make_unique<H264Encoder>(*overlaid_video_queue_, *h264_output_queue_, h264_pool_, image_data_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
         
         // Start the encoder
         if (!h264_encoder_->start()) {
@@ -877,7 +912,7 @@ void Application::h264_queue_consumer_thread_func() {
     
     while (h264_consumer_running_ && g_running.load(std::memory_order_acquire)) {
         // Attempt to pop a buffer pointer from the H264 output queue
-        if (h264_output_queue_.pop(h264_buffer_ptr)) {
+        if (h264_output_queue_->pop(h264_buffer_ptr)) {
             increment_h264_output_queue_out();
             
             // Wrap the raw pointer in a shared_ptr with a custom deleter that returns it to the pool
@@ -1200,14 +1235,14 @@ void Application::debug_queue_monitoring() {
     while (std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time).count() < 5000) {
         
         // Log raw_image_for_processor_queue_ status every 100ms
-        bool raw_image_queue_empty = raw_image_for_processor_queue_.empty();
+        bool raw_image_queue_empty = raw_image_for_processor_queue_->empty();
         APP_LOG_INFO("Raw Image Queue Empty: " + std::string(raw_image_queue_empty ? "YES" : "NO"));
         
         // Also log other important queue statuses
-        bool main_video_queue_empty = main_video_queue_.empty();
+        bool main_video_queue_empty = main_video_queue_->empty();
         APP_LOG_INFO("Main Video Queue Empty: " + std::string(main_video_queue_empty ? "YES" : "NO"));
         
-        bool tpu_inference_queue_empty = tpu_inference_queue_.empty();
+        bool tpu_inference_queue_empty = tpu_inference_queue_->empty();
         APP_LOG_INFO("TPU Inference Queue Empty: " + std::string(tpu_inference_queue_empty ? "YES" : "NO"));
         
         // Sleep for 100ms before next check
@@ -1220,11 +1255,11 @@ void Application::debug_queue_monitoring() {
 
 void Application::monitor_queue_depths() {
     // Check queue status using size_approx() to get actual queue depths
-    size_t raw_image_queue_depth = raw_image_for_processor_queue_.size_approx();
-    size_t tpu_inference_queue_depth = tpu_inference_queue_.size_approx();
-    size_t detection_logic_queue_depth = detection_results_for_logic_queue_.size_approx();
-    size_t overlaid_video_queue_depth = overlaid_video_queue_.size_approx();
-    size_t h264_output_queue_depth = h264_output_queue_.size_approx();
+    size_t raw_image_queue_depth = raw_image_for_processor_queue_->size_approx();
+    size_t tpu_inference_queue_depth = tpu_inference_queue_->size_approx();
+    size_t detection_logic_queue_depth = detection_results_for_logic_queue_->size_approx();
+    size_t overlaid_video_queue_depth = overlaid_video_queue_->size_approx();
+    size_t h264_output_queue_depth = h264_output_queue_->size_approx();
     
     // Get current timestamp for logging
     auto current_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1337,8 +1372,8 @@ void Application::check_thread_stalls() {
     }
     
     // Check queue status
-    size_t tpu_inference_queue_depth = tpu_inference_queue_.empty() ? 0 : 1;
-    size_t detection_logic_queue_depth = detection_results_for_logic_queue_.empty() ? 0 : 1;
+    size_t tpu_inference_queue_depth = tpu_inference_queue_->empty() ? 0 : 1;
+    size_t detection_logic_queue_depth = detection_results_for_logic_queue_->empty() ? 0 : 1;
     
     // If queues are getting full, it indicates consumption issues
     if (tpu_inference_queue_depth > 45) { // Almost full
@@ -1357,7 +1392,7 @@ void Application::drain_queues() {
     {
         int items_drained = 0;
         ImageData* ptr = nullptr;
-        while (items_drained < 20 && raw_image_for_processor_queue_.pop(ptr)) {
+        while (items_drained < 20 && raw_image_for_processor_queue_->pop(ptr)) {
             if (ptr) {
                 ptr->buffer.reset();
                 image_data_pool_->release(ptr);
@@ -1376,7 +1411,7 @@ void Application::drain_queues() {
     {
         int items_drained = 0;
         ImageData* ptr = nullptr;
-        while (items_drained < 20 && tpu_inference_queue_.pop(ptr)) {
+        while (items_drained < 20 && tpu_inference_queue_->pop(ptr)) {
             if (ptr) {
                 ptr->buffer.reset();
                 image_data_pool_->release(ptr);
@@ -1395,7 +1430,7 @@ void Application::drain_queues() {
     {
         int items_drained = 0;
         ResultToken* ptr = nullptr;
-        while (items_drained < 20 && detection_results_for_logic_queue_.pop(ptr)) {
+        while (items_drained < 20 && detection_results_for_logic_queue_->pop(ptr)) {
             if (ptr) {
                 // For logic results, we account for drops explicitly
                 increment_inference_results_dropped();

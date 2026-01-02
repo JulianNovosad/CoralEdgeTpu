@@ -21,14 +21,16 @@ public:
                        std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
                        std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                        libcamera::PixelFormat input_pixel_format,
-                       int output_width, int output_height);
+                       int output_width, int output_height,
+                       const std::string& module_name = "ImageProcessor");
         
         // Constructor for processors that only do basic processing (like for TPU inference)
         ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue,
                        std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
                        std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                        libcamera::PixelFormat input_pixel_format,
-                       int output_width, int output_height);
+                       int output_width, int output_height,
+                       const std::string& module_name = "ImageProcessor");
         ~ImageProcessor();
     
         bool start();
@@ -59,6 +61,7 @@ public:
         libcamera::PixelFormat input_pixel_format_;
         int output_width_;
         int output_height_;
+        std::string module_name_;
         int skip_factor_ = 1;
         uint64_t frame_counter_ = 0;
         bool is_tpu_stream_ = false;

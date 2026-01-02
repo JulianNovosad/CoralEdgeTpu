@@ -52,6 +52,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
                                  [[maybe_unused]] unsigned int target_width,
                                  [[maybe_unused]] unsigned int target_height,
                                  std::chrono::steady_clock::time_point capture_time,
+                                 uint64_t t_capture_raw_ms,
                                  const libcamera::PixelFormat& actual_format,
                                  long long frame_id,
                                  [[maybe_unused]] long long exposure_ms,
@@ -104,43 +105,61 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
         }
     }
 
-    ImageData* image_data = image_data_pool->acquire();
-    if (!image_data) {
-        APP_LOG_ERROR(std::string(stream_name) + " Failed to acquire ImageData from pool.");
+    auto img_data = image_data_pool->acquire();
+    if (!img_data) {
+        APP_LOG_ERROR(std::string(stream_name) + " Image data pool exhaust.");
         return false;
     }
 
-    *image_data = ImageData(capture_time, (int)frame_id);
-    image_data->width = cfg.size.width;
-    image_data->height = cfg.size.height;
-    image_data->stride = cfg.stride;
-    image_data->format = actual_format;
-    image_data->length = total_length;
-    image_data->fd = fd;
-    image_data->offset = plane0.offset;
-    
-    image_data->ingest_start_time = process_start;
-    image_data->ingest_end_time = std::chrono::steady_clock::now();
-    image_data->capture_time = capture_time; 
-    image_data->t_capture_raw_ms = get_time_raw_ms();
-    image_data->buffer = std::move(pooled_buffer);
+    img_data->width = cfg.size.width;
+    img_data->height = cfg.size.height;
+    img_data->stride = cfg.stride;
+    img_data->format = actual_format;
+    img_data->frame_id = static_cast<int>(frame_id);
+    img_data->capture_time = capture_time;
+    img_data->t_capture_raw_ms = t_capture_raw_ms;
+    img_data->length = total_length;
+    img_data->fd = fd;
+    img_data->offset = 0; // Assume 0 for simplicity or get from plane if needed
 
+    // Population of telemetry fields
+    img_data->cam_exposure_ms = static_cast<float>(exposure_ms);
+    // ISP Latency: Time from capture start (capture_time) to now (host processing start)
+    auto now = std::chrono::steady_clock::now();
+    img_data->cam_isp_latency_ms = std::chrono::duration<float, std::chrono::milliseconds::period>(now - capture_time).count();
+    // Buffer usage: Approximate based on pool status if available (simplified for now)
+    img_data->cam_buffer_usage_percent = -1.0f; 
+
+    // Also populate the pooled buffer metadata directly
+    pooled_buffer->cam_exposure_ms = img_data->cam_exposure_ms;
+    pooled_buffer->cam_isp_latency_ms = img_data->cam_isp_latency_ms;
+    pooled_buffer->frame_id = img_data->frame_id;
+    pooled_buffer->t_capture_raw_ms = img_data->t_capture_raw_ms;
+
+    img_data->buffer = std::move(pooled_buffer); // Transfer ownership AFTER population
+    
+    img_data->ingest_start_time = process_start;
+    img_data->ingest_end_time = std::chrono::steady_clock::now();
+    
     if (app_ref) {
         app_ref->inc_cam_to_viz_produced();
     }
 
-    if (!queue.push(image_data)) {
+    if (!queue.push(img_data)) {
         // CRITICAL: Release IMMEDIATELY if push fails to prevent pool exhaustion
         if (app_ref) {
             app_ref->inc_cam_to_viz_dropped();
         }
-        image_data->buffer.reset(); 
-        image_data_pool->release(image_data); 
+        img_data->buffer.reset(); 
+        image_data_pool->release(img_data); 
         return false;
     }
     
     // LOG THE FRAME PUSH FOR DEBUGGING
-    APP_LOG_DEBUG("Camera: Pushed frame ID " + std::to_string(image_data->frame_id) + " to queue at time " + std::to_string(get_time_raw_ms()));
+    // APP_LOG_DEBUG("Camera: Pushed frame ID " + std::to_string(img_data->frame_id) + " to queue at time " + std::to_string(get_time_raw_ms()));
+    // if (std::string(stream_name) == "Main Video Stream") {
+    //    std::cerr << "DEBUG: CameraCapture pushed Main frame " << img_data->frame_id << std::endl;
+    // }
 
     return true;
 }
@@ -483,12 +502,8 @@ void CameraCapture::request_processor_thread_func() {
         
         // Authoritative Monotonic Raw Clock (Unified across all modules)
         uint64_t t_capture_ms = get_time_raw_ms();
+        auto capture_time = now_mon; 
         
-        auto capture_time = std::chrono::steady_clock::time_point(std::chrono::milliseconds(t_capture_ms));
-        
-        // If we want to be even more precise, we could calculate the offset between 
-        // SensorTimestamp (boot time) and get_time_raw_ms(), but simple unification is safer.
-
         long long frame_id = request->sequence();
         // Validate frame_id to prevent invalid values from propagating
         if (frame_id < 0) {
@@ -503,6 +518,41 @@ void CameraCapture::request_processor_thread_func() {
         long long exposure_ms = 0;
         auto md_exposure_us = request->metadata().get(libcamera::controls::ExposureTime);
         if (md_exposure_us) exposure_ms = *md_exposure_us / 1000;
+
+        // Log CameraCapture telemetry to unified CSV
+        {
+            CsvLogEntry cam_entry;
+            copy_to_array(cam_entry.module, "CameraCapture");
+            copy_to_array(cam_entry.event, "frame_captured");
+            cam_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            cam_entry.call_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+            cam_entry.cam_frame_id = static_cast<int>(frame_id);
+            cam_entry.cam_exposure_ms = static_cast<float>(exposure_ms);
+            
+            // ISP Latency: Time from sensor capture to now
+            uint64_t sensor_ts_ns = 0;
+            for (auto const& [stream, buffer] : request->buffers()) {
+                sensor_ts_ns = buffer->metadata().timestamp;
+                break;
+            }
+            if (sensor_ts_ns > 0) {
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                uint64_t now_ns = (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+                cam_entry.cam_isp_latency_ms = static_cast<float>(now_ns - sensor_ts_ns) / 1000000.0f;
+            } else {
+                cam_entry.cam_isp_latency_ms = 0.0f;
+            }
+            
+            if (image_buffer_pool_) {
+                auto stats = image_buffer_pool_->get_buffer_stats();
+                if (stats.second > 0) {
+                    cam_entry.cam_buffer_usage_percent = (static_cast<float>(stats.second - stats.first) / static_cast<float>(stats.second)) * 100.0f;
+                }
+            }
+            
+            Logger::getInstance().log_csv(cam_entry);
+        }
         
         // OPTIMIZATION: Extract buffers and reuse request immediately to keep libcamera pipeline full
         libcamera::Request::BufferMap captured_buffers = request->buffers();
@@ -541,12 +591,19 @@ void CameraCapture::request_processor_thread_func() {
             std::map<const libcamera::FrameBuffer*, MappedBufferInfo> compat_map;
             for(auto const& [k, v] : mapped_buffers_) compat_map[k] = {v.addr, v.length};
 
+            // Extract sensor timestamp for latency calculation
+            uint64_t sensor_ts_ns = 0;
+            for (auto const& [stream, buffer] : captured_buffers) {
+                sensor_ts_ns = buffer->metadata().timestamp;
+                break;
+            }
+
             if (captured_buffers.count(video_stream_)) {
                 const libcamera::FrameBuffer* video_fb = captured_buffers.at(video_stream_);
                 if (video_fb) {
                     // ISP MANDATE: Distribute to ALL registered consumers (Visualization, Encoder, etc.)
                     for (auto& queue_ref : main_output_queues_) {
-                        if (!process_frame_buffer(video_fb, video_stream_->configuration(), image_buffer_pool_, image_data_pool_, queue_ref.get(), "Main Video Stream", width_, height_, capture_time, video_stream_->configuration().pixelFormat, frame_id, exposure_ms, &main_stream_drop_count_, &tpu_stream_drop_count_, nullptr, app_ref_, compat_map)) {
+                        if (!process_frame_buffer(video_fb, video_stream_->configuration(), image_buffer_pool_, image_data_pool_, queue_ref.get(), "Main Video Stream", width_, height_, capture_time, t_capture_ms, video_stream_->configuration().pixelFormat, frame_id, exposure_ms, &main_stream_drop_count_, &tpu_stream_drop_count_, nullptr, app_ref_, compat_map)) {
                             // Drop handled inside process_frame_buffer
                         } else {
                             processed_any_frame = true;
@@ -564,7 +621,7 @@ void CameraCapture::request_processor_thread_func() {
             if (captured_buffers.count(tpu_stream_)) {
                 const libcamera::FrameBuffer* tpu_fb = captured_buffers.at(tpu_stream_);
                 if (tpu_fb) {
-                    if (this->process_tpu_processed_frame_buffer(tpu_fb, tpu_stream_->configuration(), capture_time, frame_id, exposure_ms)) {
+                    if (this->process_tpu_processed_frame_buffer(tpu_fb, tpu_stream_->configuration(), capture_time, t_capture_ms, frame_id, exposure_ms, sensor_ts_ns)) {
                         fps_measurement_frames_++;
                         if (fps_measurement_frames_ > skip_initial_measurements_) {
                             auto interval_us = std::chrono::duration_cast<std::chrono::microseconds>(now_mon - last_frame_time_).count();
@@ -598,8 +655,10 @@ bool CameraCapture::init_video_encoder() { return true; }
 bool CameraCapture::process_tpu_processed_frame_buffer(const libcamera::FrameBuffer* fb,
                                                  const libcamera::StreamConfiguration& cfg,
                                                  std::chrono::steady_clock::time_point capture_time,
+                                                 uint64_t t_capture_raw_ms,
                                                  long long frame_id,
-                                                 [[maybe_unused]] long long exposure_ms) {
+                                                 long long exposure_ms,
+                                                 uint64_t sensor_ts_ns) {
     if (fb->planes().empty()) {
         APP_LOG_ERROR("TPU processed: No planes.");
         return false;
@@ -674,7 +733,27 @@ bool CameraCapture::process_tpu_processed_frame_buffer(const libcamera::FrameBuf
     image_data->offset = plane.offset;
     image_data->buffer = std::move(pooled_buffer);
     image_data->capture_time = capture_time;
-    image_data->t_capture_raw_ms = get_time_raw_ms();
+    image_data->t_capture_raw_ms = t_capture_raw_ms;
+
+    // Population of telemetry fields for TPU stream
+    image_data->cam_exposure_ms = static_cast<float>(exposure_ms);
+    
+    if (sensor_ts_ns > 0) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint64_t now_ns = (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+        image_data->cam_isp_latency_ms = static_cast<float>(now_ns - sensor_ts_ns) / 1000000.0f;
+    } else {
+        auto now = std::chrono::steady_clock::now();
+        image_data->cam_isp_latency_ms = std::chrono::duration<float, std::milli>(now - capture_time).count();
+    }
+
+    if (image_buffer_pool_) {
+        auto stats = image_buffer_pool_->get_buffer_stats();
+        if (stats.second > 0) {
+            image_data->cam_buffer_usage_percent = (static_cast<float>(stats.second - stats.first) / static_cast<float>(stats.second)) * 100.0f;
+        }
+    }
 
     if (app_ref_) {
         app_ref_->inc_cam_to_tpu_proc_produced();

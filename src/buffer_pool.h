@@ -30,6 +30,13 @@ struct PooledBuffer {
     int frame_id = 0;                 // Frame ID to track frame sequence
     int64_t encoder_frame_count = -1;  // Frame count from encoder for PTS calculation
     
+    // Telemetry fields
+    float cam_exposure_ms = -1.0f;
+    float cam_isp_latency_ms = -1.0f;
+    float cam_buffer_usage_percent = -1.0f;
+    float image_proc_ms = -1.0f;
+    float tpu_temp_c = -1.0f;
+    
     // Zero-copy related fields
     int fd = -1;           // File descriptor for zero-copy access
     size_t offset = 0;     // Offset within the file descriptor

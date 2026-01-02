@@ -29,7 +29,8 @@ ImageProcessor::ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue
                                std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
                                std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                                libcamera::PixelFormat input_pixel_format,
-                               int output_width, int output_height)
+                               int output_width, int output_height,
+                               const std::string& module_name)
     : input_queue_(input_queue), 
       output_queue_(output_queue), 
       detection_buffer_ptr_(detection_buffer),
@@ -39,6 +40,7 @@ ImageProcessor::ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue
       input_pixel_format_(input_pixel_format),
       output_width_(output_width), 
       output_height_(output_height),
+      module_name_(module_name),
       skip_factor_(1),
       frame_counter_(0),
       is_tpu_stream_(false),
@@ -52,7 +54,8 @@ ImageProcessor::ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue
                                std::shared_ptr<BufferPool<uint8_t>> buffer_pool,
                                std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
                                libcamera::PixelFormat input_pixel_format,
-                               int output_width, int output_height)
+                               int output_width, int output_height,
+                               const std::string& module_name)
     : input_queue_(input_queue), 
       output_queue_(output_queue), 
       detection_buffer_ptr_(nullptr),
@@ -61,6 +64,7 @@ ImageProcessor::ImageProcessor(ImageQueue& input_queue, ImageQueue& output_queue
       input_pixel_format_(input_pixel_format),
       output_width_(output_width), 
       output_height_(output_height),
+      module_name_(module_name),
       skip_factor_(1),
       frame_counter_(0),
       is_tpu_stream_(false),
@@ -365,19 +369,51 @@ void ImageProcessor::worker_thread_func() {
                                         *output_image_data = ImageData(input_image.capture_time, input_image.frame_id);
                                         output_image_data->width = output_width_;
                                         output_image_data->height = output_height_;
+                                        // TPU expects RGB888, ensuring consistency
                                         output_image_data->format = libcamera::formats::RGB888;
                                         output_image_data->buffer = processed_buffer_data;
                                         output_image_data->fd = -1;
                                         output_image_data->t_capture_raw_ms = input_image.t_capture_raw_ms;
                                         
+                                        uint64_t current_time_ms = get_time_raw_ms();
+                                        float image_proc_ms = static_cast<float>(current_time_ms - process_start_time);
+                                        output_image_data->image_proc_ms = image_proc_ms;
+
+                                        // Propagate camera telemetry
+                                        output_image_data->cam_exposure_ms = input_image.cam_exposure_ms;
+                                        output_image_data->cam_isp_latency_ms = input_image.cam_isp_latency_ms;
+                                        output_image_data->cam_buffer_usage_percent = input_image.cam_buffer_usage_percent;
+                                        
                                         if (output_queue_.push(output_image_data)) {
                                             guard.output_produced = true;
+                                            // std::cerr << "DEBUG: ImageProcessor[" << module_name_ << "] pushed frame " << input_image.frame_id << std::endl;
+                                            
+                                            // Log to unified CSV
+                                            CsvLogEntry ip_entry;
+                                            copy_to_array(ip_entry.module, module_name_.c_str());
+                                            copy_to_array(ip_entry.event, "frame_processed");
+                                            ip_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                                            ip_entry.call_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                                            ip_entry.cam_frame_id = input_image.frame_id;
+                                            ip_entry.image_proc_ms = image_proc_ms;
+                                            
+                                            // Propagate camera telemetry
+                                            ip_entry.cam_exposure_ms = input_image.cam_exposure_ms;
+                                            ip_entry.cam_isp_latency_ms = input_image.cam_isp_latency_ms;
+                                            ip_entry.cam_buffer_usage_percent = input_image.cam_buffer_usage_percent;
+
+                                            Logger::getInstance().log_csv(ip_entry);
                                         } else {
                                             output_image_data->buffer.reset();
                                             image_data_pool_->release(output_image_data);
+                                            APP_LOG_ERROR("ImageProcessor: Output queue push failed (Full).");
                                         }
+                                    } else {
+                                        APP_LOG_ERROR("ImageProcessor: Failed to acquire ImageData from pool.");
                                     }
                                 }
+                            } else {
+                                APP_LOG_ERROR("ImageProcessor: Failed to acquire buffer from pool (Starvation).");
                             }
                         }
                     }

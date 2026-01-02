@@ -1,53 +1,64 @@
 #ifndef ORIENTATION_SENSOR_H
 #define ORIENTATION_SENSOR_H
 
-#include "pipeline_structs.h" // For OrientationData
-
 #include <string>
-#include <thread>
+#include <memory>
 #include <atomic>
-#include <chrono>
-#include <memory> // For std::shared_ptr
-#include <zmq.hpp> // ZeroMQ C++ bindings
+#include <thread>
+#include <mutex>
+#include <zmq.hpp>
+#include "pipeline_structs.h"
 
 /**
- * @brief Interface for an Orientation sensor module.
- *
- * This class provides methods to start/stop the orientation sensor reading, and to retrieve
- * the latest orientation data. For now, it will provide mock data.
+ * @brief Receives orientation data from an external sensor (e.g., Android app) via ZeroMQ.
  */
 class OrientationSensor {
 public:
-    OrientationSensor(unsigned short yaw_port, unsigned short pitch_port, unsigned short roll_port);
+    /**
+     * @brief Constructor for OrientationSensor.
+     * @param yaw_port Port for yaw data.
+     * @param pitch_port Port for pitch data.
+     * @param roll_port Port for roll data.
+     * @note Legacy constructor, currently uses ports.
+     */
+    OrientationSensor(int yaw_port, int pitch_port, int roll_port);
     ~OrientationSensor();
 
     bool start();
     void stop();
-    bool is_running() const { return running_; }
+    bool is_running() const { return running_.load(); }
 
     /**
-     * @brief Retrieves the latest orientation data.
-     * @return An OrientationData struct containing the latest sensor readings.
+     * @brief Gets the latest received orientation data.
+     * @return The most recent OrientationData.
      */
-    OrientationData get_latest_orientation_data() const;
+    OrientationData get_latest_orientation_data();
+
+    /**
+     * @brief Sets the source address and port for orientation data.
+     * @param ip The source IP address.
+     * @param port The source port.
+     */
+    void set_source(const std::string& ip, int port);
 
 private:
-    void worker_thread_func();
+    void receiver_thread_func();
 
-    unsigned short yaw_port_;
-    unsigned short pitch_port_;
-    unsigned short roll_port_;
-
-    std::atomic<bool> running_ = false;
-    std::thread worker_thread_;
-    mutable std::mutex orientation_data_mutex_; // Mutable to allow const get_latest_orientation_data to lock
-    OrientationData latest_orientation_data_; // Store the latest orientation data
+    int yaw_port_;
+    int pitch_port_;
+    int roll_port_;
     
-    // ZeroMQ sockets for receiving orientation data
+    std::string source_ip_;
+    int source_port_;
+
+    std::atomic<bool> running_;
+    std::thread receiver_thread_;
+    
+    std::mutex data_mutex_;
+    OrientationData latest_data_;
+    
     std::unique_ptr<zmq::context_t> zmq_context_;
-    std::unique_ptr<zmq::socket_t> yaw_socket_;
-    std::unique_ptr<zmq::socket_t> pitch_socket_;
-    std::unique_ptr<zmq::socket_t> roll_socket_;
+    std::unique_ptr<zmq::socket_t> zmq_socket_;
 };
 
 #endif // ORIENTATION_SENSOR_H

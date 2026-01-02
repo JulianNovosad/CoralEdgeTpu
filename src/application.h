@@ -14,6 +14,7 @@
 #include "system_monitor.h"
 #include "image_processor.h" // New include
 #include "keyboard_monitor.h"
+#include "discovery_module.h" // Added for auto-discovery
 
 #include "udp_streamer.h"
 #include "monitor.h"
@@ -74,19 +75,20 @@ public:
     std::unique_ptr<SystemMonitor> system_monitor_;
     std::unique_ptr<KeyboardMonitor> keyboard_monitor_;
     std::unique_ptr<Monitor> monitor_;
+    std::unique_ptr<DiscoveryModule> discovery_module_; // Added for auto-discovery
     std::unique_ptr<ImageProcessor> visualization_processor_; // Added for visualization
-    ImageQueue main_video_queue_; // Added queue
+    std::shared_ptr<ImageQueue> main_video_queue_; // Added queue
     bool use_reduced_resolution_ = false; // Added flag
     
     // Queues (moved to public for monitor access)
-    ImageQueue raw_image_for_processor_queue_; // New queue
-    ImageQueue tpu_inference_queue_;
+    std::shared_ptr<ImageQueue> raw_image_for_processor_queue_; // New queue
+    std::shared_ptr<ImageQueue> tpu_inference_queue_;
 
     TripleBuffer<DetectionResults> detection_results_for_overlay_buffer_;
     TripleBuffer<OverlayBallisticPoint> ballistic_points_for_overlay_buffer_; 
-    DetectionResultsQueue detection_results_for_logic_queue_;
-    ImageQueue overlaid_video_queue_;
-    H264Queue h264_output_queue_;
+    std::shared_ptr<DetectionResultsQueue> detection_results_for_logic_queue_;
+    std::shared_ptr<ImageQueue> overlaid_video_queue_;
+    std::shared_ptr<H264Queue> h264_output_queue_;
 
 private:
     void release_edge_tpu_resources();

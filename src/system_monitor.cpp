@@ -56,7 +56,17 @@ void SystemMonitor::worker_thread_func() {
         latest_cpu_usage_.store(cpu_usage);
         latest_memory_usage_.store(memory_usage_percent);
 
-        // Removed CSV logging - only LogicModule logs unified telemetry
+        // Log to unified CSV
+        CsvLogEntry sys_entry;
+        copy_to_array(sys_entry.module, "SystemMonitor");
+        copy_to_array(sys_entry.event, "system_stats");
+        sys_entry.produced_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        sys_entry.call_ts_epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        sys_entry.sys_cpu_temp_c = cpu_temp;
+        sys_entry.sys_cpu_usage_pct = cpu_usage;
+        sys_entry.sys_ram_usage_pct = memory_usage_percent;
+        sys_entry.sys_voltage_v = 0.0f; // Default if not available
+        Logger::getInstance().log_csv(sys_entry);
 
         next_tick += interval_s_;
         std::unique_lock<std::mutex> lock(stop_mutex_);

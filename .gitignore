@@ -13,11 +13,11 @@ build/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
+# Makefile
 
 # Temporary log files
 *.log
-*.txt
+# *.txt
 
 # Executables
 detector

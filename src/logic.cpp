@@ -98,6 +98,7 @@ BallisticState BallisticsSolver::rk4_step(const BallisticState& state, float dt,
 }
 
 std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial_pitch, float max_distance, float time_step_override) {
+    std::cerr << "BallisticsSolver: calculate_trajectory() start, pitch=" << initial_pitch << ", dist=" << max_distance << std::endl;
     std::vector<BallisticState> trajectory;
     float air_density = get_air_density();
 
@@ -279,6 +280,7 @@ float BallisticsSolver::calculate_flight_time(float distance) {
 }
 
 bool BallisticsSolver::calculate_impact_point(const TrackedObject& target, Vec3& out_impact_point, float& out_flight_time) {
+    std::cerr << "BallisticsSolver: Starting calculation for Track ID " << target.id << std::endl;
     // Validate input target position
     if (!std::isfinite(target.position.x) || !std::isfinite(target.position.y) || !std::isfinite(target.position.z)) {
         APP_LOG_ERROR("Invalid target position values detected in calculate_impact_point");
@@ -429,7 +431,9 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue,
                          std::shared_ptr<ObjectPool<ResultToken>> result_token_pool,
                          std::shared_ptr<OrientationSensor> orientation_sensor, 
                          const ConfigLoader& config,
-                         TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer)
+                         TripleBuffer<OverlayBallisticPoint>* ballistic_overlay_buffer,
+                         SystemMonitor* system_monitor,
+                         H264Encoder* h264_encoder)
     : detection_input_queue_(detection_input_queue),
       running_(false),
       orientation_sensor_(orientation_sensor),
@@ -440,7 +444,9 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue,
       min_track_confidence_(config.get_min_track_confidence()),
       result_token_pool_(result_token_pool),
       distance_history_(DISTANCE_WINDOW_SIZE, 0.0f),
-      ballistic_overlay_buffer_(ballistic_overlay_buffer) {
+      ballistic_overlay_buffer_(ballistic_overlay_buffer),
+      system_monitor_(system_monitor),
+      h264_encoder_(h264_encoder) {
 
     servo_command_pool_ = std::make_shared<ObjectPool<ServoCommand>>(10, "ServoCommandPool");
 
@@ -587,17 +593,17 @@ void LogicModule::worker_thread_func() {
     auto last_update_time = get_time_raw_ms();
     APP_LOG_INFO("LogicModule: Starting main processing loop - HEARTBEAT");
     
-    while (running_ && g_running.load(std::memory_order_acquire)) {
-        ResultToken* token_ptr = nullptr;
+    while (running_.load(std::memory_order_acquire) && g_running.load(std::memory_order_acquire)) {
+        std::cerr << "LogicModule: TOP OF LOOP" << std::endl;
         auto start_time = std::chrono::steady_clock::now();
-        
-        // Check queue depth to detect potential Logic thread starvation
-
-        
+        ResultToken* token_ptr = nullptr;
+        // std::cerr << "LogicModule: Waiting for detection token..." << std::endl;
         if (detection_input_queue_.wait_pop(token_ptr, std::chrono::milliseconds(100))) {
             if (!token_ptr) {
+                std::cerr << "LogicModule: Received poison pill" << std::endl;
                 break; // Poison pill
             }
+            std::cerr << "LogicModule: Popped token for frame " << (token_ptr->isValid() ? std::to_string(token_ptr->get()->frame_id) : "INVALID") << std::endl;
 
             struct LogicAccountingGuard {
                 LogicModule* mod;
@@ -619,22 +625,29 @@ void LogicModule::worker_thread_func() {
                 }
             } guard(this, token_ptr);
 
+            std::cerr << "LogicModule: Checking token validity" << std::endl;
             if (!token_ptr->isValid()) {
+                std::cerr << "LogicModule: Token INVALID" << std::endl;
                 continue;
             }
             
             ResultToken& token = *token_ptr;
             auto detections_buffer = token.get();
             
+            std::cerr << "LogicModule: Checking detections_buffer" << std::endl;
             // Immediate safety check: Verify buffer validity before any access
             if (!detections_buffer || !detections_buffer.get() || !detections_buffer->valid) {
+                std::cerr << "LogicModule: detections_buffer INVALID" << std::endl;
                 continue;
             }
+            std::cerr << "LogicModule: detections_buffer valid, frame_id=" << detections_buffer->frame_id << std::endl;
 
             // Ballistic Hit-Scan Invariant (Section V.3) - Now safe to access buffer members
             uint64_t t_logic_start = get_time_raw_ms();
             uint64_t t_capture = detections_buffer->t_capture_raw_ms;
             uint64_t latency = t_logic_start - t_capture;
+            
+            std::cerr << "LogicModule: Latency check: t_logic_start=" << t_logic_start << ", t_capture=" << t_capture << ", latency=" << latency << std::endl;
 
             // Record frame in telemetry (success or violation)
             {
@@ -654,7 +667,10 @@ void LogicModule::worker_thread_func() {
                 telemetry_idx_.store(idx + 1, std::memory_order_release);
             }
 
+            std::cerr << "LogicModule: Budget check for frame " << detections_buffer->frame_id << ", latency=" << latency << std::endl;
             if (latency > MAX_FRAME_BUDGET_RAW_MS) {
+                std::cerr << "LogicModule: Budget VIOLATED for frame " << detections_buffer->frame_id << std::endl;
+                APP_LOG_WARNING("LogicModule: Dropping frame due to latency violation: " + std::to_string(latency) + "ms");
                 continue; 
             }
 
@@ -673,52 +689,76 @@ void LogicModule::worker_thread_func() {
                 copy_to_array(entry.event, "frame_complete");
                 entry.thread_id = static_cast<long long>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
                 
+                // Initialize TPU fields to non-NaN defaults
+                entry.tpu_model_score = 0.0f;
+                entry.tpu_class_id = 0;
+
                 // Set camera fields from buffer
                 entry.cam_frame_id = detections_buffer->frame_id;
-                entry.cam_exposure_ms = -1.0f; // Not available in this context
-                entry.cam_isp_latency_ms = -1.0f; // Not available in this context
-                entry.cam_buffer_usage_percent = -1.0f; // Not available in this context
+                entry.cam_exposure_ms = detections_buffer->cam_exposure_ms;
+                entry.cam_isp_latency_ms = detections_buffer->cam_isp_latency_ms;
+                entry.cam_buffer_usage_percent = detections_buffer->cam_buffer_usage_percent;
+                
+                // Set ImageProcessor fields from buffer
+                entry.image_proc_ms = detections_buffer->image_proc_ms;
                 
                 // Set TPU fields from buffer timing
                 if (detections_buffer->t_inf_end > 0 && detections_buffer->t_inf_start > 0) {
                     entry.tpu_inference_ms = static_cast<float>(detections_buffer->t_inf_end - detections_buffer->t_inf_start);
                 }
-                entry.tpu_temp_c = -1.0f; // TPU temp not available in this context
+                entry.tpu_temp_c = detections_buffer->tpu_temp_c;
                 if (detections_buffer->size > 0 && detections_buffer->data.size() > 0) {
                     // Use the first detection's score and class as representative
                     entry.tpu_model_score = detections_buffer->data[0].score;
                     entry.tpu_class_id = detections_buffer->data[0].class_id;
                 }
                 
-                // Set logic fields (these would need to be populated during processing)
-                entry.logic_target_dist_m = -1.0f; // Will be updated with actual values during processing if needed
-                entry.logic_ballistic_drop_m = -1.0f;
-                entry.logic_windage_m = -1.0f;
-                entry.logic_servo_x_cmd = -1.0f;
-                entry.logic_servo_y_cmd = -1.0f;
-                entry.logic_solution_time_ms = -1.0f; // Placeholder - actual logic solution time would need to be measured
-                
-                // Set encoder fields (pull from H264Encoder if available)
-                entry.enc_process_ms = -1.0f; // Not available in this context
-                entry.enc_bitrate_mbps = -1.0f; // Not available in this context
-                entry.enc_queue_depth = -1; // Not available in this context
-                
-                // Pull latest system metrics from SystemMonitor
-                if (app_ref_) {
-                    auto& sys_mon_ptr = app_ref_->get_system_monitor();
-                    if (sys_mon_ptr) {
-                        entry.sys_cpu_temp_c = sys_mon_ptr->get_latest_cpu_temp();
-                        entry.sys_cpu_usage_pct = sys_mon_ptr->get_latest_cpu_usage();
-                        entry.sys_ram_usage_pct = sys_mon_ptr->get_latest_memory_usage();
-                        entry.sys_voltage_v = -1.0f; // Not available
+                // Set logic fields
+                if (!active_tracks_.empty()) {
+                    const TrackedObject* primary = &active_tracks_[0];
+                    for (const auto& track : active_tracks_) {
+                        if (track.uncertainty.total_confidence > primary->uncertainty.total_confidence) {
+                            primary = &track;
+                        }
                     }
+                    entry.logic_target_dist_m = primary->position.z;
+                    entry.logic_ballistic_drop_m = primary->predicted_impact_point.y - primary->position.y;
+                    entry.logic_windage_m = primary->predicted_impact_point.x - primary->position.x;
+                    entry.logic_servo_x_cmd = 0.5f + (primary->predicted_impact_point.x / static_cast<float>(config_.get_tpu_target_width()));
+                    entry.logic_servo_y_cmd = 0.5f + (primary->predicted_impact_point.y / static_cast<float>(config_.get_tpu_target_height()));
+                    entry.logic_solution_time_ms = static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count()) / 1000.0f;
+                } else {
+                    entry.logic_target_dist_m = 0.0f;
+                    entry.logic_ballistic_drop_m = 0.0f;
+                    entry.logic_windage_m = 0.0f;
+                    entry.logic_servo_x_cmd = 0.5f; // Center
+                    entry.logic_servo_y_cmd = 0.5f; // Center
+                    entry.logic_solution_time_ms = 0.0f;
+                }
+
+                // Set Encoder metrics from module
+                if (h264_encoder_) {
+                    entry.enc_process_ms = static_cast<float>(h264_encoder_->get_encode_timing_us()) / 1000.0f;
+                    entry.enc_bitrate_mbps = h264_encoder_->get_latest_bitrate_mbps();
+                    entry.enc_queue_depth = h264_encoder_->get_queue_depth();
+                }
+
+                // Set System metrics from monitor
+                if (system_monitor_) {
+                    entry.sys_cpu_temp_c = system_monitor_->get_latest_cpu_temp();
+                    entry.sys_cpu_usage_pct = system_monitor_->get_latest_cpu_usage();
+                    entry.sys_ram_usage_pct = system_monitor_->get_latest_memory_usage();
+                    entry.sys_voltage_v = 0.0f; 
                 }
                 
                 // Log the complete unified entry
+                std::cerr << "LogicModule: Logging CSV entry for frame " << entry.cam_frame_id << std::endl;
                 Logger::getInstance().log_csv(entry);
                 
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("LogicModule: Exception during processing: " + std::string(e.what()));
             } catch (...) {
-                // Silently drop on exception
+                APP_LOG_ERROR("LogicModule: Unknown exception during processing.");
             }
 
             // Update logic rate and freshness indicators
@@ -882,10 +922,12 @@ void LogicModule::telemetry_worker_thread_func() {
 }
 
 void LogicModule::process(const std::vector<DetectionResult>& detections, CsvLogEntry& entry) {
+    std::cerr << "LogicModule: process() start for frame " << (detections.empty() ? -1 : detections[0].source_frame_id) << ", detections=" << detections.size() << std::endl;
     [[maybe_unused]] auto total_process_start = std::chrono::high_resolution_clock::now();
     
     // Early return if detections vector is empty to prevent unnecessary processing
     if (detections.empty()) {
+        std::cerr << "LogicModule: process() early return (empty detections)" << std::endl;
         // Log a heartbeat event to show that the logic module is processing "empty" frames
         static uint64_t last_empty_log = 0;
         uint64_t now = get_time_raw_ms();
@@ -962,17 +1004,23 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, CsvLog
     }
 
     [[maybe_unused]] auto start_sensor_fusion = std::chrono::high_resolution_clock::now();
+    std::cerr << "LogicModule: perform_sensor_fusion() start" << std::endl;
     perform_sensor_fusion();
+    std::cerr << "LogicModule: perform_sensor_fusion() end" << std::endl;
     [[maybe_unused]] auto end_sensor_fusion = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time for sensor fusion: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_sensor_fusion - start_sensor_fusion).count()) + " us");
 
     [[maybe_unused]] auto start_update_tracks = std::chrono::high_resolution_clock::now();
+    std::cerr << "LogicModule: update_object_tracks() start" << std::endl;
     update_object_tracks(detections);
+    std::cerr << "LogicModule: update_object_tracks() end" << std::endl;
     [[maybe_unused]] auto end_update_tracks = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time to update object tracks: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_update_tracks - start_update_tracks).count()) + " us");
 
     [[maybe_unused]] auto start_ballistics = std::chrono::high_resolution_clock::now();
+    std::cerr << "LogicModule: calculate_ballistics_for_tracks() start" << std::endl;
     calculate_ballistics_for_tracks();
+    std::cerr << "LogicModule: calculate_ballistics_for_tracks() end" << std::endl;
     [[maybe_unused]] auto end_ballistics = std::chrono::high_resolution_clock::now();
     APP_LOG_DEBUG("LogicModule: Time for ballistic calculations: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_ballistics - start_ballistics).count()) + " us");
 

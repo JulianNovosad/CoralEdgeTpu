@@ -80,12 +80,35 @@ namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity.
 std::unique_ptr<Logger> Logger::instance_;
 std::once_flag Logger::once_flag_;
 
+// CsvLogger static member initialization
+long long CsvLogger::start_time_epoch_ms_ = 0;
+uint64_t CsvLogger::start_time_monotonic_ms_ = 0;
+std::once_flag CsvLogger::start_time_init_flag_;
+
 // =============================================================================
 // CsvLogger Implementation (Unified Session Log)
 // =============================================================================
 
 CsvLogger::CsvLogger(const std::string& log_file_path)
     : log_file_path_(log_file_path) {
+    
+    // Initialize program start times (once, thread-safe)
+    std::call_once(start_time_init_flag_, []() {
+        // Epoch time for produced_ts (system_clock)
+        start_time_epoch_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        // Monotonic time for call_ts (CLOCK_MONOTONIC_RAW)
+        struct timespec ts;
+        if (clock_gettime(CLOCK_MONOTONIC_RAW, &ts) == 0) {
+            start_time_monotonic_ms_ = (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+        } else {
+            // Fallback to steady_clock
+            auto now = std::chrono::steady_clock::now();
+            start_time_monotonic_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()).count();
+        }
+    });
     
     // Ensure parent directory exists (should be handled by Logger::init, but safety first)
     fs::path p(log_file_path_);
@@ -106,6 +129,8 @@ CsvLogger::CsvLogger(const std::string& log_file_path)
 }
 
 CsvLogger::~CsvLogger() {
+    std::cerr << "CsvLogger: Destructor called, flushing final buffer..." << std::endl;
+    flush_buffer_to_disk(); // Ensure data is saved before closing
     std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
         current_log_file_.close();
@@ -118,6 +143,7 @@ void CsvLogger::write_header() {
         // Unified "Wide Row" Header
         current_log_file_ << "produced_ts_epoch_ms,call_ts_epoch_ms,module,event,thread_id,"
                           << "cam_frame_id,cam_exposure_ms,cam_isp_latency_ms,cam_buffer_usage_percent,"
+                          << "image_proc_ms,"
                           << "tpu_inference_ms,tpu_temp_c,tpu_model_score,tpu_class_id,"
                           << "logic_target_dist_m,logic_ballistic_drop_m,logic_windage_m,logic_servo_x_cmd,logic_servo_y_cmd,logic_solution_time_ms,"
                           << "enc_process_ms,enc_bitrate_mbps,enc_queue_depth,"
@@ -127,8 +153,14 @@ void CsvLogger::write_header() {
 }
 
 void CsvLogger::write_entry(const CsvLogEntry& entry) {
-    std::lock_guard<std::mutex> lock(buffer_mutex_);
-    buffer_.push_back(entry);
+    {
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
+        buffer_.push_back(entry);
+    }
+    if (buffer_.size() % 10 == 0) {
+        std::cerr << "CsvLogger: Buffer size reached " << buffer_.size() << ", forcing flush." << std::endl;
+        flush_buffer_to_disk();
+    }
 }
 
 void CsvLogger::flush_buffer_to_disk() {
@@ -136,6 +168,9 @@ void CsvLogger::flush_buffer_to_disk() {
     if (buffer_.empty()) {
         return;
     }
+
+    size_t count = buffer_.size();
+    std::cerr << "CsvLogger: Flushing " << count << " entries to " << log_file_path_ << std::endl;
 
     std::lock_guard<std::recursive_mutex> file_lock(file_mutex_);
     if (!current_log_file_.is_open()) {
@@ -149,9 +184,19 @@ void CsvLogger::flush_buffer_to_disk() {
     }
 
     for (const auto& e : buffer_) {
+        // Convert timestamps to relative milliseconds from program start
+        // produced_ts comes from system_clock (epoch), so subtract epoch start
+        long long relative_produced_ts = e.produced_ts_epoch_ms - start_time_epoch_ms_;
+        // call_ts comes from CLOCK_MONOTONIC_RAW, so subtract monotonic start
+        long long relative_call_ts = e.call_ts_epoch_ms - static_cast<long long>(start_time_monotonic_ms_);
+        
+        // Ensure non-negative (in case of clock issues or entries from before start time was set)
+        if (relative_produced_ts < 0) relative_produced_ts = 0;
+        if (relative_call_ts < 0) relative_call_ts = 0;
+        
         // Format: Common (Always present)
-        current_log_file_ << e.produced_ts_epoch_ms << ","
-                          << e.call_ts_epoch_ms << ","
+        current_log_file_ << relative_produced_ts << ","
+                          << relative_call_ts << ","
                           << e.module.data() << ","
                           << e.event.data() << ","
                           << e.thread_id << ",";
@@ -161,6 +206,9 @@ void CsvLogger::flush_buffer_to_disk() {
         if (e.cam_exposure_ms != -1.0f) { current_log_file_ << e.cam_exposure_ms << ","; } else { current_log_file_ << "NaN,"; }
         if (e.cam_isp_latency_ms != -1.0f) { current_log_file_ << e.cam_isp_latency_ms << ","; } else { current_log_file_ << "NaN,"; }
         if (e.cam_buffer_usage_percent != -1.0f) { current_log_file_ << e.cam_buffer_usage_percent << ","; } else { current_log_file_ << "NaN,"; }
+
+        // Format: ImageProcessor
+        if (e.image_proc_ms != -1.0f) { current_log_file_ << e.image_proc_ms << ","; } else { current_log_file_ << "NaN,"; }
 
         // Format: TPU
         if (e.tpu_inference_ms != -1.0f) { current_log_file_ << e.tpu_inference_ms << ","; } else { current_log_file_ << "NaN,"; }
@@ -258,6 +306,7 @@ Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_d
     // 6. Initialize Unified CSV Logger
     fs::path unified_csv_path = session_path / "unified.csv";
     unified_logger_ = std::make_unique<CsvLogger>(unified_csv_path.string());
+    std::cerr << "Logger: Initialized in directory: " << current_session_dir_ << std::endl;
 }
 
 Logger::~Logger() {
@@ -284,16 +333,19 @@ void Logger::stop_writer_thread() {
         if (log_flusher_thread_.joinable()) {
             log_flusher_thread_.join(); 
         }
+        if (unified_logger_) {
+            unified_logger_->flush_buffer_to_disk();
+        }
     }
 }
 
 void Logger::log(const std::string& level, const std::string& message) {
-    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), level, message})); 
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), level.c_str(), message.c_str()})); 
 }
 
 void Logger::log_json(const std::string& key, const std::string& value) {
     std::string json_message = "{\"" + key + "\": " + value + "}";
-    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), "JSON", json_message})); 
+    log_queue_.push(std::move(LogEntry{std::chrono::system_clock::now(), "JSON", json_message.c_str()})); 
 }
 
 void Logger::log_csv(const CsvLogEntry& entry) {

@@ -60,8 +60,8 @@ int main(int argc, char** argv) {
         while (g_running.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
-        // Shutdown requested, wait 3 seconds then force exit
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        // Shutdown requested, wait 10 seconds then force exit
+        std::this_thread::sleep_for(std::chrono::seconds(10));
         if (!g_running.load()) {
             std::cerr << "\n[WATCHDOG] Graceful shutdown timed out (3s). Forcing termination via _exit(1)." << std::endl;
             _exit(1);

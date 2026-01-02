@@ -3,12 +3,16 @@
 #include <glib.h>
 #include <sstream>
 #include <cstring>
+#include <arpa/inet.h>
 
 extern std::atomic<bool> g_running;
 
 UDPStreamer::UDPStreamer(int width, int height, double fps)
     : pipeline_(nullptr), appsrc_(nullptr), loop_(nullptr),
-      running_(false), width_(width), height_(height), fps_(fps), base_time_(0), last_pts_(0) {
+      running_(false), initializing_(false), pipeline_ready_(false),
+      width_(width), height_(height), fps_(fps), 
+      destination_ip_("255.255.255.255"), destination_port_(5000),
+      base_time_(0), last_pts_(0) {
 }
 
 UDPStreamer::~UDPStreamer() {
@@ -16,38 +20,85 @@ UDPStreamer::~UDPStreamer() {
 }
 
 bool UDPStreamer::start() {
-    if (running_.load()) return true;
+    if (running_.load() || initializing_.load()) return true;
     
-    if (!gst_is_initialized()) gst_init(nullptr, nullptr);
-    
-    setup_pipeline();
-    
-    if (gst_element_set_state(pipeline_, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
-        APP_LOG_ERROR("UDPStreamer: Failed to set pipeline to PLAYING state");
-        return false;
-    }
-    
+    initializing_.store(true);
     running_.store(true);
     
-    // Start the main loop in a thread
-    server_thread_ = std::thread([this]() {
-        g_main_loop_run(loop_);
-    });
+    // Spawn initialization in a background thread to avoid blocking main loop
+    init_thread_ = std::thread(&UDPStreamer::initialization_worker, this);
     
-    APP_LOG_INFO("UDPStreamer: Started UDP stream on port 5000");
     return true;
 }
 
-void UDPStreamer::setup_pipeline() {
-    // Pipeline: appsrc (h264) -> h264parse -> mpegtsmux -> udpsink
-    std::string pipeline_string = 
-        "appsrc name=src is-live=true format=time ! "
-        "queue leaky=downstream max-size-buffers=2 ! "
-        "h264parse ! "
-        "mpegtsmux ! "
-        "udpsink host=192.168.178.255 port=5000 sync=false";
+void UDPStreamer::initialization_worker() {
+    APP_LOG_INFO("UDPStreamer: Starting background initialization...");
+    
+    if (!gst_is_initialized()) {
+        gst_init(nullptr, nullptr);
+    }
+    
+    // Pre-flight check for IP address format
+    struct sockaddr_in sa;
+    if (inet_pton(AF_INET, destination_ip_.c_str(), &(sa.sin_addr)) != 1) {
+        APP_LOG_ERROR("UDPStreamer: Invalid destination IP format: " + destination_ip_);
+        initializing_.store(false);
+        running_.store(false);
+        return;
+    }
 
-    APP_LOG_INFO("UDPStreamer: Pipeline: " + pipeline_string);
+    setup_pipeline();
+    
+    if (!pipeline_) {
+        APP_LOG_ERROR("UDPStreamer: Failed to setup pipeline");
+        initializing_.store(false);
+        running_.store(false);
+        return;
+    }
+
+    // Attempt to set pipeline to PLAYING state with timeout
+    GstStateChangeReturn ret = gst_element_set_state(pipeline_, GST_STATE_PLAYING);
+    if (ret == GST_STATE_CHANGE_FAILURE) {
+        APP_LOG_ERROR("UDPStreamer: Failed to set pipeline to PLAYING state");
+        initializing_.store(false);
+        running_.store(false);
+        return;
+    } else if (ret == GST_STATE_CHANGE_ASYNC) {
+        // Wait for state change with a 200ms timeout
+        GstState current, pending;
+        ret = gst_element_get_state(pipeline_, &current, &pending, 200 * GST_MSECOND);
+        if (ret == GST_STATE_CHANGE_FAILURE) {
+            APP_LOG_ERROR("UDPStreamer: Async state change failed after timeout");
+            initializing_.store(false);
+            running_.store(false);
+            return;
+        }
+    }
+    
+    // Start the GLib main loop in a thread
+    server_thread_ = std::thread([this]() {
+        if (loop_) {
+            g_main_loop_run(loop_);
+        }
+    });
+    
+    pipeline_ready_.store(true);
+    initializing_.store(false);
+    
+    APP_LOG_INFO("UDPStreamer: Background initialization complete. Streaming to " + destination_ip_ + ":" + std::to_string(destination_port_));
+}
+
+void UDPStreamer::setup_pipeline() {
+    // Pipeline: appsrc (h264) -> queue -> h264parse -> mpegtsmux -> tcpserversink
+    // Restored MPEG-TS for VLC compatibility (URL: tcp://<PI_IP>:5000)
+    std::stringstream ss;
+    ss << "appsrc name=src is-live=true format=time ! "
+       << "queue leaky=downstream max-size-buffers=50 ! "
+       << "h264parse ! "
+       << "mpegtsmux ! "
+       << "tcpserversink host=0.0.0.0 port=5000 sync=false";
+    
+    std::string pipeline_string = ss.str();
 
     GError* error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_string.c_str(), &error);
@@ -76,21 +127,31 @@ void UDPStreamer::setup_pipeline() {
 
     // Create main loop
     loop_ = g_main_loop_new(NULL, FALSE);
-    
-    APP_LOG_INFO("UDPStreamer: Pipeline configured successfully (Raw -> x264enc -> UDP)");
 }
 
 void UDPStreamer::stop() {
-    if (!running_.load()) return;
+    bool expected = true;
+    if (!running_.compare_exchange_strong(expected, false)) return;
     
-    running_.store(false);
+    APP_LOG_INFO("UDPStreamer: Stopping...");
+
+    // Wait for initialization thread if it's still running
+    if (init_thread_.joinable()) {
+        init_thread_.join();
+    }
     
+    pipeline_ready_.store(false);
+    initializing_.store(false);
+
     if (loop_) {
         g_main_loop_quit(loop_);
     }
     
     if (pipeline_) {
+        // Safe transition to NULL with timeout
         gst_element_set_state(pipeline_, GST_STATE_NULL);
+        GstState current, pending;
+        gst_element_get_state(pipeline_, &current, &pending, 100 * GST_MSECOND);
     }
     
     if (server_thread_.joinable()) {
@@ -119,11 +180,16 @@ void UDPStreamer::stop() {
 }
 
 void UDPStreamer::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
-    if (!running_.load() || !buffer || !buffer->data.data() || buffer->size == 0) {
+    // Mandate: Drop frames if pipeline is not ready to avoid blocking main loop
+    if (!pipeline_ready_.load()) {
+        // Limit debug spam
+        static int drop_log_count = 0;
+        if (drop_log_count++ % 100 == 0) std::cerr << "DEBUG: UDPStreamer dropping frame (pipeline not ready)" << std::endl;
         return;
     }
-    
-    APP_LOG_DEBUG("UDPStreamer: Pushing H264 frame, size=" + std::to_string(buffer->size));
+    if (!buffer || !buffer->data.data() || buffer->size == 0) {
+        return;
+    }
     
     GstElement* src = nullptr;
     {
@@ -162,12 +228,29 @@ void UDPStreamer::pushH264Data(std::shared_ptr<H264Buffer> buffer) {
     GST_BUFFER_DTS(gst_buffer) = pts;
     GST_BUFFER_DURATION(gst_buffer) = (GstClockTime)(1000.0 / fps_) * GST_MSECOND;
     
+    // Non-blocking push to appsrc
     GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(src), gst_buffer);
     if (ret != GST_FLOW_OK) {
         APP_LOG_DEBUG("UDPStreamer: push failed: " + std::to_string(ret));
     } else {
-        APP_LOG_DEBUG("UDPStreamer: Successfully pushed buffer to GStreamer, size=" + std::to_string(buffer->size));
+        // push OK
     }
     
     gst_object_unref(src);
+}
+
+void UDPStreamer::set_destination(const std::string& ip, int port) {
+    if (destination_ip_ == ip && destination_port_ == port) {
+        return;
+    }
+    
+    APP_LOG_INFO("UDPStreamer: Destination change requested to " + ip + ":" + std::to_string(port));
+    
+    // Non-blocking restart
+    stop();
+    
+    destination_ip_ = ip;
+    destination_port_ = port;
+    
+    start();
 }

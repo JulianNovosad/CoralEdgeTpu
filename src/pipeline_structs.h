@@ -11,8 +11,7 @@
 #include <memory> // For std::shared_ptr
 #include <functional> // For std::function
 #include "buffer_pool.h" // For BufferPool
-#include <boost/lockfree/spsc_queue.hpp> // For lock-free SPSC queues
-#include <boost/lockfree/queue.hpp>      // For lock-free MPMC queues
+#include "lockfree_queue.h"      // For LockFreeQueue
 #include <libcamera/pixel_format.h> // Include for libcamera::PixelFormat
 #include <thread>
 
@@ -40,6 +39,13 @@ struct ImageData {
     // Timing measurements (Deterministic)
     uint64_t t_capture_raw_ms = 0;                  ///< Authoritative raw ms from get_time_raw_ms()
     std::chrono::steady_clock::time_point capture_time;     ///< Time when frame was captured (PRIMARY TIMESTAMP)
+
+    // Telemetry fields inherited from Camera
+    float cam_exposure_ms = -1.0f;
+    float cam_isp_latency_ms = -1.0f;
+    float cam_buffer_usage_percent = -1.0f;
+    float image_proc_ms = -1.0f;
+    float tpu_temp_c = -1.0f;
 
     bool isValid() const { return buffer != nullptr; }
 
@@ -100,6 +106,12 @@ struct DetectionResult {
     std::chrono::steady_clock::time_point timestamp; ///< Timestamp of when detection was made.
     uint64_t t_capture_raw_ms = 0;      ///< Monotonic capture time inherited from ImageData (ms since boot).
     int source_frame_id = 0;            ///< ID of the source frame that generated this detection.
+
+    // Telemetry fields carried for logging
+    float cam_exposure_ms = -1.0f;
+    float cam_isp_latency_ms = -1.0f;
+    float cam_buffer_usage_percent = -1.0f;
+    float tpu_temp_c = -1.0f;
 };
 
 /**
@@ -230,102 +242,6 @@ private:
 
 // --- Type aliases for all pipeline queues ---
 
-/**
- * @brief A non-blocking, lock-free Multi-Producer Multi-Consumer queue.
- * 
- * Uses boost::lockfree::queue. Requirements:
- * 1. T must be trivially copyable (usually a pointer).
- * 2. Fixed capacity to avoid heap allocation in hot paths.
- */
-template<typename T, size_t Capacity = 1024>
-class LockFreeQueue {
-private:
-    mutable std::atomic<size_t> item_count_{0};  // Track approximate item count for monitoring
-    
-public:
-    LockFreeQueue() : queue_(Capacity) {}
-
-    /**
-     * @brief Pushes an item onto the queue. Non-blocking.
-     * @return True if successful, false if queue is full.
-     */
-    bool push(const T& data) {
-        bool result = queue_.push(data);
-        if (result) {
-            item_count_.fetch_add(1, std::memory_order_relaxed);
-        }
-        return result;
-    }
-
-    /**
-     * @brief Pops an item from the queue. Non-blocking.
-     * @return True if successful, false if queue is empty.
-     */
-    bool pop(T& data) {
-        bool result = queue_.pop(data);
-        if (result) {
-            item_count_.fetch_sub(1, std::memory_order_relaxed);
-        }
-        return result;
-    }
-
-    /**
-     * @brief Compatibility method for wait_pop (polls with yield).
-     * @warning Polling in hot paths should be minimized.
-     */
-    bool wait_pop(T& data, std::chrono::milliseconds timeout) {
-        auto start = std::chrono::steady_clock::now();
-        while (!queue_.pop(data)) {
-            if (std::chrono::steady_clock::now() - start > timeout) return false;
-            std::this_thread::yield();
-        }
-        item_count_.fetch_sub(1, std::memory_order_relaxed);
-        return true;
-    }
-
-    size_t write_available() const { return Capacity; }
-    bool empty() const { return queue_.empty(); }
-    bool full() const { return queue_.write_available() == 0; } // Check if queue is full
-    
-    /**
-     * @brief Get approximate size of the queue (for monitoring purposes).
-     * @note This is not thread-safe for exact counts but good for monitoring.
-     */
-    size_t size_approx() const { 
-        return item_count_.load(std::memory_order_relaxed);
-    }
-
-    /**
-     * @brief Try to pop an item from the queue without blocking.
-     * @return True if successful, false if queue is empty.
-     */
-    bool try_pop(T& data) {
-        bool result = queue_.pop(data);
-        if (result) {
-            item_count_.fetch_sub(1, std::memory_order_relaxed);
-        }
-        return result;
-    }
-
-    /**
-     * @brief Drains all items from the queue.
-     * @param callback Function to call for each item (e.g. for cleanup).
-     */
-    void clear(std::function<void(T&)> callback = nullptr) {
-        T data;
-        size_t count = 0;
-        while (queue_.pop(data)) {
-            if (callback) callback(data);
-            count++;
-        }
-        if (count > 0) {
-            item_count_.fetch_sub(count, std::memory_order_relaxed);
-        }
-    }
-
-private:
-    boost::lockfree::queue<T, boost::lockfree::fixed_sized<true>> queue_;
-};
 
 /// @brief Type alias for a lock-free queue holding ImageData pointers.
 typedef LockFreeQueue<ImageData*, 16> ImageQueue;

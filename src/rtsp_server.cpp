@@ -5,6 +5,8 @@
 #include <iostream>
 #include <thread>
 #include <glib.h>
+#include <gst/gst.h>
+#include <gst/app/gstappsrc.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <atomic>
@@ -20,7 +22,7 @@ std::atomic<bool> RTSPServerWrapper::camera_in_use_{false};
 std::atomic<int> RTSPServerWrapper::active_client_count_{0};
 
 // Static callback function to handle media configuration
-static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, gpointer user_data) {
+void RTSPServerWrapper::media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, gpointer user_data) {
     RTSPServerWrapper *server_wrapper = static_cast<RTSPServerWrapper*>(user_data);
     APP_LOG_INFO("RTSP: media_configure callback triggered");
     

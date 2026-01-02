@@ -30,8 +30,13 @@ public:
     void set_application_ref(Application* app);
     
     // Timing methods for monitoring
-    long long get_encode_timing_us() const { return avg_encode_time_us_; }
-    long long get_nal_timing_us() const { return avg_nal_time_us_; }
+    long long get_encode_timing_us() const { return avg_encode_time_us_.load(); }
+    long long get_nal_timing_us() const { return avg_nal_time_us_.load(); }
+    float get_latest_bitrate_mbps() const { return latest_bitrate_mbps_.load(); }
+    int get_queue_depth() const { 
+        std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(encoding_queue_mutex_));
+        return static_cast<int>(encoding_queue_.size()); 
+    }
 
 private:
     void worker_thread_func();
@@ -56,6 +61,7 @@ private:
     // Timing statistics
     mutable std::atomic<long long> avg_encode_time_us_{0};
     mutable std::atomic<long long> avg_nal_time_us_{0};
+    mutable std::atomic<float> latest_bitrate_mbps_{0.0f};
     
     // Display starvation detection
     mutable std::atomic<bool> first_frame_sent_{false};

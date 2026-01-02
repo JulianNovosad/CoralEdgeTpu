@@ -19,10 +19,10 @@ H264Encoder::H264Encoder(ImageQueue& input_queue,
       running_(false),
       encoder_(nullptr),
       frame_count_(0) {
-    // Initialize x264 structures
-    x264_param_default(&param_);
-    x264_picture_init(&picture_in_);
-    x264_picture_init(&picture_out_);
+    // Initialize x264 structures - MOVED TO WORKER THREAD
+    // x264_param_default(&param_);
+    // x264_picture_init(&picture_in_);
+    // x264_picture_init(&picture_out_);
     
     // Initialize encoding queue and worker thread
     encoding_worker_running_.store(false);
@@ -95,7 +95,7 @@ void H264Encoder::stop() {
     if (encoder_) { // Check if encoder was successfully opened
         x264_encoder_close(encoder_);
         encoder_ = nullptr;
-        x264_picture_clean(&picture_in_);
+        // x264_picture_clean(&picture_in_); // MOVED TO WORKER THREAD
     }
     APP_LOG_INFO("H264Encoder stopped.");
 }
@@ -103,156 +103,99 @@ void H264Encoder::stop() {
 extern std::atomic<bool> g_running;
 
 void H264Encoder::worker_thread_func() {
-
     APP_LOG_INFO("H264Encoder worker thread started.");
     APP_LOG_INFO("H264Encoder: Initializing x264 with width=" + std::to_string(width_) + ", height=" + std::to_string(height_) + ", fps=" + std::to_string(fps_));
 
-    
+    // Local x264 structures to avoid member variable issues / stack issues
+    x264_param_t param;
+    x264_picture_t picture_in;
+    x264_picture_t picture_out;
 
-    // Initialize x264 parameters using member variable
-
-    x264_param_default(&param_); // Start with sane defaults
-
-    x264_param_default_preset(&param_, "ultrafast", "zerolatency");
-
-    
+    // Initialize x264 parameters
+    x264_param_default(&param); // Start with sane defaults
+    x264_param_default_preset(&param, "ultrafast", "zerolatency");
 
     // Configure input resolution and pixel format
-
-    param_.i_width = width_;
-
-    param_.i_height = height_;
-
-    param_.i_fps_num = (int)fps_; // Use the configured FPS instead of hardcoded 40
-
-    param_.i_fps_den = 1;
-
-    param_.i_timebase_num = 1;
-    param_.i_timebase_den = (int)fps_; // Match our input FPS
-
-    param_.i_keyint_max = 30; // Keyframe every 1-2 seconds at 40 FPS
-
-    param_.b_intra_refresh = 0; // Traditional Full IDR frames for VLC compatibility
-
+    param.i_width = width_;
+    param.i_height = height_;
+    param.i_fps_num = (int)fps_; 
+    param.i_fps_den = 1;
+    param.i_timebase_num = 1;
+    param.i_timebase_den = (int)fps_; 
+    param.i_keyint_max = 30; 
+    param.b_intra_refresh = 0; 
     
-
     // Input pixel format (OpenCV uses BGR, but we convert to YUV420p for x264)
-
-    param_.i_csp = X264_CSP_I420; 
-
-    
+    param.i_csp = X264_CSP_I420; 
 
     // Stream parameters
-
-    param_.i_threads = 4; // Use all 4 cores on Pi 5 for x264 encoding
-
-    param_.b_vfr_input = 0; // Constant frame rate
-
-    param_.b_repeat_headers = 1; // Repeat SPS/PPS before IDR frames
-
-    param_.b_annexb = 1; // Annex B format (start codes) for better compatibility
+    param.i_threads = 1; // REDUCED TO 1 TO PREVENT CRASH / LOWER MEMORY
+    param.b_vfr_input = 0; // Constant frame rate
+    param.b_repeat_headers = 1; // Repeat SPS/PPS before IDR frames
+    param.b_annexb = 1; // Annex B format (start codes) for better compatibility
     
-    // Keyframe and IDR frame settings for proper decoding (already set earlier)
-    param_.i_keyint_min = 1; // Minimum keyframe interval
-    param_.i_bframe = 0; // No B-frames for simpler decoding and lower latency
-
-    
+    // Keyframe and IDR frame settings
+    param.i_keyint_min = 1; // Minimum keyframe interval
+    param.i_bframe = 0; // No B-frames for simpler decoding and lower latency
 
     // Apply profile and tune settings
-
-    x264_param_apply_profile(&param_, "baseline"); // Baseline profile for broad compatibility
+    x264_param_apply_profile(&param, "baseline"); // Baseline profile for broad compatibility
     
-    // Additional settings for better header handling and streaming
-    param_.i_frame_reference = 1; // Limit reference frames for lower latency
-    param_.i_dpb_size = 1; // Decoded picture buffer size (minimum for low latency)
-    param_.analyse.b_transform_8x8 = 0; // Disable 8x8 transforms for simpler decoding
-    param_.rc.i_qp_constant = 28; // Use constant quality
-    param_.rc.i_rc_method = X264_RC_CQP; // Constant quantizer
-    param_.i_cqm_preset = X264_CQM_FLAT; // Use flat quantization matrices
-    // Additional low-latency settings
-    param_.i_bframe_adaptive = X264_B_ADAPT_NONE; // Disable adaptive B-frames
-    param_.i_bframe_bias = 0; // B-frame bias
-    param_.i_frame_packing = -1; // No frame packing
+    // Additional settings
+    param.i_frame_reference = 1;
+    param.i_dpb_size = 1;
+    param.analyse.b_transform_8x8 = 0;
+    param.rc.i_qp_constant = 28;
+    param.rc.i_rc_method = X264_RC_CQP;
+    param.i_cqm_preset = X264_CQM_FLAT;
+    param.i_bframe_adaptive = X264_B_ADAPT_NONE;
+    param.i_bframe_bias = 0;
+    param.i_frame_packing = -1;
     
     // Additional ultra-low latency settings
-    param_.rc.i_vbv_buffer_size = 0; // Disable VBV buffering for lower latency
-    param_.rc.i_vbv_max_bitrate = 0; // Disable VBV bitrate limiting
-    param_.i_sync_lookahead = 0; // Disable sync lookahead for lower latency
-    param_.i_bframe_pyramid = X264_B_PYRAMID_NONE; // Disable B-frame pyramid
-    param_.b_aud = 0; // Don't emit access unit delimiters
-    param_.b_repeat_headers = 1; // Ensure headers are repeated for robustness
-    param_.i_slice_max_size = 1500; // Limit slice size to improve network streaming
-    param_.i_slice_max_mbs = 0; // No slice macroblock limit
+    param.rc.i_vbv_buffer_size = 0;
+    param.rc.i_vbv_max_bitrate = 0;
+    param.i_sync_lookahead = 0;
+    param.i_bframe_pyramid = X264_B_PYRAMID_NONE;
+    param.b_aud = 0;
+    param.b_repeat_headers = 1;
+    param.i_slice_max_size = 1500;
+    param.i_slice_max_mbs = 0;
     // Performance optimizations
-    param_.analyse.inter = 0; // Disable inter analysis for speed
-    param_.analyse.i_me_method = X264_ME_DIA; // Fastest motion estimation
-    param_.analyse.i_subpel_refine = 0; // Minimal subpixel refinement
-    param_.rc.i_qp_min = 28; // Minimum quantizer
-    param_.rc.i_qp_max = 35; // Maximum quantizer for performance
+    param.analyse.inter = 0; 
+    param.analyse.i_me_method = X264_ME_DIA;
+    param.analyse.i_subpel_refine = 0;
+    param.rc.i_qp_min = 28;
+    param.rc.i_qp_max = 35;
 
-    
+    APP_LOG_INFO("H264Encoder: Attempting to open x264 encoder...");
+    encoder_ = x264_encoder_open(&param); 
+    if (!encoder_) {
+        APP_LOG_ERROR("H264Encoder: Failed to open x264 encoder.");
+        running_.store(false); 
+        return;
+    }
+    APP_LOG_INFO("H264Encoder: x264 encoder opened successfully.");
 
+    APP_LOG_INFO("H264Encoder: Attempting to allocate x264 picture_in_...");
+    if (x264_picture_alloc(&picture_in, param.i_csp, param.i_width, param.i_height) < 0) {
+        std::cerr << "DEBUG: H264Encoder alloc picture failed!" << std::endl;
+        APP_LOG_ERROR("H264Encoder: Failed to allocate x264 picture_in_.");
+        running_.store(false); 
+        return;
+    }
+    APP_LOG_INFO("H264Encoder: x264 picture_in allocated.");
 
+    APP_LOG_INFO("H264Encoder: Initializing picture_out...");
+    x264_picture_init(&picture_out); // Initialize picture_out
+    APP_LOG_INFO("H264Encoder: picture_out initialized.");
 
-    
-
-    APP_LOG_INFO("H264Encoder: x264 parameters - width=" + std::to_string(param_.i_width) +
-
-                 ", height=" + std::to_string(param_.i_height) +
-
-                 ", csp=" + std::to_string(param_.i_csp) +
-
-                 ", fps_num=" + std::to_string(param_.i_fps_num) +
-
-                 ", fps_den=" + std::to_string(param_.i_fps_den) +
-
-                 ", keyint_max=" + std::to_string(param_.i_keyint_max) +
-
-                 ", threads=" + std::to_string(param_.i_threads));
-
-    
-
-        APP_LOG_INFO("H264Encoder: Attempting to open x264 encoder...");
-
-        // Open the encoder
-
-        encoder_ = x264_encoder_open(&param_); 
-
-        if (!encoder_) {
-
-            APP_LOG_ERROR("H264Encoder: Failed to open x264 encoder.");
-
-            running_.store(false); // Set running_ to false to stop the thread
-
-            return;
-
-        }
-
-        APP_LOG_INFO("H264Encoder: x264 encoder opened successfully.");
-
-    
-
-        APP_LOG_INFO("H264Encoder: Attempting to allocate x264 picture_in_...");
-
-                // Allocate pictures
-
-                if (x264_picture_alloc(&picture_in_, param_.i_csp, param_.i_width, param_.i_height) < 0) {
-
-                    APP_LOG_ERROR("H264Encoder: Failed to allocate x264 picture_in_.");
-
-                    running_.store(false); // Set running_ to false to stop the thread
-
-                    return;
-
-                }
-
-                APP_LOG_INFO("H264Encoder: x264 picture_in_ allocated.");
-
-    x264_picture_init(&picture_out_); // Initialize picture_out_
+    APP_LOG_INFO("H264Encoder: Starting main loop...");
+    APP_LOG_INFO("H264Encoder: Input Queue Address: " + std::to_string((uintptr_t)&input_queue_));
 
     while (running_.load() && g_running.load(std::memory_order_acquire)) {
         ImageData* input_image_ptr = nullptr;
-        // 1. Pop from input queue with 100ms timeout to ensure shutdown_requested is checked
+        // 1. Pop from input queue ...
         if (input_queue_.wait_pop(input_image_ptr, std::chrono::milliseconds(100))) {
             if (!input_image_ptr || !input_image_ptr->isValid()) {
                 if (input_image_ptr) image_data_pool_->release(input_image_ptr);
@@ -263,168 +206,85 @@ void H264Encoder::worker_thread_func() {
             // Record queue pop time
             image_data.encode_start_time = std::chrono::steady_clock::now();
             
-            // Calculate and log input latency if capture time is available
-            if (image_data.capture_time.time_since_epoch().count() > 0) {
-                auto input_latency_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                    image_data.encode_start_time - image_data.capture_time).count();
-                (void)input_latency_us; // Suppress unused variable warning in release builds
-                APP_LOG_DEBUG("H264Encoder: Input latency (capture to encode start): " + std::to_string(input_latency_us) + " us");
-            }
-
             if (!image_data.buffer) {
                 APP_LOG_WARNING("H264Encoder: Received image with null buffer. Skipping.");
                 image_data_pool_->release(input_image_ptr);
                 continue;
             }
 
-            // Log input frame information before processing
-            static int input_frame_counter = 0;
-            if (input_frame_counter < 5) {  // Log first 5 input frames
-                APP_LOG_INFO("INPUT FRAME #" + std::to_string(input_frame_counter) + 
-                            ": Width=" + std::to_string(image_data.width) + 
-                            ", Height=" + std::to_string(image_data.height) +
-                            ", Buffer Size=" + std::to_string(image_data.buffer ? image_data.buffer->data.size() : 0) +
-                            ", Format=" + std::to_string(image_data.format.fourcc()) +  // This will show the libcamera format
-                            ", T_Capture=" + std::to_string(image_data.t_capture_raw_ms) + "ms" +
-                            ", Frame ID=" + std::to_string(image_data.frame_id));
-                input_frame_counter++;
-            }
-
             // 2. Color conversion (Ensure proper format for x264 encoding)
             [[maybe_unused]] auto cvtcolor_start = std::chrono::steady_clock::now();
-            
-            // Check if buffer is valid before creating cv::Mat
-            if (!image_data.buffer || image_data.buffer->data.data() == nullptr) {
-                APP_LOG_WARNING("H264Encoder: Invalid buffer data. Skipping frame.");
-                continue;
-            }
-            
             cv::Mat frame_bgr, frame_yuv;
             
-            // Based on the pipeline, the overlaid video should be in the format from VisualizationProcessor
-            // Let's be explicit about the expected format and handle it properly
-            size_t expected_bgr_size = image_data.width * image_data.height * 3;  // BGR: 3 bytes per pixel
+            size_t expected_bgr_size = image_data.width * image_data.height * 3;
             size_t actual_size = image_data.buffer->data.size();
             
             if (actual_size >= expected_bgr_size) {
-                // Create OpenCV matrix with the expected BGR format
-                cv::Mat frame_bgr_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
-                if (frame_bgr_raw.empty()) {
-                    APP_LOG_ERROR("H264Encoder: Failed to create OpenCV matrix from buffer data. Skipping frame.");
-                    continue;
-                }
-                // Convert BGR to YUV420p directly without intermediate BGR copy to improve performance
-                cv::cvtColor(frame_bgr_raw, frame_yuv, cv::COLOR_BGR2YUV_I420);
+                // ImageProcessor produces RGB888, so we convert RGB to YUV420p
+                cv::Mat frame_rgb_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
+                cv::cvtColor(frame_rgb_raw, frame_yuv, cv::COLOR_RGB2YUV_I420);
             } else {
-                APP_LOG_WARNING("H264Encoder: Buffer size (" + std::to_string(actual_size) + 
-                               ") is smaller than expected BGR size (" + std::to_string(expected_bgr_size) + 
-                               "). Attempting to use available data.");
-                
-                // Try to work with what we have - could be different format from VisualizationProcessor
-                size_t expected_yuyv_size = image_data.width * image_data.height * 2;  // YUYV: 2 bytes per pixel
-                size_t expected_gray_size = image_data.width * image_data.height;      // Grayscale: 1 byte per pixel
-                
-                if (actual_size == expected_yuyv_size) {
-                    // Input is YUYV format from camera
-                    cv::Mat frame_yuyv(image_data.height, image_data.width, CV_8UC2, image_data.buffer->data.data());
-                    if (frame_yuyv.empty()) {
-                        APP_LOG_ERROR("H264Encoder: Failed to create YUYV matrix from buffer data. Skipping frame.");
-                        continue;
-                    }
-                    cv::cvtColor(frame_yuyv, frame_bgr, cv::COLOR_YUV2BGR_YUYV);
-                    cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
-                } else if (actual_size == expected_gray_size) {
-                    // Input is grayscale
+                // Unknown format fallback
+                if (actual_size >= (image_data.width * image_data.height)) {
                     cv::Mat frame_gray(image_data.height, image_data.width, CV_8UC1, image_data.buffer->data.data());
-                    if (frame_gray.empty()) {
-                        APP_LOG_ERROR("H264Encoder: Failed to create grayscale matrix from buffer data. Skipping frame.");
-                        continue;
-                    }
                     cv::cvtColor(frame_gray, frame_bgr, cv::COLOR_GRAY2BGR);
                     cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
                 } else {
-                    // Unknown format, try to interpret as grayscale and convert to BGR
-                    APP_LOG_WARNING("H264Encoder: Unknown format, attempting to interpret as grayscale and convert to BGR.");
-                    if (actual_size >= (image_data.width * image_data.height)) {
-                        cv::Mat frame_gray(image_data.height, image_data.width, CV_8UC1, image_data.buffer->data.data());
-                        if (frame_gray.empty()) {
-                            APP_LOG_ERROR("H264Encoder: Failed to create grayscale matrix from buffer data. Skipping frame.");
-                            continue;
-                        }
-                        cv::cvtColor(frame_gray, frame_bgr, cv::COLOR_GRAY2BGR);
-                        cv::cvtColor(frame_bgr, frame_yuv, cv::COLOR_BGR2YUV_I420);
-                    } else {
-                        APP_LOG_ERROR("H264Encoder: Buffer size too small. Skipping frame.");
-                        continue;
-                    }
+                    image_data_pool_->release(input_image_ptr);
+                    continue;
                 }
             }
             [[maybe_unused]] auto cvtcolor_end = std::chrono::steady_clock::now();
-            APP_LOG_DEBUG("H264Encoder: Time for cvtColor: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(cvtcolor_end - cvtcolor_start).count()) + " us");
 
             image_data.buffer.reset(); // Release buffer after conversion
 
             // 3. Encode I420 frame using x264
-            [[maybe_unused]] auto encode_start = std::chrono::steady_clock::now();
-
-            // Increment frame count and set PTS
             frame_count_++;
-            picture_in_.i_pts = frame_count_;
+            picture_in.i_pts = frame_count_;
 
-            // Map I420 planes from cv::Mat to x264_picture_t
-            // cv::cvtColor(..., COLOR_BGR2YUV_I420) returns I420 layout (Y, then U, then V)
             int y_size = width_ * height_;
             int uv_size = y_size / 4;
-            std::memcpy(picture_in_.img.plane[0], frame_yuv.data, y_size);
-            std::memcpy(picture_in_.img.plane[1], frame_yuv.data + y_size, uv_size);
-            std::memcpy(picture_in_.img.plane[2], frame_yuv.data + y_size + uv_size, uv_size);
+            std::memcpy(picture_in.img.plane[0], frame_yuv.data, y_size);
+            std::memcpy(picture_in.img.plane[1], frame_yuv.data + y_size, uv_size);
+            std::memcpy(picture_in.img.plane[2], frame_yuv.data + y_size + uv_size, uv_size);
 
             x264_nal_t* nals;
             int i_nals;
-            int encoded_frame_size = x264_encoder_encode(encoder_, &nals, &i_nals, &picture_in_, &picture_out_);
+            int encoded_frame_size = x264_encoder_encode(encoder_, &nals, &i_nals, &picture_in, &picture_out);
 
             if (encoded_frame_size > 0) {
                 auto h264_buffer_shared = h264_buffer_pool_->acquire();
                 if (h264_buffer_shared) {
                     H264Buffer* h264_buffer = h264_buffer_shared.get();
-                    if (static_cast<size_t>(encoded_frame_size) > h264_buffer->data.capacity()) {
-                        APP_LOG_ERROR("H264Encoder: Encoded size " + std::to_string(encoded_frame_size) + 
-                                      " exceeds buffer capacity " + std::to_string(h264_buffer->data.capacity()));
-                    } else {
-                        // Copy NAL units to buffer (nals[0].p_payload contains all NALs concatenated)
+                    if (static_cast<size_t>(encoded_frame_size) <= h264_buffer->data.capacity()) {
+                        // Copy NAL units to buffer
                         std::memcpy(h264_buffer->data.data(), nals[0].p_payload, encoded_frame_size);
                         h264_buffer->size = encoded_frame_size;
-                        h264_buffer->t_capture_raw_ms = image_data.t_capture_raw_ms;
                         h264_buffer->frame_id = image_data.frame_id;
                         h264_buffer->encoder_frame_count = frame_count_;
+                        h264_buffer->timestamp_epoch_ms = image_data.t_capture_raw_ms;
 
                         if (output_queue_.push(h264_buffer)) {
                             if (app_) app_->increment_h264_output_queue_in();
-                            // CRITICAL: We leak the shared_ptr here to keep the raw pointer valid.
-                            // Consumer must release back to pool correctly.
-                            // To keep it simple for this prototype, we'll assume the pool handles it.
-                            // Actually, I'll use a local static vector to keep them alive temporarily? No.
                         }
                     }
-                } else {
-                    APP_LOG_WARNING("H264Encoder: Failed to acquire buffer. Dropping frame.");
                 }
             } else if (encoded_frame_size < 0) {
                 APP_LOG_ERROR("H264Encoder: x264_encoder_encode failed.");
             }
 
-            image_data.encode_end_time = std::chrono::steady_clock::now();
             last_frame_processed_time_ = std::chrono::steady_clock::now();
             last_frame_id_ = image_data.frame_id;
             image_data_pool_->release(input_image_ptr);
         }
     }
+    x264_picture_clean(&picture_in); // Clean up allocated picture
     APP_LOG_INFO("H264Encoder worker thread stopped.");
-}
+} 
 
 bool H264Encoder::is_display_starving() const {
     if (!running_.load()) {
-        return true; // If encoder isn't running, display is definitely starving
+        return true; 
     }
     
     auto current_time = std::chrono::steady_clock::now();
@@ -432,15 +292,10 @@ bool H264Encoder::is_display_starving() const {
         current_time - last_frame_processed_time_
     ).count();
     
-    // Consider starving if no frame has been processed in more than 2x the expected frame interval
-    // For example, if FPS is 30, expect frames every ~33ms, so 66ms+ would be starving
     double expected_frame_interval_ms = 1000.0 / fps_;
-    double starvation_threshold_ms = expected_frame_interval_ms * 2.0;  // 2x the expected interval
+    double starvation_threshold_ms = expected_frame_interval_ms * 2.0;  
     
     if (time_since_last_frame > starvation_threshold_ms) {
-        APP_LOG_WARNING("H264Encoder: Display starvation detected! Last frame was " + 
-                       std::to_string(time_since_last_frame) + "ms ago (threshold: " + 
-                       std::to_string(starvation_threshold_ms) + "ms)");
         return true;
     }
     

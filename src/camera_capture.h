@@ -205,11 +205,12 @@ private:
 
     void request_processor_thread_func(); // New thread function
     // New helper to process processed TPU frames
-    bool process_tpu_processed_frame_buffer(const libcamera::FrameBuffer* fb,
-                                      const libcamera::StreamConfiguration& cfg,
-                                      std::chrono::steady_clock::time_point capture_time,
-                                      long long frame_id,
-                                      long long exposure_ms);
-};
+        bool process_tpu_processed_frame_buffer(const libcamera::FrameBuffer* fb,
+                                           const libcamera::StreamConfiguration& cfg,
+                                           std::chrono::steady_clock::time_point capture_time,
+                                           uint64_t t_capture_raw_ms,
+                                           long long frame_id,
+                                           long long exposure_ms,
+                                           uint64_t sensor_ts_ns);};
 
 #endif // CAMERA_CAPTURE_H
