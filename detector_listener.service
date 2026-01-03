@@ -1,0 +1,15 @@
+[Unit]
+Description=Detector Control Listener
+After=network.target
+
+[Service]
+ExecStart=/home/pi/CoralEdgeTpu/build/control_listener
+WorkingDirectory=/home/pi/CoralEdgeTpu
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+User=pi
+
+[Install]
+WantedBy=multi-user.target

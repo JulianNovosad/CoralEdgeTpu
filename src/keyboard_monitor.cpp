@@ -10,9 +10,10 @@
 // Forward declaration from global_definitions.cpp
 extern std::atomic<bool> g_running;
 
+// External declaration for terminal settings (defined in main.cpp)
+extern struct termios original_termios;
+
 KeyboardMonitor::KeyboardMonitor() {
-    // Get original terminal settings to restore them on exit
-    tcgetattr(STDIN_FILENO, &original_termios_);
 }
 
 KeyboardMonitor::~KeyboardMonitor() {
@@ -20,8 +21,8 @@ KeyboardMonitor::~KeyboardMonitor() {
 }
 
 void KeyboardMonitor::restore_terminal_settings() {
-    // Restore original terminal settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &original_termios_);
+    // Restore original terminal settings from the global authority
+    tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
 }
 
 bool KeyboardMonitor::start() {
@@ -50,8 +51,8 @@ bool KeyboardMonitor::is_running() const {
 void KeyboardMonitor::monitor_thread_func() {
     set_thread_name("KeyboardMonitor");
 
-    // Set terminal to non-canonical, non-echo mode
-    struct termios new_termios = original_termios_;
+    // Set terminal to non-canonical, non-echo mode based on global original settings
+    struct termios new_termios = original_termios;
     new_termios.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
 

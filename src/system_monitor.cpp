@@ -4,6 +4,7 @@
 #include <string>
 #include <regex> // For regex parsing of /proc/meminfo
 #include <iostream>
+#include <future>
 
 extern std::atomic<bool> g_running;
 
@@ -37,7 +38,23 @@ void SystemMonitor::stop() {
             stop_cv_.notify_all();
         }
         if (worker_thread_.joinable()) {
-            worker_thread_.join();
+            auto shared_promise = std::make_shared<std::promise<void>>();
+            std::future<void> future = shared_promise->get_future();
+            std::thread joiner_thread([this, shared_promise]() {
+                try {
+                    if (worker_thread_.joinable()) {
+                        worker_thread_.join();
+                    }
+                    shared_promise->set_value();
+                } catch (...) {}
+            });
+            if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+                std::cerr << "[SHUTDOWN] SystemMonitor worker thread did not join within 3s, detaching." << std::endl;
+                if (worker_thread_.joinable()) worker_thread_.detach();
+                joiner_thread.detach();
+            } else {
+                if (joiner_thread.joinable()) joiner_thread.join();
+            }
         }
         APP_LOG_INFO("SystemMonitor stopped.");
     }

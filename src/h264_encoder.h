@@ -34,8 +34,7 @@ public:
     long long get_nal_timing_us() const { return avg_nal_time_us_.load(); }
     float get_latest_bitrate_mbps() const { return latest_bitrate_mbps_.load(); }
     int get_queue_depth() const { 
-        std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(encoding_queue_mutex_));
-        return static_cast<int>(encoding_queue_.size()); 
+        return 0; 
     }
 
 private:
@@ -77,27 +76,6 @@ private:
     // Presentation timestamp tracking for monotonicity
     std::chrono::steady_clock::time_point stream_start_time_;
     bool stream_start_time_initialized_{false};
-    
-    // Buffer exhaustion monitoring
-    std::chrono::steady_clock::time_point last_buffer_acquisition_success_;
-    bool buffer_acquisition_success_initialized_{false};
-    static constexpr std::chrono::seconds BUFFER_EXHAUSTION_THRESHOLD{2};
-    
-    // Encoding queue for decoupled processing
-    struct EncodingJob {
-        cv::Mat frame_yuv;
-        int64_t frame_pts;
-        uint64_t t_capture_raw_ms;
-        int frame_id;
-    };
-    
-    std::queue<EncodingJob> encoding_queue_;
-    std::mutex encoding_queue_mutex_;
-    std::condition_variable encoding_queue_cv_;
-    std::thread encoding_worker_thread_;
-    std::atomic<bool> encoding_worker_running_{false};
-    
-    void encoding_worker_func();
     
     // Method for checking display starvation
     bool is_display_starving() const;

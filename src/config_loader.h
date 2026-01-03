@@ -54,6 +54,7 @@ public:
     std::string get_video_stream_protocol() const;
     std::string get_video_stream_address() const;
     unsigned short get_video_stream_port() const;
+    unsigned short get_video_stream_rtp_port() const;
     
     // --- RTSP Configuration ---
     int get_rtsp_port() const;
@@ -120,6 +121,7 @@ public:
     unsigned short get_phone_orientation_yaw_port() const;
     unsigned short get_phone_orientation_pitch_port() const;
     unsigned short get_phone_orientation_roll_port() const;
+    unsigned short get_orientation_pub_port() const;
 
     /**
      * @brief Provides read-only access to the raw JSON configuration data.

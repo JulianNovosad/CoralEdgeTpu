@@ -131,6 +131,24 @@ public:
         return buffer;
     }
 
+    /**
+     * @brief Manually acquire a raw buffer pointer from the pool.
+     * @return Raw pointer to a PooledBuffer, or nullptr on timeout.
+     * @warning The caller is responsible for returning the buffer to the pool
+     *          using release_raw().
+     */
+    PooledBuffer<T>* acquire_raw() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (!cond_.wait_for(lock, std::chrono::milliseconds(100),
+                            [this]{ return !available_buffers_.empty(); })) {
+            return nullptr;
+        }
+        PooledBuffer<T>* buffer_ptr = available_buffers_.front();
+        available_buffers_.pop();
+        current_in_use_.fetch_add(1);
+        return buffer_ptr;
+    }
+
     // No explicit release method needed, as it's handled by the custom deleter
     
     size_t get_available_buffers() const {

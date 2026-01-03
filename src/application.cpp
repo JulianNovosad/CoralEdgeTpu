@@ -68,11 +68,16 @@ Application::Application(int argc, char** argv) : argc_(argc), argv_(argv), reco
     // Set up signal handlers to restore terminal settings on exit
     supervisor_.setup_signal_handlers();
 
-    // Check for reduced resolution flag in command line arguments
+    // Check for reduced resolution flag and dynamic IP in command line arguments
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--reduced-resolution" || std::string(argv[i]) == "-rr") {
+        std::string arg = argv[i];
+        if (arg == "--reduced-resolution" || arg == "-rr") {
             use_reduced_resolution_ = true;
             APP_LOG_INFO("Application: Reduced resolution mode enabled via command line argument");
+        } else if (arg.find('-') != 0 && arg.find('.') != std::string::npos) {
+            // Assume it's an IP address if it doesn't start with '-' and contains a '.'
+            dynamic_phone_ip_ = arg;
+            APP_LOG_INFO("Application: Dynamic phone IP detected via command line: " + dynamic_phone_ip_);
         }
     }
     
@@ -100,11 +105,7 @@ void Application::stop() {
     std::cerr << "[SHUTDOWN] Joining RecoveryThread..." << std::endl;
     timed_join_thread(recovery_thread_, "RecoveryThread");
 
-    // 2. Stop ControlModule to prevent new commands
-    std::cerr << "[SHUTDOWN] Stopping ControlModule..." << std::endl;
-    if (control_module_) control_module_->stop();
-
-    // 3. Stop MPEG-TS Server and Encoder first (sink end of pipeline)
+    // 2. Stop MPEG-TS Server and Encoder first (sink end of pipeline)
     std::cerr << "[SHUTDOWN] Stopping MpegTsServer and H264Encoder..." << std::endl;
     if (mpegts_server_) mpegts_server_->stop();
     if (h264_encoder_) h264_encoder_->stop();
@@ -290,8 +291,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
              return false;
         }
 
-        APP_LOG_INFO("Creating OrientationSensor...");
-        orientation_sensor_ = std::make_shared<OrientationSensor>(config_loader_.get_phone_orientation_yaw_port(), config_loader_.get_phone_orientation_pitch_port(), config_loader_.get_phone_orientation_roll_port());
+        orientation_sensor_ = std::make_shared<OrientationSensor>(config_loader_.get_orientation_pub_port(), config_loader_.get_orientation_pub_port(), config_loader_.get_orientation_pub_port());
         APP_LOG_INFO("OrientationSensor created.");
 
         APP_LOG_INFO("Creating LogicModule...");
@@ -328,7 +328,16 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
 
         // Create MPEG-TS server
         APP_LOG_INFO("Creating MpegTsServer...");
-        mpegts_server_ = std::make_unique<MpegTsServer>(cam_w, cam_h, config_loader_.get_camera_fps());
+        std::string video_address = dynamic_phone_ip_.empty() ? config_loader_.get_video_stream_address() : dynamic_phone_ip_;
+        const unsigned short video_port = config_loader_.get_video_stream_rtp_port();
+        APP_LOG_INFO("MpegTsServer: Target video stream address: " + video_address + ", port: " + std::to_string(video_port));
+        mpegts_server_ = std::make_unique<MpegTsServer>(
+            cam_w, 
+            cam_h, 
+            config_loader_.get_camera_fps(),
+            video_address,
+            video_port
+        );
         APP_LOG_INFO("MpegTsServer created.");
 
         // Create Discovery Module
@@ -344,36 +353,6 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
                 mpegts_server_->set_destination(peer.ip);
             }
         });
-
-        APP_LOG_INFO("Creating ControlModule...");
-        control_module_ = std::make_unique<ControlModule>(6005);
-        control_module_->on_start([this](const std::string& phone_ip) {
-            APP_LOG_INFO("Application: START command received from " + phone_ip);
-            if (orientation_sensor_) {
-                orientation_sensor_->set_source(phone_ip, 2001); // Port 2001 per spec
-            }
-            
-            // Start streaming modules
-            if (visualization_processor_) visualization_processor_->start();
-            if (h264_encoder_) h264_encoder_->start();
-            
-            if (mpegts_server_) {
-                mpegts_server_->set_destination(phone_ip);
-                mpegts_server_->start();
-            }
-        });
-        control_module_->on_stop([this]() {
-            APP_LOG_INFO("Application: STOP command received");
-            
-            // Stop streaming modules
-            if (mpegts_server_) mpegts_server_->stop();
-            if (h264_encoder_) h264_encoder_->stop();
-            if (visualization_processor_) visualization_processor_->stop();
-            
-            // Drain queues to prevent stalls after stop
-            drain_queues();
-        });
-        APP_LOG_INFO("ControlModule created.");
 
         APP_LOG_INFO("Creating Monitor...");
         monitor_ = std::make_unique<Monitor>(*this);
@@ -411,8 +390,6 @@ bool Application::start_modules() {
 
     if (discovery_module_) start_ok &= discovery_module_->start();
 
-    if (control_module_) start_ok &= control_module_->start();
-
     
 
     if (!start_ok) {
@@ -445,31 +422,67 @@ bool Application::start_modules() {
 
 
 
-    // 3. Start processing modules (Middlware)
-
-    APP_LOG_INFO("Starting processing middleware...");
-
-    start_ok &= image_processor_->start();
-
-    start_ok &= inference_engine_->start();
-
-    start_ok &= logic_module_->start();
+        // 3. Start processing modules (Middlware)
 
 
 
-    if (!start_ok) {
-
-        APP_LOG_ERROR("One or more processing modules failed to start.");
-
-        stop();
-
-        return false;
-
-    }
+        APP_LOG_INFO("Starting processing middleware...");
 
 
 
-    // Note: visualization_processor_ and h264_encoder_ are started via ControlModule START command
+        start_ok &= image_processor_->start();
+
+
+
+        if (visualization_processor_) start_ok &= visualization_processor_->start();
+
+
+
+        start_ok &= inference_engine_->start();
+
+
+
+        start_ok &= logic_module_->start();
+
+
+
+        if (!start_ok) {
+
+
+
+            APP_LOG_ERROR("One or more processing modules failed to start.");
+
+
+
+            stop();
+
+
+
+            return false;
+
+
+
+        }
+
+
+
+    
+
+
+
+        // Start streaming-related modules now that ControlModule is gone
+
+
+
+        if (visualization_processor_) visualization_processor_->start("");
+
+
+
+        if (h264_encoder_) h264_encoder_->start();
+
+
+
+        if (mpegts_server_) mpegts_server_->start();
 
     
 
@@ -527,11 +540,6 @@ void Application::register_shutdown_handlers() {
             mpegts_server_->stop();
         }
     }); // Register MPEG-TS server for shutdown
-    supervisor_.register_module_stop("ControlModule", [&]() {
-        if (control_module_) {
-            control_module_->stop();
-        }
-    });
     supervisor_.register_module_stop("OverlayConsumer", [&]() {
         overlay_consumer_running_ = false;
         if (!timed_join_thread(overlay_consumer_thread_, "OverlayConsumerThread", std::chrono::seconds(3))) {
@@ -928,7 +936,11 @@ bool Application::restart_orientation_subsystem() {
         }
         
         // Recreate the orientation sensor
-        orientation_sensor_ = std::make_shared<OrientationSensor>(config_loader_.get_phone_orientation_yaw_port(), config_loader_.get_phone_orientation_pitch_port(), config_loader_.get_phone_orientation_roll_port());
+                orientation_sensor_ = std::make_shared<OrientationSensor>(
+                    config_loader_.get_orientation_pub_port(), // Use the new getter for orientation port
+                    config_loader_.get_orientation_pub_port(), // Assuming yaw/pitch/roll now use the same pub port
+                    config_loader_.get_orientation_pub_port()  // Assuming yaw/pitch/roll now use the same pub port
+                );
         
         // Start the orientation sensor
         if (!orientation_sensor_->start()) {

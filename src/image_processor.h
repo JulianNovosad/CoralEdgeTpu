@@ -7,6 +7,7 @@
 #include <boost/lockfree/spsc_queue.hpp>
 
 #include "pipeline_structs.h"
+#include "gpu_overlay.h"
 #include <libcamera/pixel_format.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -34,9 +35,9 @@ public:
         ~ImageProcessor();
     
         bool start();
-            void stop();
-            bool is_running() const;
-        
+                    void stop();
+                    void start(const std::string& phone_ip);
+                    bool is_running() const;        
             // Set skip factor (process only every Nth frame)
             void set_skip_factor(int skip_factor) { skip_factor_ = skip_factor; }
         
@@ -64,11 +65,10 @@ public:
         std::string module_name_;
         int skip_factor_ = 1;
         uint64_t frame_counter_ = 0;
-        bool is_tpu_stream_ = false;
-    
-        std::atomic<bool> running_{false};
-        std::thread worker_thread_;
-        
+                bool is_tpu_stream_;
+                std::atomic<bool> running_;
+                std::atomic<bool> is_running_;
+                std::thread worker_thread_;        
         // Timing statistics
         mutable std::atomic<long long> avg_queue_pop_time_us_{0};
         mutable std::atomic<long long> avg_preprocess_time_us_{0};

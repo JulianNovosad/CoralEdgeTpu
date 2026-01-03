@@ -14,11 +14,25 @@ extern std::atomic<bool> g_running;
 extern struct termios original_termios;
 
 static void signal_handler(int signum) {
+    // Restore terminal settings IMMEDIATELY when signal is received to ensure user is not left in raw mode
+    tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
+
     if (!g_running.load(std::memory_order_acquire)) {
         // Force exit if signal is received again during shutdown
         _exit(signum);
     }
     g_running.store(false, std::memory_order_release);
+
+    // Start a thread to force exit if graceful shutdown takes too long
+    std::thread force_exit_thread([signum]() {
+        sleep(3); // 3 second grace period
+        if (!g_running.load()) {
+            const char* msg = "\nGraceful shutdown timed out, forcing exit...\n";
+            write(STDERR_FILENO, msg, 44);
+            _exit(signum);
+        }
+    });
+    force_exit_thread.detach();
 }
 
 static void crash_handler(int signum) {

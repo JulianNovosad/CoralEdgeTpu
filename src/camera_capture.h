@@ -49,14 +49,14 @@ public:
      * @param watchdog_timeout Timeout voor de camera-watchdog.
      */
     CameraCapture(unsigned int main_width, unsigned int main_height,
-                  unsigned int tpu_width, unsigned int tpu_height,
-                  unsigned int tpu_fps,
-                  unsigned int target_tpu_width, unsigned int target_tpu_height,
-                  std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
-                  std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
-                  std::list<std::reference_wrapper<ImageQueue>>& main_output_queues,
-                  ImageQueue& image_processor_input_queue,
-                  std::chrono::seconds watchdog_timeout);
+                                                                            unsigned int tpu_width, unsigned int tpu_height,
+                                                                            unsigned int target_tpu_width, unsigned int target_tpu_height,
+                                                                            std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
+                                                                            std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
+                                                                            ImageQueue& image_processor_input_queue,
+                                                                            std::chrono::seconds watchdog_timeout);
+                                               
+                                                   void set_main_output_queues(const std::vector<ImageQueue*>& queues) { main_output_queues_ = queues; }
     ~CameraCapture();
 
     /**
@@ -126,7 +126,7 @@ private:
     unsigned int target_tpu_width_; ///< Doelbreedte voor TPU-inferentie na resizing.
     unsigned int target_tpu_height_; ///< Doelhoogte voor TPU-inferentie na resizing.
 
-    std::list<std::reference_wrapper<ImageQueue>>& main_output_queues_;  ///< Wachtrijen voor BGR-frames bestemd voor de live stream.
+    std::vector<ImageQueue*> main_output_queues_;  ///< Wachtrijen voor BGR-frames bestemd voor de live stream.
     ImageQueue& image_processor_input_queue_;  ///< Wachtrij voor ruwe frames bestemd voor de ImageProcessor.
     std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool_; ///< Pool voor het beheren van image buffers.
     std::shared_ptr<ObjectPool<ImageData>> image_data_pool_; ///< Pool for ImageData objects.

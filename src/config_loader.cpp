@@ -77,17 +77,42 @@ std::string ConfigLoader::get_log_path() const {
     return config_data_.value("/application/log_path"_json_pointer, "/home/pi/CoralEdgeTpu/logs");
 }
 
-std::string ConfigLoader::get_video_stream_protocol() const {
-    return config_data_.value("/application/video_stream/protocol"_json_pointer, "HTTP_WEBSOCKET");
+
+// --- Video Stream Configuration Getters ---
+unsigned short ConfigLoader::get_video_stream_rtp_port() const {
+    return config_data_.value("/application/video_stream/rtp_port"_json_pointer, 5000);
 }
+
 
 std::string ConfigLoader::get_video_stream_address() const {
     return config_data_.value("/application/video_stream/address"_json_pointer, "0.0.0.0");
 }
 
-std::string ConfigLoader::get_telemetry_protocol() const {
-    return config_data_.value("/application/telemetry/protocol"_json_pointer, "HTTP_WEBSOCKET");
+// --- Orientation and Telemetry Port Getters ---
+// Parses the port from the telemetry pub_address string (e.g., "tcp://*:6001")
+unsigned short ConfigLoader::get_orientation_pub_port() const {
+    std::string pub_address = get_telemetry_pub_address();
+    size_t colon_pos = pub_address.find(':');
+    if (colon_pos != std::string::npos) {
+        size_t last_colon_pos = pub_address.rfind(':');
+        if (last_colon_pos != std::string::npos && last_colon_pos > colon_pos) { // Check for IPv6 address format like [::1]:port
+             try {
+                return std::stoul(pub_address.substr(last_colon_pos + 1));
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("ConfigLoader: Failed to parse port from telemetry pub_address: " + pub_address + " - " + e.what());
+            }
+        } else if (colon_pos != std::string::npos) { // IPv4 or simple address
+            try {
+                return std::stoul(pub_address.substr(colon_pos + 1));
+            } catch (const std::exception& e) {
+                APP_LOG_ERROR("ConfigLoader: Failed to parse port from telemetry pub_address: " + pub_address + " - " + e.what());
+            }
+        }
+    }
+    // Default port if parsing fails or address is malformed
+    return 6001;
 }
+
 
 std::string ConfigLoader::get_telemetry_pub_address() const {
     return config_data_.value("/application/telemetry/pub_address"_json_pointer, "tcp://*:6000");
@@ -191,29 +216,13 @@ int ConfigLoader::get_visualization_height() const {
 
 
 // --- Network Port Getters (Corrected) ---
-unsigned short ConfigLoader::get_phone_orientation_yaw_port() const {
-    return config_data_.value("/application/network_ports/2001/port"_json_pointer, 2001);
-}
 
-unsigned short ConfigLoader::get_phone_orientation_pitch_port() const {
-    return config_data_.value("/application/network_ports/2002/port"_json_pointer, 2002);
-}
 
-unsigned short ConfigLoader::get_phone_orientation_roll_port() const {
-    return config_data_.value("/application/network_ports/2003/port"_json_pointer, 2003);
-}
 
-unsigned short ConfigLoader::get_video_stream_port() const {
-    // Check if the port is defined in the network_ports section
-    if (config_data_.contains("/application/network_ports/1001"_json_pointer)) {
-        const auto& port_config = config_data_["/application/network_ports/1001"_json_pointer];
-        if (port_config.contains("port")) {
-            return port_config["port"].get<unsigned short>();
-        }
-    }
-    // Fallback to default value
-    return 1001;
-}
+
+
+
+
 
 // --- TPU Stream Configuration Getters ---
 unsigned int ConfigLoader::get_tpu_stream_width() const {

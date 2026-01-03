@@ -266,7 +266,7 @@ Logger& Logger::getInstance() {
 }
 
 Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_dir, const ConfigLoader* config_loader)
-    : base_log_dir_(base_log_dir), log_file_prefix_(log_file_prefix), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(3) {
+    : base_log_dir_(base_log_dir), log_file_prefix_(log_file_prefix), last_rotation_time_(std::chrono::system_clock::now()), max_standard_log_files_(3), running_(false) {
     
     // 1. Ensure Base Directory Exists
     if (!fs::exists(base_log_dir_)) {

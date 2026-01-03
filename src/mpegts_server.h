@@ -1,5 +1,5 @@
-#ifndef UDP_STREAMER_H
-#define UDP_STREAMER_H
+#ifndef MPEGTS_SERVER_H
+#define MPEGTS_SERVER_H
 
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
@@ -11,12 +11,12 @@
 #include "pipeline_structs.h"
 
 /**
- * @brief Handles UDP streaming of H264 video data using GStreamer.
+ * @brief Handles MPEG-TS over TCP streaming of H264 video data using GStreamer.
  */
-class UDPStreamer {
+class MpegTsServer {
 public:
-    UDPStreamer(int width, int height, double fps);
-    ~UDPStreamer();
+    MpegTsServer(int width, int height, double fps, const std::string& default_address, unsigned short default_port);
+    ~MpegTsServer();
 
     bool start();
     void stop();
@@ -26,11 +26,10 @@ public:
     void pushH264Data(std::shared_ptr<H264Buffer> buffer);
 
     /**
-     * @brief Sets the destination IP and port for the UDP stream.
+     * @brief Sets the destination IP for orientation data.
      * @param ip Destination IP address.
-     * @param port Destination UDP port.
      */
-    void set_destination(const std::string& ip, int port);
+    void set_destination(const std::string& ip);
 
 private:
     void setup_pipeline();
@@ -51,7 +50,9 @@ private:
     double fps_;
     
     std::string destination_ip_;
-    int destination_port_;
+    unsigned short default_port_; // Added to store the default port
+    GstElement* udpsink_;
+    void update_udpsink_host(const std::string& host);
     
     std::mutex appsrc_mutex_;
     
@@ -60,4 +61,4 @@ private:
     uint64_t last_pts_;
 };
 
-#endif // UDP_STREAMER_H
+#endif // MPEGTS_SERVER_H

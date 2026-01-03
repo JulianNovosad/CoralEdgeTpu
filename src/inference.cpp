@@ -715,6 +715,13 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
         return a.score > b.score;
     });
 
+    if (!raw_detections.empty()) {
+        char raw_log[128];
+        snprintf(raw_log, sizeof(raw_log), "InferenceEngine: Raw detections before NMS: %zu, max_score: %.2f", 
+                 raw_detections.size(), raw_detections[0].score);
+        APP_LOG_DEBUG(raw_log);
+    }
+
     std::vector<DetectionResult> filtered_detections;
     std::vector<bool> is_suppressed(raw_detections.size(), false);
     

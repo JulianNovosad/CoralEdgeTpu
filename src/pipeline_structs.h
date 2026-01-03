@@ -115,16 +115,31 @@ struct DetectionResult {
 };
 
 /**
- * @brief Represents a ballistic impact point in overlay pixel coordinates.
+ * @brief Represents a ballistic impact point and safety metadata in overlay pixel coordinates.
  *
  * For visual validation only; overlay-space only (no world coords).
  * Coordinate origin: top-left of image.
  */
 struct OverlayBallisticPoint {
-    int x = 0;                 ///< X-coordinate in pixels.
-    int y = 0;                 ///< Y-coordinate in pixels.
-    bool is_valid = false;     ///< True if point is valid and should be drawn.
-    int frame_id = 0;          ///< Frame ID that this point is bound to.
+    int x = 0;                          ///< Legacy X-coordinate in pixels.
+    int y = 0;                          ///< Legacy Y-coordinate in pixels.
+    bool is_valid = false;              ///< True if point is valid and should be drawn.
+    int frame_id = 0;                   ///< Frame ID that this point is bound to.
+    
+    // Avant-Garde enhanced fields
+    float impact_px_x = 0.0f;           ///< Predicted impact point X (pixels)
+    float impact_px_y = 0.0f;           ///< Predicted impact point Y (pixels)
+    float safety_cone_radius_px = 0.0f;  ///< Radius of safety cone in pixels
+    bool safety_cone_violation = false;  ///< True if safety cone exceeds inner bounding box
+    
+    // Target Bounding Box / Inner Fraction (normalized 0.0-1.0)
+    float inner_xmin = 0.0f;
+    float inner_ymin = 0.0f;
+    float inner_xmax = 0.0f;
+    float inner_ymax = 0.0f;
+    
+    float confidence = 0.0f;            ///< Total confidence (0.0 - 1.0)
+    int hit_streak = 0;                 ///< Current hit streak
 };
 
 /**
@@ -244,7 +259,7 @@ private:
 
 
 /// @brief Type alias for a lock-free queue holding ImageData pointers.
-typedef LockFreeQueue<ImageData*, 16> ImageQueue;
+typedef LockFreeQueue<ImageData*, 256> ImageQueue;
 
 // Define a type for a pooled buffer of detection results
 using DetectionResultBuffer = PooledBuffer<DetectionResult>;

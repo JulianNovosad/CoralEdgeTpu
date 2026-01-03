@@ -16,7 +16,7 @@
 #include "keyboard_monitor.h"
 #include "discovery_module.h" // Added for auto-discovery
 
-#include "udp_streamer.h"
+#include "mpegts_server.h"
 #include "monitor.h"
 
 #include "buffer_pool.h"
@@ -69,7 +69,7 @@ public:
     // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
     std::unique_ptr<H264Encoder> h264_encoder_;
 
-    std::unique_ptr<UDPStreamer> udp_streamer_;
+    std::unique_ptr<MpegTsServer> mpegts_server_;
     std::shared_ptr<OrientationSensor> orientation_sensor_;
     std::unique_ptr<LogicModule> logic_module_;
     std::unique_ptr<SystemMonitor> system_monitor_;
@@ -89,6 +89,7 @@ public:
     std::shared_ptr<DetectionResultsQueue> detection_results_for_logic_queue_;
     std::shared_ptr<ImageQueue> overlaid_video_queue_;
     std::shared_ptr<H264Queue> h264_output_queue_;
+    std::string dynamic_phone_ip_; // Added to store phone IP from command line
 
 private:
     void release_edge_tpu_resources();

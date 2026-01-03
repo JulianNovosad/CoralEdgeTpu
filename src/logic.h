@@ -90,10 +90,10 @@ struct BallisticState {
  * @brief Structuur voor het bijhouden van onzekerheid in metingen.
  */
 struct Uncertainty {
-    float position_variance;     // Variantie in positie (m^2)
-    float velocity_variance;     // Variantie in snelheid (m^2/s^2)
-    float distance_variance;     // Variantie in afstand (m^2)
-    float total_confidence;     // Totale betrouwbaarheid (0.0 - 1.0)
+    float position_variance = 0.0f;     // Variantie in positie (m^2)
+    float velocity_variance = 0.0f;     // Variantie in snelheid (m^2/s^2)
+    float distance_variance = 0.0f;     // Variantie in afstand (m^2)
+    float total_confidence = 0.0f;     // Totale betrouwbaarheid (0.0 - 1.0)
 };
 
 /**
@@ -227,7 +227,7 @@ private:
     void process(const std::vector<DetectionResult>& detections, CsvLogEntry& entry);
     void update_object_tracks(const std::vector<DetectionResult>& detections);
     SafetyStatus perform_safety_and_uncertainty_checks(const TrackedObject& target, const Uncertainty& uncertainty, std::string& safety_status_message);
-    void issue_servo_commands(float target_x, float target_y, float target_z, float confidence, uint64_t t_capture);
+    void issue_servo_commands(float delta_theta_x, float delta_theta_y, float target_z, float confidence, uint64_t t_capture);
     void execute_servo_command(float target_x, float target_y, float target_z, float confidence); // New function to actually execute servo commands
     float calculate_iou(const DetectionResult& det1, const DetectionResult& det2);
     void perform_sensor_fusion();

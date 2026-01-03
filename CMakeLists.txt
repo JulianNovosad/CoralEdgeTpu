@@ -21,6 +21,11 @@ pkg_check_modules(ZMQ REQUIRED libzmq cppzmq)
 # X264
 pkg_check_modules(X264 REQUIRED x264)
 
+# GLESv2 and EGL
+pkg_check_modules(GLESV2 REQUIRED glesv2)
+pkg_check_modules(EGL REQUIRED egl)
+pkg_check_modules(GBM REQUIRED gbm)
+
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -31,6 +36,9 @@ include_directories(
     ${LIBCAMERA_INCLUDE_DIRS}
     ${ZMQ_INCLUDE_DIRS}
     ${X264_INCLUDE_DIRS}
+    ${GLESV2_INCLUDE_DIRS}
+    ${EGL_INCLUDE_DIRS}
+    ${GBM_INCLUDE_DIRS}
 )
 
 # Link directories
@@ -43,6 +51,7 @@ set(SOURCE_FILES
     src/application_supervisor.cpp
     src/camera_capture.cpp
     src/image_processor.cpp
+    src/gpu_overlay.cpp
     src/inference.cpp
     src/logic.cpp
     src/monitor.cpp
@@ -50,16 +59,19 @@ set(SOURCE_FILES
     src/util_logging.cpp
     src/config_loader.cpp
     src/h264_encoder.cpp
-    src/udp_streamer.cpp
-    src/discovery_module.cpp
+    src/mpegts_server.cpp
     src/orientation_sensor.cpp
     src/pca9685_controller.cpp
     src/rtsp_server.cpp
     src/keyboard_monitor.cpp
+    src/discovery_module.cpp
     src/global_definitions.cpp
 )
 
 add_executable(detector ${SOURCE_FILES})
+
+add_executable(control_listener src/control_listener.cpp)
+target_link_libraries(control_listener Threads::Threads)
 
 target_link_libraries(detector
     ${OpenCV_LIBS}
@@ -67,6 +79,9 @@ target_link_libraries(detector
     ${LIBCAMERA_LIBRARIES}
     ${ZMQ_LIBRARIES}
     ${X264_LIBRARIES}
+    ${GLESV2_LIBRARIES}
+    ${EGL_LIBRARIES}
+    ${GBM_LIBRARIES}
     Threads::Threads
     atomic
 )

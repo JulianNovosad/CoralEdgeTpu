@@ -1,6 +1,7 @@
 #include "orientation_sensor.h"
 #include "util_logging.h"
 #include "json.hpp"
+#include <future>
 
 OrientationSensor::OrientationSensor(int yaw_port, int pitch_port, int roll_port)
     : yaw_port_(yaw_port), pitch_port_(pitch_port), roll_port_(roll_port), 
@@ -31,7 +32,23 @@ void OrientationSensor::stop() {
     }
     
     if (receiver_thread_.joinable()) {
-        receiver_thread_.join();
+        auto shared_promise = std::make_shared<std::promise<void>>();
+        std::future<void> future = shared_promise->get_future();
+        std::thread joiner_thread([this, shared_promise]() {
+            try {
+                if (receiver_thread_.joinable()) {
+                    receiver_thread_.join();
+                }
+                shared_promise->set_value();
+            } catch (...) {}
+        });
+        if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+            std::cerr << "[SHUTDOWN] OrientationSensor receiver thread did not join within 3s, detaching." << std::endl;
+            if (receiver_thread_.joinable()) receiver_thread_.detach();
+            joiner_thread.detach();
+        } else {
+            if (joiner_thread.joinable()) joiner_thread.join();
+        }
     }
     
     APP_LOG_INFO("OrientationSensor stopped.");

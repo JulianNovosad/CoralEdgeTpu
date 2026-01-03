@@ -41,8 +41,6 @@ private:
 
     std::atomic<bool> running_{false};
     std::thread monitor_thread_;
-
-    struct termios original_termios_;
 };
 
 #endif // KEYBOARD_MONITOR_H

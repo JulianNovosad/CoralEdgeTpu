@@ -6,6 +6,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
+#include <future>
+#include <iostream>
 
 DiscoveryModule::DiscoveryModule(int beacon_port)
     : beacon_port_(beacon_port), running_(false) {
@@ -32,8 +34,41 @@ void DiscoveryModule::stop() {
     
     running_.store(false);
     
-    if (beacon_thread_.joinable()) beacon_thread_.join();
-    if (listener_thread_.joinable()) listener_thread_.join();
+    if (beacon_thread_.joinable()) {
+        auto shared_promise = std::make_shared<std::promise<void>>();
+        std::future<void> future = shared_promise->get_future();
+        std::thread joiner_thread([this, shared_promise]() {
+            try {
+                if (beacon_thread_.joinable()) beacon_thread_.join();
+                shared_promise->set_value();
+            } catch (...) {}
+        });
+        if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+            std::cerr << "[SHUTDOWN] DiscoveryModule beacon thread did not join within 3s, detaching." << std::endl;
+            if (beacon_thread_.joinable()) beacon_thread_.detach();
+            joiner_thread.detach();
+        } else {
+            if (joiner_thread.joinable()) joiner_thread.join();
+        }
+    }
+
+    if (listener_thread_.joinable()) {
+        auto shared_promise = std::make_shared<std::promise<void>>();
+        std::future<void> future = shared_promise->get_future();
+        std::thread joiner_thread([this, shared_promise]() {
+            try {
+                if (listener_thread_.joinable()) listener_thread_.join();
+                shared_promise->set_value();
+            } catch (...) {}
+        });
+        if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+            std::cerr << "[SHUTDOWN] DiscoveryModule listener thread did not join within 3s, detaching." << std::endl;
+            if (listener_thread_.joinable()) listener_thread_.detach();
+            joiner_thread.detach();
+        } else {
+            if (joiner_thread.joinable()) joiner_thread.join();
+        }
+    }
     
     APP_LOG_INFO("DiscoveryModule stopped.");
 }

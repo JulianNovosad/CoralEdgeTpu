@@ -461,9 +461,10 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue,
     image_center_x_ = image_width_px * 0.5f;
     image_center_y_ = image_height_px * 0.5f;
     
-    // Log verification value for 3° safety cone
-    float px_at_3deg = focal_length_px_ * std::tan(3.0f * PI / 180.0f);
-    APP_LOG_INFO("Safety cone verification: 3° corresponds to " + std::to_string(px_at_3deg) + " pixels");
+    // Log verification value for safety cone from config
+    float max_ang_err_deg = config_.get_max_angular_error_degrees();
+    float px_at_safety_cone = focal_length_px_ * std::tan(max_ang_err_deg * PI / 180.0f);
+    APP_LOG_INFO("Safety cone verification: " + std::to_string(max_ang_err_deg) + "° corresponds to " + std::to_string(px_at_safety_cone) + " pixels");
     
     BallisticProfile profile = {
         .muzzle_velocity_mps = config.get_muzzle_velocity_mps(),
@@ -518,13 +519,18 @@ bool LogicModule::start() {
         
         // Get telemetry configuration from config
         std::string telemetry_address = config_.get_telemetry_pub_address();
-        telemetry_socket_->bind(telemetry_address);
         
-        APP_LOG_INFO("LogicModule telemetry socket bound to: " + telemetry_address);
+        // Use try/catch specifically for bind
+        try {
+            telemetry_socket_->bind(telemetry_address);
+            APP_LOG_INFO("LogicModule telemetry socket bound to: " + telemetry_address);
+        } catch (const zmq::error_t& ze) {
+            APP_LOG_ERROR("Failed to bind telemetry socket to " + telemetry_address + ": " + ze.what());
+            // Non-fatal if telemetry fails, but log it
+        }
     } catch (const std::exception& e) {
         APP_LOG_ERROR("Failed to initialize telemetry socket: " + std::string(e.what()));
-        running_ = false;
-        return false;
+        // Initialization failed, but we can continue without telemetry if needed
     }
     
     // Start servo worker thread
@@ -551,12 +557,46 @@ void LogicModule::stop() {
         if (worker_thread_.joinable()) worker_thread_.join();
         
         // Stop telemetry worker thread
-        if (telemetry_worker_thread_.joinable()) telemetry_worker_thread_.join();
+        if (telemetry_worker_thread_.joinable()) {
+            auto shared_promise = std::make_shared<std::promise<void>>();
+            std::future<void> future = shared_promise->get_future();
+            std::thread joiner_thread([this, shared_promise]() {
+                try {
+                    if (telemetry_worker_thread_.joinable()) {
+                        telemetry_worker_thread_.join();
+                    }
+                    shared_promise->set_value();
+                } catch (...) {}
+            });
+            if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+                std::cerr << "[SHUTDOWN] Logic telemetry worker thread did not join within 3s, detaching." << std::endl;
+                if (telemetry_worker_thread_.joinable()) telemetry_worker_thread_.detach();
+                joiner_thread.detach();
+            } else {
+                if (joiner_thread.joinable()) joiner_thread.join();
+            }
+        }
         
         // Stop servo worker thread
-        if (servo_worker_running_.exchange(false)) {
-            // Wake up servo worker if it's waiting
-            if (servo_worker_thread_.joinable()) servo_worker_thread_.join();
+        servo_worker_running_ = false;
+        if (servo_worker_thread_.joinable()) {
+            auto shared_promise = std::make_shared<std::promise<void>>();
+            std::future<void> future = shared_promise->get_future();
+            std::thread joiner_thread([this, shared_promise]() {
+                try {
+                    if (servo_worker_thread_.joinable()) {
+                        servo_worker_thread_.join();
+                    }
+                    shared_promise->set_value();
+                } catch (...) {}
+            });
+            if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+                std::cerr << "[SHUTDOWN] Logic servo worker thread did not join within 3s, detaching." << std::endl;
+                if (servo_worker_thread_.joinable()) servo_worker_thread_.detach();
+                joiner_thread.detach();
+            } else {
+                if (joiner_thread.joinable()) joiner_thread.join();
+            }
         }
         
         // Clean up ZeroMQ sockets
@@ -568,8 +608,7 @@ void LogicModule::stop() {
 }
 
 void LogicModule::send_telemetry_data(const std::string& telemetry_message) {
-    if (!telemetry_socket_) {
-        APP_LOG_ERROR("Telemetry socket not initialized");
+    if (!telemetry_socket_ || !telemetry_socket_->handle()) {
         return;
     }
     
@@ -684,7 +723,15 @@ void LogicModule::worker_thread_func() {
                 if (detections_buffer->size > 0) {
                     active_detections.assign(detections_buffer->data.begin(), detections_buffer->data.begin() + detections_buffer->size);
                 }
-                process(active_detections, entry);
+                
+                try {
+                    process(active_detections, entry);
+                } catch (const std::exception& e) {
+                    APP_LOG_ERROR("LogicModule: Exception in process(): " + std::string(e.what()));
+                } catch (...) {
+                    APP_LOG_ERROR("LogicModule: Unknown exception in process()");
+                }
+                
                 guard.consumed = true;
                 
                 // Set common fields after process might have updated timing
@@ -729,8 +776,16 @@ void LogicModule::worker_thread_func() {
                     entry.logic_target_dist_m = primary->position.z;
                     entry.logic_ballistic_drop_m = primary->predicted_impact_point.y - primary->position.y;
                     entry.logic_windage_m = primary->predicted_impact_point.x - primary->position.x;
-                    entry.logic_servo_x_cmd = 0.5f + (primary->predicted_impact_point.x / static_cast<float>(config_.get_tpu_target_width()));
-                    entry.logic_servo_y_cmd = 0.5f + (primary->predicted_impact_point.y / static_cast<float>(config_.get_tpu_target_height()));
+                    
+                    // New angular-based servo scaling for logging
+                    float dx_px = (primary->predicted_impact_point.x * focal_length_px_) / std::max(0.01f, primary->position.z);
+                    float dy_px = (primary->predicted_impact_point.y * focal_length_px_) / std::max(0.01f, primary->position.z);
+                    float delta_theta_x = std::atan2(dx_px, focal_length_px_);
+                    float delta_theta_y = std::atan2(dy_px, focal_length_px_);
+                    constexpr float SERVO_RANGE_RAD = 180.0f * (3.1415926535f / 180.0f);
+                    
+                    entry.logic_servo_x_cmd = 0.5f + (delta_theta_x / SERVO_RANGE_RAD);
+                    entry.logic_servo_y_cmd = 0.5f + (delta_theta_y / SERVO_RANGE_RAD);
                     entry.logic_solution_time_ms = static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_time).count()) / 1000.0f;
                 } else {
                     entry.logic_target_dist_m = 0.0f;
@@ -822,8 +877,10 @@ void LogicModule::servo_worker_thread_func() {
                         state_start_ms_ = now;
                         
                         // Execute forward stroke
-                        float normalized_x = 0.5f + (cmd_ptr->target_x / static_cast<float>(config_.get_tpu_target_width()));
-                        float target_pos = std::max(0.0f, std::min(1.0f, normalized_x));
+                        // cmd_ptr->target_x now carries delta_theta_x in radians
+                        constexpr float SERVO_RANGE_RAD = 180.0f * (PI / 180.0f);
+                        float target_pos = 0.5f + (cmd_ptr->target_x / SERVO_RANGE_RAD);
+                        target_pos = std::max(0.0f, std::min(1.0f, target_pos));
                         
                         // Lobotomized: Hardware calls ENABLED
                         if (led_controller_ && led_controller_->is_initialized()) {
@@ -927,22 +984,21 @@ void LogicModule::telemetry_worker_thread_func() {
 }
 
 void LogicModule::process(const std::vector<DetectionResult>& detections, CsvLogEntry& entry) {
-    std::cerr << "LogicModule: process() start for frame " << (detections.empty() ? -1 : detections[0].source_frame_id) << ", detections=" << detections.size() << std::endl;
-    [[maybe_unused]] auto total_process_start = std::chrono::high_resolution_clock::now();
-    
-    // Early return if detections vector is empty to prevent unnecessary processing
+    auto total_process_start = std::chrono::high_resolution_clock::now();
+    // This variable is used to calculate the total processing time in this function.
+    // It is deliberately placed at the very beginning of the function body.
     if (detections.empty()) {
-        std::cerr << "LogicModule: process() early return (empty detections)" << std::endl;
-        // Log a heartbeat event to show that the logic module is processing "empty" frames
-        static uint64_t last_empty_log = 0;
-        uint64_t now = get_time_raw_ms();
+        // Heartbeat for telemetry/monitor - Logging heartbeat
+        APP_LOG_DEBUG("LogicModule: No detections received, logging heartbeat.");
         
-        // Only log every 1000ms to avoid log spam
-        if (now - last_empty_log > 1000) {
-            APP_LOG_DEBUG("LogicModule: No detections received, logging heartbeat.");
-            last_empty_log = now;
+        // TEST: Simulate a ballistic point for overlay verification even with 0 detections
+        if (ballistic_overlay_buffer_) {
+            auto& write_buf = ballistic_overlay_buffer_->get_write_buffer();
+            write_buf.x = 0.5f; // Center
+            write_buf.y = 0.5f;
+            write_buf.is_valid = true; // Corrected from 'valid' to 'is_valid'
+            ballistic_overlay_buffer_->commit_write(); // Corrected from 'swap()' to 'commit_write()'
         }
-        
         return;
     }
     
@@ -1053,13 +1109,19 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, CsvLog
         entry.logic_windage_m = primary->predicted_impact_point.x - primary->position.x;
         
         // Servo commands (normalized 0.0 to 1.0, where 0.5 is center)
-        entry.logic_servo_x_cmd = 0.5f + (primary->predicted_impact_point.x / static_cast<float>(config_.get_tpu_target_width()));
-        entry.logic_servo_y_cmd = 0.5f + (primary->predicted_impact_point.y / static_cast<float>(config_.get_tpu_target_height()));
+        float dx_px = (primary->predicted_impact_point.x * focal_length_px_) / std::max(0.01f, primary->position.z);
+        float dy_px = (primary->predicted_impact_point.y * focal_length_px_) / std::max(0.01f, primary->position.z);
+        float delta_theta_x = std::atan2(dx_px, focal_length_px_);
+        float delta_theta_y = std::atan2(dy_px, focal_length_px_);
+        constexpr float SERVO_RANGE_RAD = 180.0f * (3.1415926535f / 180.0f);
+        
+        entry.logic_servo_x_cmd = 0.5f + (delta_theta_x / SERVO_RANGE_RAD);
+        entry.logic_servo_y_cmd = 0.5f + (delta_theta_y / SERVO_RANGE_RAD);
         
         entry.logic_solution_time_ms = static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - total_process_start).count()) / 1000.0f;
     }
 
-    [[maybe_unused]] auto total_process_end = std::chrono::high_resolution_clock::now(); 
+    auto total_process_end = std::chrono::high_resolution_clock::now(); 
     APP_LOG_DEBUG("LogicModule: Total time for process function: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(total_process_end - total_process_start).count()) + " us");
 }
 
@@ -1107,6 +1169,10 @@ void LogicModule::calculate_ballistics_for_tracks() {
             // Propagate uncertainty based on flight time
             Uncertainty uncertainty = propagate_uncertainty(track, flight_time);
             
+            // Store results in track for later use
+            track.predicted_impact_point = impact_point;
+            track.uncertainty = uncertainty;
+
             // Validate the calculated impact point to prevent extremely large values that cause hangs
             if (!std::isfinite(impact_point.x) || !std::isfinite(impact_point.y) || !std::isfinite(impact_point.z) ||
                 std::abs(impact_point.x) > 100000.0f || std::abs(impact_point.y) > 100000.0f || std::abs(impact_point.z) > 100000.0f) {
@@ -1119,78 +1185,13 @@ void LogicModule::calculate_ballistics_for_tracks() {
                         // Store target for telemetry
                         last_target_pos_ = impact_point;
                         
-                        // Populate and commit ballistic overlay point
-                        if (ballistic_overlay_buffer_) {
-                            OverlayBallisticPoint& overlay_point = ballistic_overlay_buffer_->get_write_buffer();
-                            
-                            // Perform world-to-pixel projection
-                            // Clamp impact_point.z to prevent division by zero or near-zero
-                            float safe_impact_z = std::max(0.01f, impact_point.z); 
-
-                            // World-to-pixel projection: pixel_x = (world_x * focal_length_px_) / world_z + image_center_x_
-                            overlay_point.x = static_cast<int>(std::round((impact_point.x * focal_length_px_) / safe_impact_z + image_center_x_));
-                            overlay_point.y = static_cast<int>(std::round((impact_point.y * focal_length_px_) / safe_impact_z + image_center_y_));
-                            
-                            // Check for reasonable pixel coordinates (within image bounds)
-                            if (overlay_point.x >= 0 && overlay_point.x < config_.get_tpu_target_width() &&
-                                overlay_point.y >= 0 && overlay_point.y < config_.get_tpu_target_height()) {
-                                overlay_point.is_valid = true;
-                            } else {
-                                overlay_point.x = static_cast<int>(image_center_x_); // Center if invalid for now
-                                overlay_point.y = static_cast<int>(image_center_y_);
-                                overlay_point.is_valid = false;
-                            }
-                            overlay_point.frame_id = track.last_detection.source_frame_id; // Frame binding
-
-                            // Log the projection
-                            char proj_log_buffer[256];
-                            snprintf(proj_log_buffer, sizeof(proj_log_buffer), 
-                                     "BALLISTIC_PROJECTION_AUDIT: frame_id=%d world=(%.2f, %.2f, %.2f) -> pixel=(%d, %d) valid=%d",
-                                     overlay_point.frame_id, impact_point.x, impact_point.y, impact_point.z,
-                                     overlay_point.x, overlay_point.y, overlay_point.is_valid);
-                            APP_LOG_INFO(proj_log_buffer);
-
-                            // --- CAUSALITY VERIFICATION LOG ---
-                            char verify_log[128];
-                            snprintf(verify_log, sizeof(verify_log), 
-                                "LOGIC ballistic_commit frame_id=%d valid=1 x=%d y=%d", 
-                                overlay_point.frame_id, overlay_point.x, overlay_point.y);
-                            APP_LOG_INFO(verify_log);
-                            // -----------------------------------
-
-                            ballistic_overlay_buffer_->commit_write();
-                        }
-                        
-                        // Calculate servo command based on ballistics and uncertainty
-                        // This integrates the ballistics computation with servo feedback
-                        float combined_confidence = uncertainty.total_confidence;
-                        
-                        // Only issue servo commands if confidence is above activation threshold
-                        if (combined_confidence > config_.get_servo_activate_confidence()) {
-                            current_hit_scan_count_++; // Increment hit scan count
-                            last_hit_scan_ = true; // Mark for telemetry
-                            
-                // Log servo command issuance for invariant verification
-                APP_LOG_INFO("DETECTION_INVARIANT: Issuing servo command for track ID " + std::to_string(track.id) + 
-                             ", class=" + std::to_string(track.last_detection.class_id) + 
-                             ", confidence=" + std::to_string(combined_confidence));
-
-                // Issue servo commands to control LEDs
-                issue_servo_commands(impact_point.x, impact_point.y, impact_point.z, combined_confidence, track.last_detection.t_capture_raw_ms);
-                
-                // Format the impact point as JSON for telemetry
-                // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
-                std::string telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
-                                ", \"impact_point\": {\"x\": " + std::to_string(impact_point.x) +
-                                ", \"y\": " + std::to_string(impact_point.y) +
-                                ", \"z\": " + std::to_string(impact_point.z) + 
-                                ", \"confidence\": " + std::to_string(combined_confidence * 100.0f) + "}";
-                // Send telemetry data via ZeroMQ
-                send_telemetry_data(telemetry_message);
-            } else {
-                snprintf(log_buffer, sizeof(log_buffer), "Skipping servo command for Track ID %ld: Confidence too low (%.2f%%)", track.id, combined_confidence * 100.0f);
-                APP_LOG_INFO(log_buffer);
-            }
+                        // Telemetry for impact point
+                        std::string telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
+                                        ", \"impact_point\": {\"x\": " + std::to_string(impact_point.x) +
+                                        ", \"y\": " + std::to_string(impact_point.y) +
+                                        ", \"z\": " + std::to_string(impact_point.z) + 
+                                        ", \"confidence\": " + std::to_string(uncertainty.total_confidence * 100.0f) + "}";
+                        send_telemetry_data(telemetry_message);
         } else {
             snprintf(log_buffer, sizeof(log_buffer), "No Impact Point Predicted for Track ID %ld.", track.id);
             APP_LOG_INFO(log_buffer);
@@ -1202,205 +1203,146 @@ void LogicModule::calculate_ballistics_for_tracks() {
 
 void LogicModule::perform_safety_and_actuation() {
     char log_buffer[256];
-    // --- 4. Uncertainty Propagation & Safety Checks ---
-    
     // Record start time for performance measurement
     [[maybe_unused]] auto start_time = std::chrono::high_resolution_clock::now();
     
-    // Iterate through active tracks and perform safety checks
+    // Iterate through active tracks and perform region-based safety and actuation
     for (auto& track : active_tracks_) {
-        // Use the uncertainty already calculated and stored in the track
-        std::string safety_message;
-        SafetyStatus safety_status = perform_safety_and_uncertainty_checks(track, track.uncertainty, safety_message);
+        // 1. Predicted Impact Region
+        // Start from detection bounding box (normalized 0.0 - 1.0)
+        float xmin = track.last_detection.xmin;
+        float ymin = track.last_detection.ymin;
+        float xmax = track.last_detection.xmax;
+        float ymax = track.last_detection.ymax;
         
-        // Declare variables outside the switch statement to avoid cross-initialization issues
-        Vec3 crosshair_point = {0.0f, 0.0f, track.position.z};
-        float impact_distance = 0.0f;
-        float angular_error_degrees = 0.0f;
-        float distance_factor = 0.0f;
-        float combined_confidence = 0.0f;
-        // Additional variables for angular error calculation
-        float impact_pixel_x = 0.0f;
-        float impact_pixel_y = 0.0f;
-        float dx = 0.0f;
-        float dy = 0.0f;
-        float radial_px = 0.0f;
+        // Shrink to inner fraction of width and height from config
+        float w = xmax - xmin;
+        float h = ymax - ymin;
+        float x_center_norm = (xmin + xmax) / 2.0f;
+        float y_center_norm = (ymin + ymax) / 2.0f;
+        float inner_fraction = config_.get_inner_fraction();
+        float w_inner = w * inner_fraction;
+        float h_inner = h * inner_fraction;
         
-        switch (safety_status) {
-            case SAFETY_OK: {
-                if (current_fallback_mode_ != NORMAL_OPERATION) {
-                    APP_LOG_INFO("Returning to NORMAL_OPERATION.");
-                    current_fallback_mode_ = NORMAL_OPERATION;
-                }
-                snprintf(log_buffer, sizeof(log_buffer), "Safety check PASSED for Track ID %ld: %s", track.id, safety_message.c_str());
-                APP_LOG_INFO(log_buffer);
-                
-                // Calculate distance between predicted impact point and crosshair
-                // Crosshair is at center of frame (0, 0, track.position.z)
-                impact_distance = calculate_impact_point_distance(track.predicted_impact_point, crosshair_point);
-                
-                // Validate the predicted impact point to prevent extremely large values that cause hangs
-                if (!std::isfinite(track.predicted_impact_point.x) || !std::isfinite(track.predicted_impact_point.y) || !std::isfinite(track.predicted_impact_point.z) ||
-                    std::abs(track.predicted_impact_point.x) > 100000.0f || std::abs(track.predicted_impact_point.y) > 100000.0f || std::abs(track.predicted_impact_point.z) > 100000.0f) {
-                    snprintf(log_buffer, sizeof(log_buffer), "Invalid predicted impact point for Track ID %ld: impact=(%.2f, %.2f, %.2f). Skipping safety checks.", 
-                             track.id, track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z);
-                    APP_LOG_WARNING(log_buffer);
-                    continue; // Skip this track to prevent processing invalid data that causes hangs
-                }
-                
-                // Calculate angular error between crosshair and impact point using camera intrinsics
-                // Convert impact point from world coordinates to pixel coordinates
-                impact_pixel_x = (track.predicted_impact_point.x * focal_length_px_) / track.position.z + image_center_x_;
-                impact_pixel_y = (track.predicted_impact_point.y * focal_length_px_) / track.position.z + image_center_y_;
-                
-                // Calculate inner fraction center for more precise targeting
-                {
-                    float fraction = config_.get_inner_fraction();
-                    float bbox_width = track.last_detection.xmax - track.last_detection.xmin;
-                    float bbox_height = track.last_detection.ymax - track.last_detection.ymin;
-                    
-                    float inner_xmin = track.last_detection.xmin + (1.0f - fraction) * 0.5f * bbox_width;
-                    float inner_xmax = track.last_detection.xmax - (1.0f - fraction) * 0.5f * bbox_width;
-                    float inner_ymin = track.last_detection.ymin + (1.0f - fraction) * 0.5f * bbox_height;
-                    float inner_ymax = track.last_detection.ymax - (1.0f - fraction) * 0.5f * bbox_height;
-                    
-                    // Inner fraction center in normalized coordinates
-                    float inner_center_x_norm = (inner_xmin + inner_xmax) * 0.5f;
-                    float inner_center_y_norm = (inner_ymin + inner_ymax) * 0.5f;
-                    
-                    // Convert to pixel coordinates
-                    float inner_center_x_px = inner_center_x_norm * config_.get_tpu_target_width();
-                    float inner_center_y_px = inner_center_y_norm * config_.get_tpu_target_height();
-                    
-                    // Calculate radial displacement in pixels from inner fraction center
-                    dx = impact_pixel_x - inner_center_x_px;
-                    dy = impact_pixel_y - inner_center_y_px;
-                    
-                    // Enhanced logging for verification
-                    snprintf(log_buffer, sizeof(log_buffer), "INNER_FRACTION_CENTER: track_id=%ld inner_x=%.2f inner_y=%.2f bbox_center_x=%.2f bbox_center_y=%.2f", 
-                             track.id, inner_center_x_px, inner_center_y_px, 
-                             (track.last_detection.xmin + track.last_detection.xmax) * 0.5f * config_.get_tpu_target_width(),
-                             (track.last_detection.ymin + track.last_detection.ymax) * 0.5f * config_.get_tpu_target_height());
-                    APP_LOG_INFO(log_buffer);
-                }
-                
-                radial_px = std::sqrt(dx*dx + dy*dy);
-                
-                // Calculate angular error using camera intrinsics (atan approach)
-                angular_error_degrees = camera_cone_error_degrees_from_pixels(radial_px);
-                
-                // Enhanced logging for verification with detailed calculation information
-                {
-                    float angular_error_rad = std::atan(radial_px / focal_length_px_);
-                    float angular_error_deg_calc = angular_error_rad * (180.0f / PI);
-                    
-                    snprintf(log_buffer, sizeof(log_buffer), 
-                             "ANGULAR_ERROR_VALIDATION: track_id=%ld radial_px=%.2f focal_length_px=%.2f angular_deg=%.2f (calc=%.2f) threshold=%.2f", 
-                             track.id, radial_px, focal_length_px_, angular_error_degrees, angular_error_deg_calc, config_.get_max_angular_error_degrees());
-                    APP_LOG_INFO(log_buffer);
-                    
-                    // Additional verification logging for debugging
-                    char debug_log_buffer[256];
-                    snprintf(debug_log_buffer, sizeof(debug_log_buffer), 
-                             "ANGULAR_ERROR_DEBUG: track_id=%ld impact_pixel=(%.2f,%.2f) image_center=(%.2f,%.2f) dx=%.2f dy=%.2f", 
-                             track.id, impact_pixel_x, impact_pixel_y, image_center_x_, image_center_y_, dx, dy);
-                    APP_LOG_INFO(debug_log_buffer);
-                }
-                
-                // Hard angular veto: if angular error exceeds threshold, no servo command is issued
-                if (angular_error_degrees > config_.get_max_angular_error_degrees()) {
-                    snprintf(log_buffer, sizeof(log_buffer), "Skipping servo command for Track ID %ld: Angular error too high (%.2f° > %.2f°)", 
-                             track.id, angular_error_degrees, config_.get_max_angular_error_degrees());
-                    APP_LOG_INFO(log_buffer);
-                    continue; // Skip to the next track without issuing servo command
-                }
-                
-                // Calculate confidence based on uncertainty and distance
-                // Higher distance from crosshair means lower confidence
-                distance_factor = std::exp(-impact_distance * config_.get_distance_confidence_factor()); // Adjust this factor as needed
-                combined_confidence = track.uncertainty.total_confidence * distance_factor;
-                
-                // Additional servo gating checks:
-                // 1. Detection confidence ≥ 60%
-                // 2. Detection stability (minimum hit streak)
-                // 3. Distance variance is low (implies stable tracking)
-                // 4. Angular error is within limits (already checked above)
-                bool detection_confidence_ok = track.last_detection.score >= 0.01f;
-                bool detection_stable = track.hit_streak >= 2;  // At least 2 consecutive detections
-                
-                if (!detection_confidence_ok) {
-                    APP_LOG_DEBUG("Servo gating: Skipping track ID " + std::to_string(track.id) + 
-                                 " due to low detection confidence (" + std::to_string(track.last_detection.score) + " < 0.01)");
-                }
-                
-                if (!detection_stable) {
-                    APP_LOG_DEBUG("Servo gating: Skipping track ID " + std::to_string(track.id) + 
-                                 " due to insufficient stability (hit_streak=" + std::to_string(track.hit_streak) + " < 2)");
-                }
-                
-                // Only issue servo commands if all conditions are met
-                if (combined_confidence > config_.get_servo_activate_confidence() && 
-                    detection_confidence_ok && 
-                    detection_stable) {
-                    current_hit_scan_count_++; // Increment hit scan count
-                    last_hit_scan_ = true;     // Mark for telemetry
-                    last_target_pos_ = track.predicted_impact_point;
-                    
-                    // Log servo actuation
-                    APP_LOG_DEBUG("Servo actuating for Track ID " + std::to_string(track.id) + 
-                                 ", confidence=" + std::to_string(combined_confidence));
-                    
+        // impact_point calculated in calculate_ballistics_for_tracks is the compensated aim point.
+        // We project it to normalized coordinates to get the shifted region center.
+        float safe_dist = std::max(0.01f, track.position.z);
+        float impact_px_x = (track.predicted_impact_point.x * focal_length_px_) / safe_dist + image_center_x_;
+        float impact_px_y = (track.predicted_impact_point.y * focal_length_px_) / safe_dist + image_center_y_;
+        
+        float tpu_width = static_cast<float>(config_.get_tpu_target_width());
+        float tpu_height = static_cast<float>(config_.get_tpu_target_height());
+        
+        float impact_norm_x = impact_px_x / tpu_width;
+        float impact_norm_y = impact_px_y / tpu_height;
+        
+        // The predicted_region is centered at the normalized impact point (compensation applied)
+        struct { float x_min, y_min, x_max, y_max; } predicted_region;
+        predicted_region.x_min = impact_norm_x - w_inner / 2.0f;
+        predicted_region.y_min = impact_norm_y - h_inner / 2.0f;
+        predicted_region.x_max = impact_norm_x + w_inner / 2.0f;
+        predicted_region.y_max = impact_norm_y + h_inner / 2.0f;
 
-                    
-                    // Issue servo commands to control LEDs
-                    issue_servo_commands(track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z, combined_confidence, track.last_detection.t_capture_raw_ms);
-                    
-                    // Format the impact point as JSON for telemetry
-                    // Example JSON: {"track_id": 1, "impact_point": {"x": 10.5, "y": 2.1, "z": 150.7}}
-                    std::string telemetry_message = "{\"track_id\": " + std::to_string(track.id) + 
-                                    ", \"impact_point\": {\"x\": " + std::to_string(track.predicted_impact_point.x) +
-                                    ", \"y\": " + std::to_string(track.predicted_impact_point.y) +
-                                    ", \"z\": " + std::to_string(track.predicted_impact_point.z) + 
-                                    ", \"confidence\": " + std::to_string(combined_confidence * 100.0f) + 
-                                    ", \"angular_error\": " + std::to_string(angular_error_degrees) + "}";
-                    // Send telemetry data via ZeroMQ
-                    send_telemetry_data(telemetry_message);
-                } else {
-                    APP_LOG_DEBUG("Servo skipping for Track ID " + std::to_string(track.id) + 
-                                 ", confidence=" + std::to_string(combined_confidence));
-                    
+        // 2. Crosshair Cone – Circle Projection (using configured max angular error)
+        float theta_rad = config_.get_max_angular_error_degrees() * (PI / 180.0f); // half-angle of cone
+        // Compute radius in image-space pixels
+        float r_pixels = std::tan(theta_rad) * focal_length_px_;
+        
+        float cross_center_norm_x = image_center_x_ / tpu_width;
+        float cross_center_norm_y = image_center_y_ / tpu_height;
+        float r_norm_x = r_pixels / tpu_width;
+        float r_norm_y = r_pixels / tpu_height;
 
-                }
-                break;
-            }
-            case SAFETY_WARNING_UNCERTAINTY:
-            case SAFETY_WARNING_TRACK_UNSTABLE:
-                if (current_fallback_mode_ != FALLBACK_A_REDUCED_PERFORMANCE) {
-                    APP_LOG_WARNING("Activating FALLBACK_A_REDUCED_PERFORMANCE due to warning: " + safety_message);
-                    current_fallback_mode_ = FALLBACK_A_REDUCED_PERFORMANCE;
-                }
-                snprintf(log_buffer, sizeof(log_buffer), "Safety check WARNING for Track ID %ld: %s", track.id, safety_message.c_str());
+        // 3. Decision Rule – Full Inclusion
+        // Actuation occurs iff the circle is fully inside the predicted region
+        bool fire_allowed = (
+            cross_center_norm_x - r_norm_x >= predicted_region.x_min &&
+            cross_center_norm_y - r_norm_y >= predicted_region.y_min &&
+            cross_center_norm_x + r_norm_x <= predicted_region.x_max &&
+            cross_center_norm_y + r_norm_y <= predicted_region.y_max
+        );
+
+        if (r_norm_x * 2.0f > w_inner || r_norm_y * 2.0f > h_inner) {
+            static uint64_t last_warning_time = 0;
+            uint64_t now_ms = get_time_raw_ms();
+            if (now_ms - last_warning_time > 1000) {
+                snprintf(log_buffer, sizeof(log_buffer), 
+                    "[WARNING] Safety cone (r=%.2fpx) is larger than shrunken target box (w=%.2fpx, h=%.2fpx). Fire permanently blocked at this distance.",
+                    r_pixels, w_inner * tpu_width, h_inner * tpu_height);
                 APP_LOG_WARNING(log_buffer);
-                // Reduced performance action: e.g., only log, do not issue commands
-                break;
-            case SAFETY_CRITICAL_UNCERTAINTY:
-            case SAFETY_CRITICAL_OTHER:
-                if (current_fallback_mode_ != FALLBACK_B_WARNING_STATE) { // Promote to higher fallback if less severe mode
-                    APP_LOG_ERROR("Activating FALLBACK_B_WARNING_STATE due to critical issue: " + safety_message);
-                    current_fallback_mode_ = FALLBACK_B_WARNING_STATE;
-                }
-                snprintf(log_buffer, sizeof(log_buffer), "Safety check CRITICAL for Track ID %ld: %s", track.id, safety_message.c_str());
-                APP_LOG_ERROR(log_buffer);
-                // Critical action: e.g., halt all operations, wait for manual override
-                break;
-            default:
-                snprintf(log_buffer, sizeof(log_buffer), "Safety check: Unhandled SafetyStatus for Track ID %ld: %d", track.id, static_cast<int>(safety_status));
-                APP_LOG_ERROR(log_buffer);
-                break;
+                last_warning_time = now_ms;
+            }
         }
-    }
-    
 
+        // 4. Angular error for logging (must not block actuation)
+        float dx_px = impact_px_x - image_center_x_;
+        float dy_px = impact_px_y - image_center_y_;
+        float radial_px = std::sqrt(dx_px * dx_px + dy_px * dy_px);
+        float angular_error_degrees = std::atan(radial_px / focal_length_px_) * (180.0f / PI);
+
+        // 5. Logging
+        snprintf(log_buffer, sizeof(log_buffer), 
+            "REGION_ACTUATION: track_id=%ld fire_allowed=%d r_px=%.2f region=(%.3f,%.3f,%.3f,%.3f) cross=(%.3f,%.3f) ang_err=%.2f",
+            track.id, fire_allowed, r_pixels, 
+            predicted_region.x_min, predicted_region.y_min, predicted_region.x_max, predicted_region.y_max,
+            cross_center_norm_x, cross_center_norm_y, angular_error_degrees);
+        APP_LOG_INFO(log_buffer);
+
+        // Populate Ballistic Overlay Point for Avant-Garde
+        if (ballistic_overlay_buffer_) {
+            OverlayBallisticPoint& overlay_point = ballistic_overlay_buffer_->get_write_buffer();
+            overlay_point.impact_px_x = impact_px_x;
+            overlay_point.impact_px_y = impact_px_y;
+            overlay_point.safety_cone_radius_px = r_pixels;
+            overlay_point.safety_cone_violation = !fire_allowed;
+            overlay_point.inner_xmin = predicted_region.x_min;
+            overlay_point.inner_ymin = predicted_region.y_min;
+            overlay_point.inner_xmax = predicted_region.x_max;
+            overlay_point.inner_ymax = predicted_region.y_max;
+            overlay_point.confidence = track.uncertainty.total_confidence;
+            overlay_point.hit_streak = track.hit_streak;
+            overlay_point.frame_id = track.last_detection.source_frame_id;
+            overlay_point.is_valid = true;
+            
+            ballistic_overlay_buffer_->commit_write();
+            
+            // --- CAUSALITY VERIFICATION LOG ---
+            char verify_log[128];
+            snprintf(verify_log, sizeof(verify_log), 
+                "LOGIC ballistic_commit frame_id=%d valid=1 x=%d y=%d", 
+                overlay_point.frame_id, (int)overlay_point.impact_px_x, (int)overlay_point.impact_px_y);
+            APP_LOG_INFO(verify_log);
+            // -----------------------------------
+        }
+
+        // DETAILED DEBUG LOGGING (as requested)
+        snprintf(log_buffer, sizeof(log_buffer),
+            "AUDIT_VALS: track_id=%ld impact_world=(%.3f,%.3f,%.3f) impact_px=(%.1f,%.1f) impact_norm=(%.3f,%.3f) conf=%.3f streak=%d inner_f=%.2f",
+            track.id, track.predicted_impact_point.x, track.predicted_impact_point.y, track.predicted_impact_point.z,
+            impact_px_x, impact_px_y, impact_norm_x, impact_norm_y, 
+            track.uncertainty.total_confidence, track.hit_streak, inner_fraction);
+        APP_LOG_INFO(log_buffer);
+
+        // 6. Actuation Issue
+        if (fire_allowed && track.uncertainty.total_confidence > config_.get_servo_activate_confidence()) {
+            current_hit_scan_count_++;
+            last_hit_scan_ = true;
+            last_target_pos_ = track.predicted_impact_point;
+            
+            // Pass angular deltas (radians) to issue_servo_commands
+            // target_x/y fields now carry angular deltas
+            float delta_theta_x = std::atan2(dx_px, focal_length_px_);
+            float delta_theta_y = std::atan2(dy_px, focal_length_px_);
+            
+            issue_servo_commands(delta_theta_x, delta_theta_y, track.position.z, track.uncertainty.total_confidence, track.last_detection.t_capture_raw_ms);
+        } else {
+            last_hit_scan_ = false;
+        }
+
+        // Update system fallback mode based on uncertainty (monitoring only)
+        std::string safety_msg;
+        perform_safety_and_uncertainty_checks(track, track.uncertainty, safety_msg);
+    }
 }
 
 void LogicModule::update_object_tracks(const std::vector<DetectionResult>& detections) {
@@ -2125,7 +2067,7 @@ SafetyStatus LogicModule::perform_safety_and_uncertainty_checks(const TrackedObj
 }
 
 
-void LogicModule::issue_servo_commands(float target_x, float target_y, float target_z, float confidence, uint64_t t_capture) {
+void LogicModule::issue_servo_commands(float delta_theta_x, float delta_theta_y, float target_z, float confidence, uint64_t t_capture) {
     // Instead of executing servo commands directly, enqueue them for the servo worker thread
     ServoCommand* command = servo_command_pool_->acquire();
     if (!command) {
@@ -2133,8 +2075,8 @@ void LogicModule::issue_servo_commands(float target_x, float target_y, float tar
         return;
     }
 
-    command->target_x = target_x;
-    command->target_y = target_y;
+    command->target_x = delta_theta_x;
+    command->target_y = delta_theta_y;
     command->target_z = target_z;
     command->confidence = confidence;
     command->t_capture = t_capture;

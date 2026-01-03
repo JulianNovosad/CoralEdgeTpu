@@ -8,6 +8,7 @@
 #include <sstream>
 #include <iomanip>
 #include <random>
+#include <future>
 
 Monitor::Monitor(Application& app) : app_(app), running_(false) {
     // Generate a unique run ID
@@ -37,7 +38,29 @@ void Monitor::start() {
 void Monitor::stop() {
     if (running_.exchange(false)) {
         if (monitor_thread_.joinable()) {
-            monitor_thread_.join();
+            auto shared_promise = std::make_shared<std::promise<void>>();
+            std::future<void> future = shared_promise->get_future();
+            
+            std::thread joiner_thread([this, shared_promise]() {
+                try {
+                    if (monitor_thread_.joinable()) {
+                        monitor_thread_.join();
+                    }
+                    shared_promise->set_value();
+                } catch (...) {}
+            });
+            
+            if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
+                std::cerr << "[SHUTDOWN] Monitor thread did not join within 3s, detaching." << std::endl;
+                if (monitor_thread_.joinable()) {
+                    monitor_thread_.detach();
+                }
+                joiner_thread.detach();
+            } else {
+                if (joiner_thread.joinable()) {
+                    joiner_thread.join();
+                }
+            }
         }
     }
 }
