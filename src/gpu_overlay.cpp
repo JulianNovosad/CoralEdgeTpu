@@ -491,11 +491,12 @@ void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, c
 
     // Draw background quad
     // Standard GL coordinates, Standard UVs (0,0 is bottom-left)
+    // FIX: V coordinates flipped to correct camera orientation (Top-Left 0,0)
     std::vector<Vertex> vertices = {
-        {-1, -1, 0, 0, 1, 1, 1, 1, 0},   // BL
-        { 1, -1, 1, 0, 1, 1, 1, 1, 0},   // BR
-        {-1,  1, 0, 1, 1, 1, 1, 1, 0},   // TL
-        { 1,  1, 1, 1, 1, 1, 1, 1, 0}    // TR
+        {-1, -1, 0, 1, 1, 1, 1, 1, 0},   // BL - V=1 (Bottom of Image)
+        { 1, -1, 1, 1, 1, 1, 1, 1, 0},   // BR - V=1 (Bottom of Image)
+        {-1,  1, 0, 0, 1, 1, 1, 1, 0},   // TL - V=0 (Top of Image)
+        { 1,  1, 1, 0, 1, 1, 1, 1, 0}    // TR - V=0 (Top of Image)
     };
     
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
@@ -581,11 +582,14 @@ void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, c
         uint8_t* dst_row = bgr_data + ((height_ - 1 - y) * dst_stride);
         
         for (int x = 0; x < width_; ++x) {
-            // FORCE SWAP: src[0] is Red in GL, we want it in dst[2]
-            // src[2] is Blue in GL, we want it in dst[0]
-            dst_row[x * 3 + 0] = src_row[x * 4 + 0]; // Blue channel
+            // FIX: Correct assignment for BGR destination from RGB source
+            // glReadPixels returns RGBA. 
+            // src[0] = R, src[1] = G, src[2] = B
+            // dst is BGR. dst[0] = B, dst[1] = G, dst[2] = R
+            
+            dst_row[x * 3 + 0] = src_row[x * 4 + 2]; // Blue channel (from src Blue)
             dst_row[x * 3 + 1] = src_row[x * 4 + 1]; // Green
-            dst_row[x * 3 + 2] = src_row[x * 4 + 2]; // Red channel
+            dst_row[x * 3 + 2] = src_row[x * 4 + 0]; // Red channel (from src Red)
         }
     }
     

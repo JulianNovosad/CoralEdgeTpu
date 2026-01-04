@@ -878,9 +878,10 @@ void LogicModule::servo_worker_thread_func() {
                         
                         // Execute forward stroke
                         // cmd_ptr->target_x now carries delta_theta_x in radians
-                        constexpr float SERVO_RANGE_RAD = 180.0f * (PI / 180.0f);
-                        float target_pos = 0.5f + (cmd_ptr->target_x / SERVO_RANGE_RAD);
-                        target_pos = std::max(0.0f, std::min(1.0f, target_pos));
+                        // FIX: LogicModule has already gated this via fire_allowed. 
+                        // We are aligned. Treat this as a TRIGGER actuation, not an aiming correction.
+                        // Force full actuation stroke.
+                        float target_pos = 1.0f; 
                         
                         // Lobotomized: Hardware calls ENABLED
                         if (led_controller_ && led_controller_->is_initialized()) {
@@ -888,7 +889,7 @@ void LogicModule::servo_worker_thread_func() {
                         }
                         
                         char log_buf[256];
-                        snprintf(log_buf, sizeof(log_buf), "ACTUATION_START: Latency=%lu ms, Pos=%.2f, Conf=%.2f%%", 
+                        snprintf(log_buf, sizeof(log_buf), "ACTUATION_START: Latency=%lu ms, Pos=%.2f (FIRE), Conf=%.2f%%", 
                                  latency, target_pos, cmd_ptr->confidence * 100.0f);
                         APP_LOG_INFO(log_buf);
                     }
@@ -1253,13 +1254,14 @@ void LogicModule::perform_safety_and_actuation() {
         float r_norm_x = r_pixels / tpu_width;
         float r_norm_y = r_pixels / tpu_height;
 
-        // 3. Decision Rule – Full Inclusion
-        // Actuation occurs iff the circle is fully inside the predicted region
+        // 3. Decision Rule – Center Inclusion (Relaxed)
+        // Actuation occurs if the crosshair center is strictly inside the predicted region.
+        // We trust the 'inner_fraction' (0.5) to provide the necessary spatial margin.
         bool fire_allowed = (
-            cross_center_norm_x - r_norm_x >= predicted_region.x_min &&
-            cross_center_norm_y - r_norm_y >= predicted_region.y_min &&
-            cross_center_norm_x + r_norm_x <= predicted_region.x_max &&
-            cross_center_norm_y + r_norm_y <= predicted_region.y_max
+            cross_center_norm_x >= predicted_region.x_min &&
+            cross_center_norm_y >= predicted_region.y_min &&
+            cross_center_norm_x <= predicted_region.x_max &&
+            cross_center_norm_y <= predicted_region.y_max
         );
 
         if (r_norm_x * 2.0f > w_inner || r_norm_y * 2.0f > h_inner) {
