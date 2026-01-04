@@ -25,10 +25,14 @@ private:
     GLuint texture_id_;
     GLuint vbo_;
     GLuint font_texture_id_;
+    GLuint fbo_id_ = 0;
+    GLuint fbo_texture_id_ = 0;
+    std::vector<uint8_t> readback_buffer_;
 
     void setup_shaders();
     void setup_textures();
     void setup_geometry();
+    bool setup_fbo();
     void draw_rect(float x1, float y1, float x2, float y2, float r, float g, float b, float thickness);
     void draw_line(float x1, float y1, float x2, float y2, float r, float g, float b, float thickness);
     void draw_text(const std::string& text, float x, float y, float size, float r, float g, float b);

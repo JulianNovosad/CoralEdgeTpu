@@ -255,6 +255,7 @@ bool CameraCapture::start() {
     // controls_to_set.set(libcamera::controls::FrameDurationLimits, libcamera::Span<const int64_t, 2>({frame_duration_us, frame_duration_us}));
     controls_to_set.set(libcamera::controls::AeEnable, false);
     controls_to_set.set(libcamera::controls::ExposureTime, 8000);
+    controls_to_set.set(libcamera::controls::AnalogueGain, 8.0f);
     
     if (camera_->start(&controls_to_set)) {
         APP_LOG_ERROR("Failed to start camera.");
@@ -552,21 +553,10 @@ void CameraCapture::request_processor_thread_func() {
             Logger::getInstance().log_csv(cam_entry);
         }
         
-        // OPTIMIZATION: Extract buffers and reuse request immediately to keep libcamera pipeline full
+        // Extract buffers
         libcamera::Request::BufferMap captured_buffers = request->buffers();
         
         // Log SENSOR FPS frequently
-        static int sensor_frame_counter = 0;
-        static auto sensor_start_time = std::chrono::steady_clock::now();
-        sensor_frame_counter++;
-        auto sensor_duration = std::chrono::duration_cast<std::chrono::milliseconds>(now_mon - sensor_start_time).count();
-        if (sensor_duration >= 1000) {
-            APP_LOG_INFO("SENSOR FPS: " + std::to_string((sensor_frame_counter * 1000.0) / sensor_duration));
-            sensor_frame_counter = 0;
-            sensor_start_time = now_mon;
-        }
-
-        // Processing block (independent of the Request object's lifecycle once buffers are used)
         if (captured_buffers.empty()) {
             APP_LOG_WARNING("CameraCapture: No buffers in completed request.");
             if (app_ref_) {
@@ -579,10 +569,6 @@ void CameraCapture::request_processor_thread_func() {
             request->reuse(libcamera::Request::ReuseBuffers); 
             if (running_.load() && camera_) camera_->queueRequest(request);
         } else {
-            // REUSE IMMEDIATELY
-            request->reuse(libcamera::Request::ReuseBuffers); 
-            if (running_.load() && camera_) camera_->queueRequest(request);
-
             bool processed_any_frame = false;
             
             // Map MappedBuffer to MappedBufferInfo for the static helper
@@ -649,6 +635,10 @@ void CameraCapture::request_processor_thread_func() {
                     app_ref_->inc_cam_to_tpu_proc_dropped();
                 }
             }
+
+            // REUSE AFTER PROCESSING
+            request->reuse(libcamera::Request::ReuseBuffers); 
+            if (running_.load() && camera_) camera_->queueRequest(request);
         }
     }
 }

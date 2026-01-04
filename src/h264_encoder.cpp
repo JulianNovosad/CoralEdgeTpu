@@ -115,8 +115,8 @@ void H264Encoder::worker_thread_func() {
     param.i_fps_den = 1;
     param.i_timebase_num = 1;
     param.i_timebase_den = (int)fps_; 
-    param.i_keyint_max = 30; 
-    param.b_intra_refresh = 0; 
+    param.i_keyint_max = (int)fps_; 
+    param.b_intra_refresh = 1; 
     
     // Input pixel format (OpenCV uses BGR, but we convert to YUV420p for x264)
     param.i_csp = X264_CSP_I420; 
@@ -134,9 +134,11 @@ void H264Encoder::worker_thread_func() {
     // Apply profile and tune settings
     x264_param_apply_profile(&param, "baseline"); // Baseline profile for broad compatibility
     
-    // Additional settings
-    param.rc.i_rc_method = X264_RC_CRF;
-    param.rc.f_rf_constant = 25; // Standard quality
+    // Rate control: Use ABR with a reasonable bitrate to prevent "too small" packets on static scenes
+    param.rc.i_rc_method = X264_RC_ABR;
+    param.rc.i_bitrate = 2500; // 2.5 Mbps
+    param.rc.i_vbv_max_bitrate = 3000;
+    param.rc.i_vbv_buffer_size = 1000; // 0.4s buffer at 2.5Mbps
     
     // Additional ultra-low latency settings
     param.i_sync_lookahead = 0;
@@ -248,6 +250,8 @@ void H264Encoder::worker_thread_func() {
                     if (h264_buffer_shared) {
                         H264Buffer* h264_buffer = h264_buffer_shared.get();
                         if (static_cast<size_t>(encoded_frame_size) <= h264_buffer->data.capacity()) {
+                            // AUTHORITY: x264_encoder_encode returns the TOTAL size of all NALs in encoded_frame_size.
+                            // The nals[0].p_payload points to the start of the contiguous buffer containing ALL NALs.
                             std::memcpy(h264_buffer->data.data(), nals[0].p_payload, encoded_frame_size);
                             h264_buffer->size = encoded_frame_size;
                             h264_buffer->frame_id = image_data.frame_id;

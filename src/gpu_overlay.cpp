@@ -175,6 +175,7 @@ flat in int vType;
 
 uniform sampler2D uTexture;
 uniform sampler2D uFontTexture;
+uniform float uBrightness;
 
 out vec4 fragColor;
 
@@ -182,7 +183,7 @@ void main() {
     if (vType == 0) {
         // Background texture (BGR to RGB swap)
         vec4 tex = texture(uTexture, vTexCoord);
-        fragColor = vec4(tex.b, tex.g, tex.r, 1.0);
+        fragColor = vec4(tex.b * uBrightness, tex.g * uBrightness, tex.r * uBrightness, 1.0);
     } else if (vType == 1) {
         // Primitive
         fragColor = vColor;
@@ -199,6 +200,13 @@ GpuOverlay::GpuOverlay(int width, int height) : width_(width), height_(height), 
 }
 
 GpuOverlay::~GpuOverlay() {
+    if (fbo_id_ != 0) glDeleteFramebuffers(1, &fbo_id_);
+    if (fbo_texture_id_ != 0) glDeleteTextures(1, &fbo_texture_id_);
+    if (texture_id_ != 0) glDeleteTextures(1, &texture_id_);
+    if (font_texture_id_ != 0) glDeleteTextures(1, &font_texture_id_);
+    if (vbo_ != 0) glDeleteBuffers(1, &vbo_);
+    if (program_ != 0) glDeleteProgram(program_);
+
     if (egl_display_ != EGL_NO_DISPLAY) {
         eglMakeCurrent(egl_display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (egl_context_ != EGL_NO_CONTEXT) eglDestroyContext(egl_display_, egl_context_);
@@ -212,33 +220,52 @@ bool GpuOverlay::initialize() {
 
     typedef EGLDisplay (EGLAPIENTRYP PFNEGLGETPLATFORMDISPLAYPROC) (EGLenum platform, void *native_display, const EGLAttrib *attrib_list);
     PFNEGLGETPLATFORMDISPLAYPROC eglGetPlatformDisplay_ptr = (PFNEGLGETPLATFORMDISPLAYPROC)eglGetProcAddress("eglGetPlatformDisplay");
+    if (!eglGetPlatformDisplay_ptr) {
+        APP_LOG_ERROR("GpuOverlay: eglGetProcAddress for eglGetPlatformDisplay failed.");
+    }
 
     if (eglGetPlatformDisplay_ptr) {
         // SURFACELESS is generally best for headless
         APP_LOG_INFO("GpuOverlay: Trying EGL_PLATFORM_SURFACELESS_MESA.");
         egl_display_ = eglGetPlatformDisplay_ptr(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, nullptr);
+        if (egl_display_ == EGL_NO_DISPLAY) {
+            APP_LOG_WARNING("GpuOverlay: eglGetPlatformDisplay(SURFACELESS) failed, error: " + std::to_string(eglGetError()));
+        }
     }
 
     if (egl_display_ == EGL_NO_DISPLAY) {
-        APP_LOG_WARNING("GpuOverlay: eglGetPlatformDisplay(SURFACELESS) failed, trying GBM.");
+        APP_LOG_INFO("GpuOverlay: Trying GBM platform.");
         int drm_fd = open("/dev/dri/renderD128", O_RDWR | O_CLOEXEC);
         if (drm_fd >= 0) {
             struct gbm_device* gbm = gbm_create_device(drm_fd);
-            if (gbm && eglGetPlatformDisplay_ptr) {
-                egl_display_ = eglGetPlatformDisplay_ptr(EGL_PLATFORM_GBM_MESA, gbm, nullptr);
-            } else if (drm_fd >= 0) {
-                close(drm_fd);
+            if (gbm) { // Check if gbm_create_device was successful
+                if (eglGetPlatformDisplay_ptr) {
+                    egl_display_ = eglGetPlatformDisplay_ptr(EGL_PLATFORM_GBM_MESA, gbm, nullptr);
+                    if (egl_display_ == EGL_NO_DISPLAY) {
+                        APP_LOG_WARNING("GpuOverlay: eglGetPlatformDisplay(GBM) failed, error: " + std::to_string(eglGetError()));
+                    }
+                }
+                // Don't destroy gbm here, as it might be needed by the display.
+                // The lifetime of gbm_device should usually be tied to the display.
+            } else { // gbm_create_device failed
+                APP_LOG_ERROR("GpuOverlay: gbm_create_device failed.");
             }
+            close(drm_fd); // Close the DRM FD here, gbm_device itself manages its own reference to the FD.
+        } else {
+            APP_LOG_WARNING("GpuOverlay: Failed to open /dev/dri/renderD128 for GBM, error: " + std::string(strerror(errno)));
         }
     }
 
     if (egl_display_ == EGL_NO_DISPLAY) {
         APP_LOG_WARNING("GpuOverlay: All platform attempts failed, trying eglGetDisplay(DEFAULT).");
         egl_display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        if (egl_display_ == EGL_NO_DISPLAY) {
+            APP_LOG_ERROR("GpuOverlay: eglGetDisplay(DEFAULT) failed, error: " + std::to_string(eglGetError()));
+        }
     }
 
     if (egl_display_ == EGL_NO_DISPLAY) {
-        APP_LOG_ERROR("GpuOverlay: Failed to get EGL display, error: " + std::to_string(eglGetError()));
+        APP_LOG_ERROR("GpuOverlay: Failed to get EGL display (final fallback).");
         return false;
     }
 
@@ -257,6 +284,11 @@ bool GpuOverlay::initialize() {
     
     std::vector<EGLConfig> all_configs(num_configs_total);
     eglGetConfigs(egl_display_, all_configs.data(), num_configs_total, &num_configs_total);
+    EGLint post_get_configs_err = eglGetError();
+    if (post_get_configs_err != EGL_SUCCESS) {
+        APP_LOG_ERROR("GpuOverlay: eglGetConfigs (after fill) failed, error: " + std::to_string(post_get_configs_err));
+        return false;
+    }
 
     EGLConfig config = nullptr;
     for (const auto& c : all_configs) {
@@ -284,7 +316,7 @@ bool GpuOverlay::initialize() {
     }
 
     if (!config) {
-        APP_LOG_ERROR("GpuOverlay: No suitable EGL config found.");
+        APP_LOG_ERROR("GpuOverlay: No suitable EGL config found (final check).");
         return false;
     }
 
@@ -321,11 +353,22 @@ bool GpuOverlay::initialize() {
         }
     }
 
+    EGLint make_current_err = eglGetError();
+    if (make_current_err != EGL_SUCCESS) {
+        APP_LOG_ERROR("GpuOverlay: eglMakeCurrent failed at the end of initialize, error: " + std::to_string(make_current_err));
+        return false;
+    }
+
 
     APP_LOG_INFO("GpuOverlay: EGL/GLES3 context created and made current.");
     setup_shaders();
     setup_textures();
     setup_geometry();
+
+    if (!setup_fbo()) {
+        APP_LOG_ERROR("GpuOverlay: Failed to setup FBO.");
+        return false;
+    }
 
     return true;
 }
@@ -391,6 +434,35 @@ void GpuOverlay::setup_geometry() {
     glGenBuffers(1, &vbo_);
 }
 
+bool GpuOverlay::setup_fbo() {
+    glGenFramebuffers(1, &fbo_id_);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo_id_);
+
+    glGenTextures(1, &fbo_texture_id_);
+    glBindTexture(GL_TEXTURE_2D, fbo_texture_id_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_texture_id_, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        APP_LOG_ERROR("GpuOverlay: Framebuffer is not complete!");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return false;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return true;
+}
+
+void check_error(const std::string& label) {
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        APP_LOG_ERROR("GpuOverlay: OpenGL error at " + label + ": " + std::to_string(err));
+    }
+}
+
 struct Vertex {
     float x, y;
     float u, v;
@@ -399,25 +471,33 @@ struct Vertex {
 };
 
 void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, const OverlayBallisticPoint* ballistic_point, uint64_t frame_counter) {
+    // Bind our FBO for off-screen rendering
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo_id_);
+    check_error("BindFramebuffer");
+
     glViewport(0, 0, width_, height_);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(program_);
+    glUniform1f(glGetUniformLocation(program_, "uBrightness"), 1.5f);
 
-    // Update background texture
+    // Update background texture with CPU data
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture_id_);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGB, GL_UNSIGNED_BYTE, bgr_data);
+    check_error("UpdateTexture");
 
     // Draw background quad
+    // Standard GL coordinates, Standard UVs (0,0 is bottom-left)
     std::vector<Vertex> vertices = {
-        {-1, 1, 0, 1, 1, 1, 1, 1, 0},
-        {-1, -1, 0, 0, 1, 1, 1, 1, 0},
-        {1, 1, 1, 1, 1, 1, 1, 1, 0},
-        {1, -1, 1, 0, 1, 1, 1, 1, 0}
+        {-1, -1, 0, 0, 1, 1, 1, 1, 0},   // BL
+        { 1, -1, 1, 0, 1, 1, 1, 1, 0},   // BR
+        {-1,  1, 0, 1, 1, 1, 1, 1, 0},   // TL
+        { 1,  1, 1, 1, 1, 1, 1, 1, 0}    // TR
     };
-
+    
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STREAM_DRAW);
 
@@ -429,27 +509,17 @@ void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, c
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, r));
     glEnableVertexAttribArray(3);
     glVertexAttribIPointer(3, 1, GL_INT, sizeof(Vertex), (void*)offsetof(Vertex, type));
+    check_error("SetupAttributes");
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    check_error("DrawBackground");
 
     // Render Overlays
-    // ASPECT RATIO AUTHORITY: TPU is center-crop of 16:9
-    const float sensor_ar = 16.0f / 9.0f;
-    const float tpu_ar = 1.0f / 1.0f;
-    const float tpu_width_in_sensor = tpu_ar / sensor_ar;
-    const float tpu_x_offset_in_sensor = (1.0f - tpu_width_in_sensor) / 2.0f;
-
     for (const auto& d : detections) {
-        float x_min_norm = tpu_x_offset_in_sensor + d.xmin * tpu_width_in_sensor;
-        float x_max_norm = tpu_x_offset_in_sensor + d.xmax * tpu_width_in_sensor;
-        float y_min_norm = d.ymin;
-        float y_max_norm = d.ymax;
-
-        // Convert normalized [0,1] to GL [-1,1]
-        float gl_x1 = x_min_norm * 2.0f - 1.0f;
-        float gl_y1 = 1.0f - y_min_norm * 2.0f;
-        float gl_x2 = x_max_norm * 2.0f - 1.0f;
-        float gl_y2 = 1.0f - y_max_norm * 2.0f;
+        float gl_x1 = d.xmin * 2.0f - 1.0f;
+        float gl_y1 = (1.0f - d.ymin) * 2.0f - 1.0f; // Logic Top (0) -> GL Top (1)
+        float gl_x2 = d.xmax * 2.0f - 1.0f;
+        float gl_y2 = (1.0f - d.ymax) * 2.0f - 1.0f;
 
         draw_rect(gl_x1, gl_y1, gl_x2, gl_y2, 1, 0, 0, 2.0f);
         
@@ -461,18 +531,18 @@ void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, c
     draw_line(-0.05f, 0, 0.05f, 0, 1, 1, 1, 2.0f);
     draw_line(0, -0.05f, 0, 0.05f, 1, 1, 1, 2.0f);
 
-    draw_text("OVERLAY PATH EXECUTED (GPU)", -0.95f, 0.9f, 0.05f, 1, 1, 1);
+    draw_text("OVERLAY PATH EXECUTED (GPU FBO)", -0.95f, 0.9f, 0.05f, 1, 1, 1);
     draw_text("Frame: " + std::to_string(frame_counter), -0.95f, 0.8f, 0.04f, 1, 1, 1);
 
     if (ballistic_point && ballistic_point->is_valid && ballistic_point->frame_id == (int)frame_counter) {
         float b_x = (ballistic_point->impact_px_x / width_) * 2.0f - 1.0f;
-        float b_y = 1.0f - (ballistic_point->impact_px_y / height_) * 2.0f;
+        float b_y = (1.0f - (ballistic_point->impact_px_y / height_)) * 2.0f - 1.0f; 
         float r_x = (ballistic_point->safety_cone_radius_px / width_) * 2.0f;
         
         float ix1 = ballistic_point->inner_xmin * 2.0f - 1.0f;
-        float iy1 = 1.0f - ballistic_point->inner_ymin * 2.0f;
+        float iy1 = (1.0f - ballistic_point->inner_ymin) * 2.0f - 1.0f;
         float ix2 = ballistic_point->inner_xmax * 2.0f - 1.0f;
-        float iy2 = 1.0f - ballistic_point->inner_ymax * 2.0f;
+        float iy2 = (1.0f - ballistic_point->inner_ymax) * 2.0f - 1.0f;
 
         draw_rect(ix1, iy1, ix2, iy2, 1, 1, 0, 1.0f);
         
@@ -485,18 +555,41 @@ void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, c
         snprintf(tel, sizeof(tel), "CONF: %.1f%% STREAK: %d", ballistic_point->confidence * 100.0f, ballistic_point->hit_streak);
         draw_text(tel, b_x + 0.02f, b_y + 0.02f, 0.035f, 1, 1, 1);
     }
+    check_error("DrawOverlays");
 
-    // Read back to CPU
-    glReadPixels(0, 0, width_, height_, GL_RGB, GL_UNSIGNED_BYTE, bgr_data);
+    // Ensure all rendering is complete before readback
+    glFinish();
+
+    // Read back to CPU using RGBA (safer alignment/support)
+    size_t needed_size = width_ * height_ * 4;
+    if (readback_buffer_.size() < needed_size) {
+        readback_buffer_.resize(needed_size);
+    }
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 1); 
+    glReadPixels(0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, readback_buffer_.data());
+    check_error("ReadPixels");
+
+    const int dst_stride = width_ * 3;
+    const int src_stride = width_ * 4;
     
-    // NOTE: glReadPixels returns image with bottom row first. We might need to flip it or handle it in encoder.
-    // Actually, cv::Mat uses top-left origin. So we need a vertical flip if we want it correct.
-    // Optimization: Since we draw it flipped in GL, it might come back correctly?
-    // Let's check: Background quad uses (-1,1) for (0,0) texcoord. 
-    // In GLES (0,0) is bottom-left. So (0,0) texcoord in background quad is bottom-left of texture.
-    // If our BGR data is top-left origin, and we upload it normally, GL (0,0) is bottom-left.
-    // So the background quad should map (0,1) texcoord to (-1,1) GL pos.
-    // Let's fix vertices to be top-down.
+    for (int y = 0; y < height_; ++y) {
+        // Source is GL (bottom-up), Dest is App (top-down)
+        // src row y=0 is bottom
+        // dst row y=height-1 is bottom
+        const uint8_t* src_row = readback_buffer_.data() + (y * src_stride);
+        uint8_t* dst_row = bgr_data + ((height_ - 1 - y) * dst_stride);
+        
+        for (int x = 0; x < width_; ++x) {
+            // FORCE SWAP: src[0] is Red in GL, we want it in dst[2]
+            // src[2] is Blue in GL, we want it in dst[0]
+            dst_row[x * 3 + 0] = src_row[x * 4 + 0]; // Blue channel
+            dst_row[x * 3 + 1] = src_row[x * 4 + 1]; // Green
+            dst_row[x * 3 + 2] = src_row[x * 4 + 2]; // Red channel
+        }
+    }
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void GpuOverlay::draw_rect(float x1, float y1, float x2, float y2, float r, float g, float b, float thickness) {
@@ -511,6 +604,7 @@ void GpuOverlay::draw_line(float x1, float y1, float x2, float y2, float r, floa
         {x1, y1, 0, 0, r, g, b, 1, 1},
         {x2, y2, 0, 0, r, g, b, 1, 1}
     };
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STREAM_DRAW);
     glDrawArrays(GL_LINES, 0, 2);
 }
@@ -523,6 +617,8 @@ void GpuOverlay::draw_text(const std::string& text, float x, float y, float size
     float char_w = size;
     float char_h = size * aspect;
 
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+
     for (size_t i = 0; i < text.length(); ++i) {
         char c = text[i];
         float u_start = (float)c / 128.0f;
@@ -532,9 +628,9 @@ void GpuOverlay::draw_text(const std::string& text, float x, float y, float size
         
         std::vector<Vertex> vertices = {
             {cx, y, u_start, 0, r, g, b, 1, 2},
-            {cx, y - char_h, u_start, 1, r, g, b, 1, 2},
+            {cx, y + char_h, u_start, 1, r, g, b, 1, 2},
             {cx + char_w, y, u_end, 0, r, g, b, 1, 2},
-            {cx + char_w, y - char_h, u_end, 1, r, g, b, 1, 2}
+            {cx + char_w, y + char_h, u_end, 1, r, g, b, 1, 2}
         };
         glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -549,6 +645,7 @@ void GpuOverlay::draw_circle(float cx, float cy, float radius, float r, float g,
         float theta = 2.0f * 3.14159f * (float)i / segments;
         vertices.push_back({cx + radius * std::cos(theta), cy + radius * std::sin(theta) * aspect, 0, 0, r, g, b, 1, 1});
     }
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STREAM_DRAW);
     glDrawArrays(GL_LINE_STRIP, 0, vertices.size());
 }
