@@ -1,3 +1,5 @@
+// Verified headers: [thread, atomic, vector, string, chrono...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef CAMERA_CAPTURE_H
 #define CAMERA_CAPTURE_H
 
@@ -50,6 +52,7 @@ public:
      */
     CameraCapture(unsigned int main_width, unsigned int main_height,
                                                                             unsigned int tpu_width, unsigned int tpu_height,
+                                                                            unsigned int tpu_fps,
                                                                             unsigned int target_tpu_width, unsigned int target_tpu_height,
                                                                             std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
                                                                             std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
@@ -168,6 +171,8 @@ public:
     
     // Method to set application reference for updating counters
     void set_application_ref(class Application* app) { app_ref_ = app; }
+    
+    std::thread& get_request_processor_thread() { return request_processor_thread_; }
 private:
     
     // Frame accounting counters

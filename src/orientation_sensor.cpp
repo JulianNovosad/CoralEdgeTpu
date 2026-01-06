@@ -1,3 +1,5 @@
+// Verified headers: [orientation_sensor.h, util_logging.h, json.hpp, future]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "orientation_sensor.h"
 #include "util_logging.h"
 #include "json.hpp"
@@ -43,7 +45,7 @@ void OrientationSensor::stop() {
             } catch (...) {}
         });
         if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-            std::cerr << "[SHUTDOWN] OrientationSensor receiver thread did not join within 3s, detaching." << std::endl;
+            APP_LOG_WARNING("[SHUTDOWN] OrientationSensor receiver thread did not join within 3s, detaching.");
             if (receiver_thread_.joinable()) receiver_thread_.detach();
             joiner_thread.detach();
         } else {

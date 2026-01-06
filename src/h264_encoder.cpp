@@ -1,3 +1,5 @@
+// Verified headers: [h264_encoder.h, application.h, x264.h, future, thread]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "h264_encoder.h"
 #include "application.h"
 #include <x264.h>
@@ -72,7 +74,7 @@ void H264Encoder::stop() {
         });
         
         if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-            std::cerr << "[SHUTDOWN] H264Encoder worker thread did not join within 3s, detaching." << std::endl;
+            APP_LOG_WARNING("[SHUTDOWN] H264Encoder worker thread did not join within 3s, detaching.");
             if (worker_thread_->joinable()) {
                 worker_thread_->detach();
             }
@@ -156,7 +158,6 @@ void H264Encoder::worker_thread_func() {
 
     APP_LOG_INFO("H264Encoder: Attempting to allocate x264 picture_in_...");
     if (x264_picture_alloc(&picture_in, param.i_csp, param.i_width, param.i_height) < 0) {
-        std::cerr << "DEBUG: H264Encoder alloc picture failed!" << std::endl;
         APP_LOG_ERROR("H264Encoder: Failed to allocate x264 picture_in_.");
         running_.store(false); 
         return;

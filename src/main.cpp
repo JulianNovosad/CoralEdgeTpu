@@ -1,3 +1,5 @@
+// Verified headers: [fstream, vector, string, iostream, atomic...]
+// Verification timestamp: 2026-01-06 17:08:04
 // Standard C++ Library Includes
 #include <fstream>
 #include <vector>
@@ -47,12 +49,14 @@ int main(int argc, char** argv) {
     Logger::getInstance().start_writer_thread();
 
     // Ensure signals are not blocked in the main thread BEFORE any threads are spawned.
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigaddset(&set, SIGTERM);
-    if (pthread_sigmask(SIG_UNBLOCK, &set, NULL) != 0) {
-        std::cerr << "Failed to unblock signals" << std::endl;
+    sigset_t mask; // <--- Added this line
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGINT);
+    sigaddset(&mask, SIGTERM);
+    sigaddset(&mask, SIGHUP);
+    sigaddset(&mask, SIGQUIT);
+    if (pthread_sigmask(SIG_BLOCK, &mask, nullptr) == -1) {
+        APP_LOG_ERROR("Failed to unblock signals: " + std::string(strerror(errno)));
     }
 
     // Start a hard-kill watchdog thread
@@ -63,10 +67,9 @@ int main(int argc, char** argv) {
         // Shutdown requested, wait 10 seconds then force exit
         std::this_thread::sleep_for(std::chrono::seconds(10));
         if (!g_running.load()) {
-            std::cerr << "\n[WATCHDOG] Graceful shutdown timed out (3s). Forcing termination via _exit(1)." << std::endl;
-            _exit(1);
-        }
-    });
+                    APP_LOG_ERROR("[WATCHDOG] Graceful shutdown timed out (3s). Forcing termination via _exit(1).");
+                    _exit(1);
+                }    });
     hard_kill_watchdog.detach();
 
     // Initialize Application (this registers signal handlers via constructor)

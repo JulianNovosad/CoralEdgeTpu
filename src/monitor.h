@@ -1,3 +1,5 @@
+// Verified headers: [atomic, thread, chrono, iostream, iomanip...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef MONITOR_H
 #define MONITOR_H
 

@@ -1,3 +1,5 @@
+// Verified headers: [inference.h, util_logging.h, iostream, stdexcept, algorithm...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "inference.h"
 #include "util_logging.h"
 #include <iostream>
@@ -50,7 +52,7 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
       detection_result_pool_(detection_result_pool),
       image_data_pool_(image_data_pool),
       result_token_pool_(result_token_pool),
-      num_threads_(1), // FORCE TO 1 THREAD
+      num_threads_(num_threads),
       score_threshold_(score_threshold) {
 
     // Load the TensorFlow Lite model from the file system.
@@ -115,22 +117,14 @@ InferenceEngine::InferenceEngine(const std::string& model_path,
             options.size());
         
         if (!edgetpu_delegate_) {
-            APP_LOG_ERROR("Edge TPU delegate creation failed with options. Falling back to CPU to avoid blocking startup.");
-            // We skip further retries (like without options or USB type) because they often 
-            // trigger the same kernel timeout (12s) which blocks the main thread.
-            APP_LOG_WARNING("Continuing without Edge TPU delegate. Inference will run on CPU.");
+            throw std::runtime_error("Edge TPU delegate creation failed with options. Cannot proceed without Edge TPU.");
         } else {
             APP_LOG_INFO("Edge TPU delegate created successfully.");
         }
     } else {
-        APP_LOG_WARNING("No Edge TPU devices found. Inference will run on CPU.");
+        throw std::runtime_error("No Edge TPU devices found. Cannot proceed without Edge TPU.");
     }
     
-    if (edgetpu_delegate_) {
-        APP_LOG_INFO("Edge TPU delegate created successfully in InferenceEngine constructor. Delegate address: " + std::to_string(reinterpret_cast<uintptr_t>(edgetpu_delegate_)));
-    } else {
-        APP_LOG_WARNING("Edge TPU delegate not available. Inference will run on CPU.");
-    }
 }
 
 InferenceEngine::~InferenceEngine() {
@@ -217,35 +211,37 @@ void InferenceEngine::recreate_delegate() {
 }
 
 std::unique_ptr<tflite::Interpreter> InferenceEngine::create_interpreter() {
+    APP_LOG_INFO("create_interpreter: Attempting to create interpreter...");
     // Safety: Take shared lock because we read edgetpu_delegate_
     std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
     
     std::unique_ptr<tflite::Interpreter> local_interpreter;
     tflite::InterpreterBuilder(*model_, resolver_)(&local_interpreter);
     if (!local_interpreter) {
-        APP_LOG_ERROR("Failed to build interpreter.");
-        return nullptr;
+        APP_LOG_ERROR("create_interpreter: Failed to build interpreter.");
+        return nullptr; // Truly fatal, cannot even build a basic interpreter
     }
+    APP_LOG_INFO("create_interpreter: Interpreter built successfully.");
 
     // Apply the pre-created EdgeTPU delegate
     // MANDATE: If the delegate is configured but fails to apply, this is a FATAL error
     // for an Edge TPU compiled model.
-    if (edgetpu_delegate_) {
-        TfLiteStatus status = local_interpreter->ModifyGraphWithDelegate(edgetpu_delegate_);
-        if (status != kTfLiteOk) {
-            APP_LOG_ERROR("FATAL: Failed to apply EdgeTPU delegate to interpreter. Status: " + std::to_string(status));
-            return nullptr;
-        }
-        APP_LOG_INFO("EdgeTPU delegate applied successfully to interpreter.");
-    } else {
-        APP_LOG_ERROR("FATAL: No EdgeTPU delegate available. Refusing to run on CPU to avoid massive latency.");
-        return nullptr;
-    }
-    
+            if (edgetpu_delegate_) {
+                TfLiteStatus status = local_interpreter->ModifyGraphWithDelegate(edgetpu_delegate_);
+                if (status != kTfLiteOk) {
+                    APP_LOG_ERROR("create_interpreter: FATAL: Failed to apply EdgeTPU delegate to interpreter. Status: " + std::to_string(status));
+                    return nullptr;
+                }
+                APP_LOG_INFO("create_interpreter: EdgeTPU delegate applied successfully.");
+            } else {
+                APP_LOG_ERROR("create_interpreter: FATAL: No EdgeTPU delegate available. Refusing to run on CPU.");
+                return nullptr;
+            }    
     if (local_interpreter->AllocateTensors() != kTfLiteOk) {
-        APP_LOG_ERROR("Failed to allocate tensors.");
-        return nullptr;
+        APP_LOG_WARNING("create_interpreter: Failed to allocate tensors.");
+        return nullptr; // This interpreter instance is unusable, so it must be discarded.
     }
+    APP_LOG_INFO("create_interpreter: Tensors allocated successfully.");
     
     return local_interpreter;
 }
@@ -328,7 +324,6 @@ void InferenceEngine::worker_thread_func() {
                 std::shared_lock<std::shared_mutex> lock(delegate_mutex_);
                 invoke_status = interpreter->Invoke();
             }
-            std::cerr << "InferenceEngine: Invoke() returned " << invoke_status << " for frame " << input_image.frame_id << std::endl;
             auto invoke_end_time = std::chrono::steady_clock::now();
             uint64_t t_inf_end = get_time_raw_ms();
             long long duration_us = std::chrono::duration_cast<std::chrono::microseconds>(invoke_end_time - invoke_start_time).count();
@@ -509,7 +504,6 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
         APP_LOG_WARNING("Failed to acquire a detection result buffer from the pool. No results will be reported for this frame.");
         return nullptr;
     }
-    std::cerr << "InferenceEngine: get_output_tensor() for frame " << input_image.frame_id << std::endl;
     results_buffer->size = 0; // Reset size
 
     // Manual cleanup function - call this on error paths before returning nullptr
@@ -521,6 +515,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
 
     size_t num_outputs = interpreter->outputs().size();
     std::vector<DetectionResult> raw_detections;
+    raw_detections.reserve(100); // [REQ-006] Pre-allocate to avoid heap re-alloc in hot path
     auto timestamp = std::chrono::steady_clock::now();
 
     // -------------------------------------------------------------------------
@@ -577,6 +572,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
 
         for (int i = 0; i < num_detections; ++i) {
             float score = (static_cast<float>(scores[i]) - score_zp) * score_scale;
+            // [REQ-005] Detection Accuracy Gate
             if (score > score_threshold_) {
                 float class_val = (static_cast<float>(classes[i]) - class_zp) * class_scale;
                 
@@ -723,6 +719,7 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
     }
 
     std::vector<DetectionResult> filtered_detections;
+    filtered_detections.reserve(raw_detections.size()); // [REQ-006] Avoid realloc
     std::vector<bool> is_suppressed(raw_detections.size(), false);
     
     auto calculate_iou = [](const DetectionResult& a, const DetectionResult& b) {
@@ -754,27 +751,13 @@ std::shared_ptr<DetectionResultBuffer> InferenceEngine::get_output_tensor(tflite
 
     // --- Step 3: Post-NMS instrumentation (AI truth) ---
     // Log: nms_box_count, min / max confidence, first box (x_min, y_min, x_max, y_max)
-    char nms_log_buffer[256];
-    float min_conf = 1.0f;
-    float max_conf = 0.0f;
-    if (!filtered_detections.empty()) {
-        for (const auto& det : filtered_detections) {
-            min_conf = std::min(min_conf, det.score);
-            max_conf = std::max(max_conf, det.score);
-        }
-        const auto& first_box = filtered_detections[0];
-        snprintf(nms_log_buffer, sizeof(nms_log_buffer),
-                 "nms_box_count=%zu, min_confidence=%.2f, max_confidence=%.2f, first_box=(%.2f,%.2f,%.2f,%.2f)",
-                 filtered_detections.size(), min_conf, max_conf,
-                 first_box.xmin, first_box.ymin, first_box.xmax, first_box.ymax);
-        APP_LOG_INFO(nms_log_buffer);
-    } else {
-        APP_LOG_INFO("NMS OUTPUT EMPTY");
+    if (filtered_detections.empty()) {
+        // Optional: low-frequency log if needed
     }
 
     // Fill buffer
     size_t result_count = 0;
-    std::cerr << "InferenceEngine: filtered_detections.size()=" << filtered_detections.size() << " for frame " << input_image.frame_id << std::endl;
+    APP_LOG_DEBUG("InferenceEngine: filtered_detections.size()=" + std::to_string(filtered_detections.size()) + " for frame " + std::to_string(input_image.frame_id));
     for (const auto& det : filtered_detections) {
         if (result_count >= results_buffer->data.size()) break;
         results_buffer->data[result_count++] = det;

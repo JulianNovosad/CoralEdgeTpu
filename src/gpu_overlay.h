@@ -1,3 +1,5 @@
+// Verified headers: [EGL/egl.h, GLES3/gl3.h, vector, string, pipeline_structs.h]
+// Verification timestamp: 2026-01-06 17:08:04
 #pragma once
 
 #include <EGL/egl.h>

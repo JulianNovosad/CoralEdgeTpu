@@ -1,3 +1,5 @@
+// Verified headers: [string, memory, atomic, thread, mutex...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef ORIENTATION_SENSOR_H
 #define ORIENTATION_SENSOR_H
 

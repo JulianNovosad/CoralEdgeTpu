@@ -1,3 +1,5 @@
+// Verified headers: [util_logging.h, config_loader.h, iostream, filesystem, sstream...]
+// Verification timestamp: 2026-01-06 17:08:04
 /**
  * @file util_logging.cpp
  * @brief Implements a thread-safe, asynchronous logging utility for the application.
@@ -20,47 +22,15 @@
 #include <string>         // Explicitly include <string> for std::string
 #include "pipeline_structs.h"
 
+#include <sched.h>          // For CPU affinity
+
+
 #ifdef __linux__
 #include <sys/prctl.h> // For prctl(PR_SET_NAME)
 #endif
 
 // set_thread_name implementation
-void write_telemetry_trace(const TelemetryFrame* buffer, size_t start_idx, size_t end_idx) {
-    if (!buffer) return;
 
-    FILE* f = fopen("/tmp/aurore_trace.csv", "a");
-    if (!f) {
-        std::cerr << "[ERROR] Failed to open /tmp/aurore_trace.csv for writing: " << strerror(errno) << std::endl;
-        return;
-    }
-
-    // Check if file is empty to write header
-    fseek(f, 0, SEEK_END);
-    if (ftell(f) == 0) {
-        fprintf(f, "Frame,Capture,InfTime,LogicTime,X,Y,Z,State,Hit\n");
-    }
-
-    for (size_t i = start_idx; i < end_idx; ++i) {
-        const TelemetryFrame& frame = buffer[i % 10000]; // Fixed size 10000
-        
-        // Calculate durations
-        long long inf_time = (long long)(frame.t_inf_end - frame.t_inf_start);
-        long long logic_time = (long long)(frame.t_logic_end - frame.t_logic_start);
-
-        fprintf(f, "%lu,%lu,%lld,%lld,%.2f,%.2f,%.2f,%d,%d\n",
-                frame.frame_id,
-                frame.t_capture,
-                inf_time,
-                logic_time,
-                frame.target_x,
-                frame.target_y,
-                frame.target_z,
-                frame.state,
-                frame.hit_scan ? 1 : 0);
-    }
-
-    fclose(f);
-}
 
 void set_thread_name(const std::string& name) {
 #ifdef __linux__
@@ -72,6 +42,31 @@ void set_thread_name(const std::string& name) {
     // No-op on other platforms
     (void)name; // Suppress unused parameter warning
 #endif // __linux__
+}
+
+void set_realtime_priority(std::thread& thread, int priority, int cpu_core) {
+#ifdef __linux__
+    sched_param sch;
+    int policy;
+    pthread_getschedparam(thread.native_handle(), &policy, &sch);
+    sch.sched_priority = priority;
+    if (pthread_setschedparam(thread.native_handle(), SCHED_FIFO, &sch) != 0) {
+        APP_LOG_WARNING("Failed to set SCHED_FIFO for thread: " + std::string(strerror(errno)));
+    }
+
+    if (cpu_core >= 0) {
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(cpu_core, &cpuset);
+        if (pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset) != 0) {
+            APP_LOG_WARNING("Failed to set CPU affinity for thread to core " + std::to_string(cpu_core) + ": " + std::string(strerror(errno)));
+        }
+    }
+#else
+    (void)thread;
+    (void)priority;
+    (void)cpu_core;
+#endif
 }
 
 namespace fs = std::filesystem; ///< Alias for std::filesystem for brevity. 
@@ -119,7 +114,7 @@ CsvLogger::CsvLogger(const std::string& log_file_path)
     // Open in append mode
     current_log_file_.open(log_file_path_, std::ios_base::out | std::ios_base::app);
     if (!current_log_file_.is_open()) {
-        std::cerr << "Failed to open Unified CSV log file: " << log_file_path_ << " - Reason: " << strerror(errno) << std::endl;
+        APP_LOG_ERROR("Failed to open Unified CSV log file: " + log_file_path_ + " - Reason: " + std::string(strerror(errno)));
     } else {
         // Write header if file is empty
         if (fs::file_size(log_file_path_) == 0) {
@@ -129,7 +124,7 @@ CsvLogger::CsvLogger(const std::string& log_file_path)
 }
 
 CsvLogger::~CsvLogger() {
-    std::cerr << "CsvLogger: Destructor called, flushing final buffer..." << std::endl;
+    APP_LOG_INFO("CsvLogger: Destructor called, flushing final buffer...");
     flush_buffer_to_disk(); // Ensure data is saved before closing
     std::lock_guard<std::recursive_mutex> lock(file_mutex_);
     if (current_log_file_.is_open()) {
@@ -157,10 +152,6 @@ void CsvLogger::write_entry(const CsvLogEntry& entry) {
         std::lock_guard<std::mutex> lock(buffer_mutex_);
         buffer_.push_back(entry);
     }
-    if (buffer_.size() % 10 == 0) {
-        std::cerr << "CsvLogger: Buffer size reached " << buffer_.size() << ", forcing flush." << std::endl;
-        flush_buffer_to_disk();
-    }
 }
 
 void CsvLogger::flush_buffer_to_disk() {
@@ -170,14 +161,14 @@ void CsvLogger::flush_buffer_to_disk() {
     }
 
     size_t count = buffer_.size();
-    std::cerr << "CsvLogger: Flushing " << count << " entries to " << log_file_path_ << std::endl;
+    // std::cerr << "CsvLogger: Flushing " << count << " entries to " << log_file_path_ << std::endl;
 
     std::lock_guard<std::recursive_mutex> file_lock(file_mutex_);
     if (!current_log_file_.is_open()) {
         // Try to re-open
         current_log_file_.open(log_file_path_, std::ios_base::out | std::ios_base::app);
         if (!current_log_file_.is_open()) {
-            std::cerr << "Failed to reopen CSV log file. Entries dropped." << std::endl;
+            APP_LOG_ERROR("Failed to reopen CSV log file. Entries dropped.");
             buffer_.clear();
             return;
         }
@@ -293,7 +284,7 @@ Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_d
     fs::path std_log_path = session_path / (log_file_prefix_ + ".json");
     standard_log_file_.open(std_log_path.string(), std::ios_base::out | std::ios_base::trunc);
     if (!standard_log_file_.is_open()) {
-        std::cerr << "Failed to open standard log file: " << std_log_path << std::endl;
+        APP_LOG_ERROR("Failed to open standard log file: " + std_log_path.string());
     }
 
     // 5. Write Metadata Sidecar
@@ -306,7 +297,7 @@ Logger::Logger(const std::string& log_file_prefix, const std::string& base_log_d
     // 6. Initialize Unified CSV Logger
     fs::path unified_csv_path = session_path / "unified.csv";
     unified_logger_ = std::make_unique<CsvLogger>(unified_csv_path.string());
-    std::cerr << "Logger: Initialized in directory: " << current_session_dir_ << std::endl;
+    APP_LOG_INFO("Logger: Initialized in directory: " + current_session_dir_);
 }
 
 Logger::~Logger() {
@@ -362,8 +353,6 @@ void Logger::writer_thread_func() {
     LogEntry entry; 
     while (running_.load(std::memory_order_acquire)) { 
         if (log_queue_.pop(entry)) { 
-            std::cerr << "[" << entry.level.data() << "] " << entry.message.data() << std::endl;
-
             if (standard_log_file_.is_open()) {
                 standard_log_file_ << "{\"timestamp\":\"" << get_current_iso_time() << "\", \"level\":\"" << entry.level.data() << "\", \"message\":\"" << entry.message.data() << "\"}" << std::endl;
             }
@@ -372,7 +361,6 @@ void Logger::writer_thread_func() {
         }
     }
     while (log_queue_.pop(entry)) {
-        std::cout << "[" << entry.level.data() << "] " << entry.message.data() << std::endl;
         if (standard_log_file_.is_open()) {
             standard_log_file_ << "{\"timestamp\":\"" << get_current_iso_time() << "\", \"level\":\"" << entry.level.data() << "\", \"message\":\"" << entry.message.data() << "\"}" << std::endl;
         }
@@ -406,7 +394,7 @@ long long Logger::get_raw_monotonic_time_ns() {
 void Logger::log_flusher_thread_func() {
     set_thread_name("CsvFlusher");
     while (running_.load(std::memory_order_acquire)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); 
         if (unified_logger_) {
             unified_logger_->flush_buffer_to_disk();
         }
@@ -425,7 +413,7 @@ void Logger::prune_session_directories() {
             }
         }
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "Logger: Error iterating log dir for pruning: " << e.what() << std::endl;
+        APP_LOG_ERROR("Logger: Error iterating log dir for pruning: " + std::string(e.what()));
     }
 
     std::sort(sessions.begin(), sessions.end()); // Lexicographical sort works for YYYYMMDD_HHMMSS
@@ -467,6 +455,6 @@ void Logger::write_metadata_json(const ConfigLoader* config) {
 
         meta_file << meta.dump(4);
     } else {
-        std::cerr << "Logger: Failed to write metadata.json" << std::endl;
+        APP_LOG_ERROR("Logger: Failed to write metadata.json");
     }
 }

@@ -1,3 +1,5 @@
+// Verified headers: [termios.h, application_supervisor.h, camera_capture.h, config_loader.h, h264_encoder.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef APPLICATION_H
 #define APPLICATION_H
 

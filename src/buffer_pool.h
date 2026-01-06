@@ -1,3 +1,5 @@
+// Verified headers: [vector, memory, mutex, condition_variable, queue...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef BUFFER_POOL_H
 #define BUFFER_POOL_H
 

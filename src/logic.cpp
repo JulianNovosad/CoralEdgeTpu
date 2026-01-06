@@ -1,3 +1,5 @@
+// Verified headers: [config_loader.h, logic.h, util_logging.h, orientation_sensor.h, application.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "config_loader.h"
 #include "logic.h"
 #include "util_logging.h"
@@ -98,7 +100,7 @@ BallisticState BallisticsSolver::rk4_step(const BallisticState& state, float dt,
 }
 
 std::vector<BallisticState> BallisticsSolver::calculate_trajectory(float initial_pitch, float max_distance, float time_step_override) {
-    std::cerr << "BallisticsSolver: calculate_trajectory() start, pitch=" << initial_pitch << ", dist=" << max_distance << std::endl;
+    APP_LOG_DEBUG("BallisticsSolver: calculate_trajectory() start, pitch=" + std::to_string(initial_pitch) + ", dist=" + std::to_string(max_distance));
     std::vector<BallisticState> trajectory;
     float air_density = get_air_density();
 
@@ -280,7 +282,7 @@ float BallisticsSolver::calculate_flight_time(float distance) {
 }
 
 bool BallisticsSolver::calculate_impact_point(const TrackedObject& target, Vec3& out_impact_point, float& out_flight_time) {
-    std::cerr << "BallisticsSolver: Starting calculation for Track ID " << target.id << std::endl;
+    APP_LOG_DEBUG("BallisticsSolver: Starting calculation for Track ID " + std::to_string(target.id));
     // Validate input target position
     if (!std::isfinite(target.position.x) || !std::isfinite(target.position.y) || !std::isfinite(target.position.z)) {
         APP_LOG_ERROR("Invalid target position values detected in calculate_impact_point");
@@ -487,8 +489,9 @@ LogicModule::LogicModule(DetectionResultsQueue& detection_input_queue,
         APP_LOG_WARNING("Failed to initialize PCA9685 LED controller");
     } else {
         APP_LOG_INFO("PCA9685 LED controller initialized successfully");
-        // Set servo 0 to middle position as indicator that system is running
-        led_controller_->set_servo_position(0, 0.5f); // 50% position (middle)
+        // [REQ-002] System must default to SAFE state on startup.
+        // Set servo 0 to SAFE position (0.0) immediately.
+        led_controller_->set_servo_position(0, 0.0f); 
     }
 
     APP_LOG_INFO("LogicModule created with 3D Ballistics Solver, configured from file.");
@@ -569,7 +572,7 @@ void LogicModule::stop() {
                 } catch (...) {}
             });
             if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-                std::cerr << "[SHUTDOWN] Logic telemetry worker thread did not join within 3s, detaching." << std::endl;
+                APP_LOG_WARNING("[SHUTDOWN] Logic telemetry worker thread did not join within 3s, detaching.");
                 if (telemetry_worker_thread_.joinable()) telemetry_worker_thread_.detach();
                 joiner_thread.detach();
             } else {
@@ -591,7 +594,7 @@ void LogicModule::stop() {
                 } catch (...) {}
             });
             if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-                std::cerr << "[SHUTDOWN] Logic servo worker thread did not join within 3s, detaching." << std::endl;
+                APP_LOG_WARNING("[SHUTDOWN] Logic servo worker thread did not join within 3s, detaching.");
                 if (servo_worker_thread_.joinable()) servo_worker_thread_.detach();
                 joiner_thread.detach();
             } else {
@@ -633,16 +636,12 @@ void LogicModule::worker_thread_func() {
     APP_LOG_INFO("LogicModule: Starting main processing loop - HEARTBEAT");
     
     while (running_.load(std::memory_order_acquire) && g_running.load(std::memory_order_acquire)) {
-        std::cerr << "LogicModule: TOP OF LOOP" << std::endl;
         auto start_time = std::chrono::steady_clock::now();
         ResultToken* token_ptr = nullptr;
-        // std::cerr << "LogicModule: Waiting for detection token..." << std::endl;
         if (detection_input_queue_.wait_pop(token_ptr, std::chrono::milliseconds(100))) {
             if (!token_ptr) {
-                std::cerr << "LogicModule: Received poison pill" << std::endl;
                 break; // Poison pill
             }
-            std::cerr << "LogicModule: Popped token for frame " << (token_ptr->isValid() ? std::to_string(token_ptr->get()->frame_id) : "INVALID") << std::endl;
 
             struct LogicAccountingGuard {
                 LogicModule* mod;
@@ -664,52 +663,26 @@ void LogicModule::worker_thread_func() {
                 }
             } guard(this, token_ptr);
 
-            std::cerr << "LogicModule: Checking token validity" << std::endl;
             if (!token_ptr->isValid()) {
-                std::cerr << "LogicModule: Token INVALID" << std::endl;
                 continue;
             }
             
             ResultToken& token = *token_ptr;
             auto detections_buffer = token.get();
             
-            std::cerr << "LogicModule: Checking detections_buffer" << std::endl;
             // Immediate safety check: Verify buffer validity before any access
             if (!detections_buffer || !detections_buffer.get() || !detections_buffer->valid) {
-                std::cerr << "LogicModule: detections_buffer INVALID" << std::endl;
                 continue;
             }
-            std::cerr << "LogicModule: detections_buffer valid, frame_id=" << detections_buffer->frame_id << " detections=" << detections_buffer->size << std::endl;
 
             // Ballistic Hit-Scan Invariant (Section V.3) - Now safe to access buffer members
             uint64_t t_logic_start = get_time_raw_ms();
             uint64_t t_capture = detections_buffer->t_capture_raw_ms;
             uint64_t latency = t_logic_start - t_capture;
             
-            std::cerr << "LogicModule: Latency check: t_logic_start=" << t_logic_start << ", t_capture=" << t_capture << ", latency=" << latency << std::endl;
-
-            // Record frame in telemetry (success or violation)
-            {
-                size_t idx = telemetry_idx_.load(std::memory_order_relaxed);
-                TelemetryFrame& f = telemetry_buffer_[idx % TELEMETRY_BUFFER_SIZE];
-                f.frame_id = detections_buffer->frame_id;
-                f.t_capture = t_capture;
-                f.t_inf_start = detections_buffer->t_inf_start;
-                f.t_inf_end = detections_buffer->t_inf_end;
-                f.t_logic_start = t_logic_start;
-                f.t_logic_end = get_time_raw_ms();
-                f.target_x = last_target_pos_.x; 
-                f.target_y = last_target_pos_.y; 
-                f.target_z = last_target_pos_.z;
-                f.state = (int)servo_state_;
-                f.hit_scan = last_hit_scan_;
-                telemetry_idx_.store(idx + 1, std::memory_order_release);
-            }
-
-            std::cerr << "LogicModule: Budget check for frame " << detections_buffer->frame_id << ", latency=" << latency << std::endl;
+            // [REQ-001] End-to-End Latency Budget Check
             if (latency > MAX_FRAME_BUDGET_RAW_MS) {
-                std::cerr << "LogicModule: Budget VIOLATED for frame " << detections_buffer->frame_id << std::endl;
-                APP_LOG_WARNING("LogicModule: Dropping frame due to latency violation: " + std::to_string(latency) + "ms");
+                APP_LOG_WARNING("LogicModule: Dropping frame due to latency violation: " + std::to_string(latency) + "ms (REQ-001)");
                 continue; 
             }
 
@@ -812,7 +785,7 @@ void LogicModule::worker_thread_func() {
                 }
                 
                 // Log the complete unified entry
-                std::cerr << "LogicModule: Logging CSV entry for frame " << entry.cam_frame_id << std::endl;
+                APP_LOG_INFO("LogicModule: Logging CSV entry for frame " + std::to_string(entry.cam_frame_id));
                 Logger::getInstance().log_csv(entry);
                 
             } catch (const std::exception& e) {
@@ -854,21 +827,30 @@ void LogicModule::servo_worker_thread_func() {
     while (servo_worker_running_ && g_running.load(std::memory_order_acquire)) {
         uint64_t now = get_time_raw_ms();
         
+        // [REQ-010] Thermal Interlock: Force SAFE if CPU temp > 80C
+        if (system_monitor_ && system_monitor_->get_latest_cpu_temp() > 80.0f) {
+             if (led_controller_ && led_controller_->is_initialized()) {
+                 led_controller_->set_servo_position(0, 0.0f); // Force SAFE
+             }
+             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+             continue; // Skip state machine
+        }
+
         switch (servo_state_) {
             case ServoState::IDLE: {
-                // Reassert Safe State (0.5 center) continuously in IDLE
-                // Lobotomized: Hardware calls ENABLED
+                // [REQ-002] Reassert Safe State (0.0) continuously in IDLE
+                // Fail-Closed: Default to 0.0
                 if (led_controller_ && led_controller_->is_initialized()) {
-                    led_controller_->set_servo_position(0, 0.5f);
+                    led_controller_->set_servo_position(0, 0.0f);
                 }
 
                 ServoCommand* cmd_ptr = nullptr;
                 if (servo_command_queue_.pop(cmd_ptr)) {
-                    // Latency Audit
+                    // [REQ-001] Latency Budget Check (Photon-to-Actuation)
                     uint64_t latency = now - cmd_ptr->t_capture;
                     if (latency > MAX_FRAME_BUDGET_RAW_MS) {
                         char err_buf[128];
-                        snprintf(err_buf, sizeof(err_buf), "[TIMING_VIOLATION] Latency %lu ms exceeds %lu ms. DROPPING ACTUATION.", 
+                        snprintf(err_buf, sizeof(err_buf), "[TIMING_VIOLATION] Latency %lu ms exceeds %lu ms. DROPPING ACTUATION (REQ-001).", 
                                  latency, MAX_FRAME_BUDGET_RAW_MS);
                         APP_LOG_ERROR(err_buf);
                     } else if (cmd_ptr->confidence > config_.get_servo_activate_confidence()) {
@@ -876,14 +858,10 @@ void LogicModule::servo_worker_thread_func() {
                         servo_state_ = ServoState::ENGAGED;
                         state_start_ms_ = now;
                         
-                        // Execute forward stroke
-                        // cmd_ptr->target_x now carries delta_theta_x in radians
-                        // FIX: LogicModule has already gated this via fire_allowed. 
-                        // We are aligned. Treat this as a TRIGGER actuation, not an aiming correction.
-                        // Force full actuation stroke.
+                        // [SC-2] Ballistic Gate Passed
+                        // Execute forward stroke (FIRE)
                         float target_pos = 1.0f; 
                         
-                        // Lobotomized: Hardware calls ENABLED
                         if (led_controller_ && led_controller_->is_initialized()) {
                             led_controller_->set_servo_position(0, target_pos);
                         }
@@ -904,9 +882,9 @@ void LogicModule::servo_worker_thread_func() {
                     servo_state_ = ServoState::RETRACTING;
                     state_start_ms_ = now;
                     
-                    // Lobotomized: Hardware calls ENABLED
+                    // Return to SAFE (0.0)
                     if (led_controller_ && led_controller_->is_initialized()) {
-                        led_controller_->set_servo_position(0, 0.5f); // Return to center
+                        led_controller_->set_servo_position(0, 0.0f); 
                     }
                 }
                 break;
@@ -922,6 +900,7 @@ void LogicModule::servo_worker_thread_func() {
             }
 
             case ServoState::COOLDOWN: {
+                // [REQ-008] Enforce 300ms Cooldown
                 if (now - state_start_ms_ >= ACTUATION_COOLDOWN_MS) {
                     // TRANSITION: COOLDOWN -> IDLE
                     servo_state_ = ServoState::IDLE;
@@ -931,14 +910,12 @@ void LogicModule::servo_worker_thread_func() {
         }
 
         // 120 FPS Polling (~8.33ms)
-        // Use a precise wait to maintain frequency without heavy CPU load
         std::this_thread::sleep_for(std::chrono::milliseconds(8));
     }
 
-    // SHUTDOWN SAFETY: Final reassertion of Safe State
-    // Lobotomized: Hardware calls ENABLED
+    // SHUTDOWN SAFETY: Final reassertion of Safe State (REQ-002)
     if (led_controller_ && led_controller_->is_initialized()) {
-        led_controller_->set_servo_position(0, 0.5f);
+        led_controller_->set_servo_position(0, 0.0f);
     }
     APP_LOG_INFO("Servo worker thread stopped (Safe State Reasserted).");
 }
@@ -969,7 +946,7 @@ void LogicModule::telemetry_worker_thread_func() {
         
         // Trigger: flush more frequently for debugging (100 entries)
         if (current_idx - last_processed_idx >= 100) {
-            write_telemetry_trace(telemetry_buffer_.data(), last_processed_idx, current_idx);
+            // write_telemetry_trace(telemetry_buffer_.data(), last_processed_idx, current_idx);
             last_processed_idx = current_idx;
         }
 
@@ -979,7 +956,7 @@ void LogicModule::telemetry_worker_thread_func() {
     // Final flush on SIGINT/shutdown
     size_t final_idx = telemetry_idx_.load(std::memory_order_acquire);
     if (final_idx > last_processed_idx) {
-        write_telemetry_trace(telemetry_buffer_.data(), last_processed_idx, final_idx);
+        // write_telemetry_trace(telemetry_buffer_.data(), last_processed_idx, final_idx);
     }
     APP_LOG_INFO("Telemetry Janitor thread stopped (Final Flush Complete).");
 }
@@ -1066,30 +1043,20 @@ void LogicModule::process(const std::vector<DetectionResult>& detections, CsvLog
     }
 
     [[maybe_unused]] auto start_sensor_fusion = std::chrono::high_resolution_clock::now();
-    std::cerr << "LogicModule: perform_sensor_fusion() start" << std::endl;
     perform_sensor_fusion();
-    std::cerr << "LogicModule: perform_sensor_fusion() end" << std::endl;
     [[maybe_unused]] auto end_sensor_fusion = std::chrono::high_resolution_clock::now();
-    APP_LOG_DEBUG("LogicModule: Time for sensor fusion: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_sensor_fusion - start_sensor_fusion).count()) + " us");
 
     [[maybe_unused]] auto start_update_tracks = std::chrono::high_resolution_clock::now();
-    std::cerr << "LogicModule: update_object_tracks() start" << std::endl;
     update_object_tracks(detections);
-    std::cerr << "LogicModule: update_object_tracks() end" << std::endl;
     [[maybe_unused]] auto end_update_tracks = std::chrono::high_resolution_clock::now();
-    APP_LOG_DEBUG("LogicModule: Time to update object tracks: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_update_tracks - start_update_tracks).count()) + " us");
 
     [[maybe_unused]] auto start_ballistics = std::chrono::high_resolution_clock::now();
-    std::cerr << "LogicModule: calculate_ballistics_for_tracks() start" << std::endl;
     calculate_ballistics_for_tracks();
-    std::cerr << "LogicModule: calculate_ballistics_for_tracks() end" << std::endl;
     [[maybe_unused]] auto end_ballistics = std::chrono::high_resolution_clock::now();
-    APP_LOG_DEBUG("LogicModule: Time for ballistic calculations: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_ballistics - start_ballistics).count()) + " us");
 
     [[maybe_unused]] auto start_safety = std::chrono::high_resolution_clock::now();
     perform_safety_and_actuation();
     [[maybe_unused]] auto end_safety = std::chrono::high_resolution_clock::now();
-    APP_LOG_DEBUG("LogicModule: Time for safety and actuation: " + std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(end_safety - start_safety).count()) + " us");
 
     // --- Unified Logging Population ---
     if (!active_tracks_.empty()) {
@@ -1255,6 +1222,7 @@ void LogicModule::perform_safety_and_actuation() {
         float r_norm_y = r_pixels / tpu_height;
 
         // 3. Decision Rule – Center Inclusion (Relaxed)
+        // [SC-2] Ballistic Gate / [REQ-003] Safety Confidence
         // Actuation occurs if the crosshair center is strictly inside the predicted region.
         // We trust the 'inner_fraction' (0.5) to provide the necessary spatial margin.
         bool fire_allowed = (

@@ -1,3 +1,5 @@
+// Verified headers: [vector, string, chrono, deque, numeric]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef FRAME_ANALYZER_H
 #define FRAME_ANALYZER_H
 

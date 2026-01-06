@@ -1,3 +1,5 @@
+// Verified headers: [application.h, pipeline_structs.h, util_logging.h, queue_monitor.h, timing.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "application.h"
 #include "pipeline_structs.h"
 #include "util_logging.h"
@@ -47,7 +49,7 @@ static bool timed_join_thread(std::thread& thread, const std::string& thread_nam
     
     // Wait for the join to complete or timeout
     if (future.wait_for(timeout) == std::future_status::timeout) {
-        std::cerr << "[SHUTDOWN] Thread '" << thread_name << "' did not join within " << timeout.count() << "s, detaching to prevent SIGABRT." << std::endl;
+        APP_LOG_WARNING("[SHUTDOWN] Thread '" + thread_name + "' did not join within " + std::to_string(timeout.count()) + "s, detaching to prevent SIGABRT.");
         
         // If we timeout, we MUST detach the original thread to prevent SIGABRT on its destruction
         if (thread.joinable()) {
@@ -97,21 +99,21 @@ void Application::stop() {
     }
 
     g_running.store(false, std::memory_order_release);
-    std::cerr << "[SHUTDOWN] Application::stop() initiated." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Application::stop() initiated.");
 
     // 1. Stop the recovery thread first
     recovery_running_ = false;
     recovery_cv_.notify_all();
-    std::cerr << "[SHUTDOWN] Joining RecoveryThread..." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Joining RecoveryThread...");
     timed_join_thread(recovery_thread_, "RecoveryThread");
 
     // 2. Stop MPEG-TS Server and Encoder first (sink end of pipeline)
-    std::cerr << "[SHUTDOWN] Stopping MpegTsServer and H264Encoder..." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Stopping MpegTsServer and H264Encoder...");
     if (mpegts_server_) mpegts_server_->stop();
     if (h264_encoder_) h264_encoder_->stop();
 
     // 4. Wake up all blocked threads with poison pills
-    std::cerr << "[SHUTDOWN] Pushing poison pills..." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Pushing poison pills...");
     ImageData* p1 = image_data_pool_->acquire(); if (p1) { p1->buffer = nullptr; raw_image_for_processor_queue_->push(p1); }
     ImageData* p2 = image_data_pool_->acquire(); if (p2) { p2->buffer = nullptr; main_video_queue_->push(p2); }
     ImageData* p3 = image_data_pool_->acquire(); if (p3) { p3->buffer = nullptr; tpu_inference_queue_->push(p3); }
@@ -120,11 +122,11 @@ void Application::stop() {
     H264Buffer* h1 = h264_pool_->acquire_raw(); if (h1) { h1->size = 0; h264_output_queue_->push(h1); }
 
     // 5. ApplicationSupervisor handles the graceful shutdown of all registered modules
-    std::cerr << "[SHUTDOWN] Initiating supervisor shutdown..." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Initiating supervisor shutdown...");
     supervisor_.initiate_shutdown();
     
     // 6. Join the consumer threads
-    std::cerr << "[SHUTDOWN] Joining consumer threads..." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Joining consumer threads...");
     overlay_consumer_running_ = false;
     timed_join_thread(overlay_consumer_thread_, "OverlayConsumerThread");
     
@@ -132,13 +134,13 @@ void Application::stop() {
     timed_join_thread(h264_consumer_thread_, "H264ConsumerThread");
 
     // 7. Drain all queues to release all shared_ptrs and pooled buffers
-    std::cerr << "[SHUTDOWN] Draining queues..." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Draining queues...");
     drain_queues();
 
     // 8. Final cleanup
-    std::cerr << "[SHUTDOWN] Final supervisor cleanup..." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Final supervisor cleanup...");
     supervisor_.final_cleanup();
-    std::cerr << "[SHUTDOWN] Application::stop() completed." << std::endl;
+    APP_LOG_INFO("[SHUTDOWN] Application::stop() completed.");
 }
 
 void Application::post_shutdown_cleanup() {
@@ -213,6 +215,7 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         primary_camera_ = std::unique_ptr<CameraCapture>(new CameraCapture(
             cam_w, cam_h, // Main stream width/height
             config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
+            static_cast<unsigned int>(config_loader_.get_camera_fps()),
             config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
             image_pool_, image_data_pool_,
             *raw_image_for_processor_queue_,
@@ -444,7 +447,24 @@ bool Application::start_modules() {
 
         start_ok &= logic_module_->start();
 
-
+        if (start_ok) {
+            APP_LOG_INFO("Applying real-time priorities and CPU affinity to fire-control loop...");
+            set_realtime_priority(primary_camera_->get_request_processor_thread(), 90, 1); // Camera: highest priority, Core 1
+            set_realtime_priority(logic_module_->get_worker_thread(), 80, 3); // Logic: high priority, Core 3
+            int num_cpu_cores = 4; // Assuming Raspberry Pi 4 with 4 cores (0, 1, 2, 3)
+            int inference_thread_count = 0;
+            for (auto& thread : inference_engine_->get_worker_threads()) {
+                int assigned_core = -1;
+                // Distribute between Core 0 and Core 2 (leaving 1 for Camera, 3 for Logic)
+                if (inference_thread_count % 2 == 0) { // First, third, etc. inference thread on Core 0
+                    assigned_core = 0;
+                } else { // Second, fourth, etc. inference thread on Core 2
+                    assigned_core = 2;
+                }
+                set_realtime_priority(thread, 70, assigned_core); // Inference: medium priority
+                inference_thread_count++;
+            }
+        }
 
         if (!start_ok) {
 
@@ -724,6 +744,7 @@ bool Application::restart_camera_subsystem() {
         primary_camera_ = std::make_unique<CameraCapture>(
             cam_w, cam_h, // Main stream width/height
             config_loader_.get_tpu_stream_width(), config_loader_.get_tpu_stream_height(), // TPU stream width/height (from config)
+            static_cast<unsigned int>(config_loader_.get_camera_fps()),
             config_loader_.get_tpu_target_width(), config_loader_.get_tpu_target_height(), // Target TPU width/height (from config)
             image_pool_, image_data_pool_, *raw_image_for_processor_queue_, camera_watchdog_timeout);
         

@@ -1,3 +1,5 @@
+// Verified headers: [frame_analyzer.h, util_logging.h, iomanip, sstream]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "frame_analyzer.h"
 #include "util_logging.h" // For APP_LOG_INFO
 #include <iomanip> // For std::hex, std::setw, std::setfill

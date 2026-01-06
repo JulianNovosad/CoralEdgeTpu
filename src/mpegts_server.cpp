@@ -1,3 +1,5 @@
+// Verified headers: [mpegts_server.h, util_logging.h, sstream, cstring, arpa/inet.h]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "mpegts_server.h"
 #include "util_logging.h"
 #include <glib.h>

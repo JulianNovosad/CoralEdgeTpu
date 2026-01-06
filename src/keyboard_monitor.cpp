@@ -1,3 +1,5 @@
+// Verified headers: [termios.h, keyboard_monitor.h, util_logging.h, application_supervisor.h, iostream...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include <termios.h>
 #include "keyboard_monitor.h"
 #include "util_logging.h"

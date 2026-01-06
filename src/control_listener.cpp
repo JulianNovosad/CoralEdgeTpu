@@ -1,3 +1,5 @@
+// Verified headers: [iostream, string, vector, netinet/in.h, unistd.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include <iostream>
 #include <string>
 #include <vector>

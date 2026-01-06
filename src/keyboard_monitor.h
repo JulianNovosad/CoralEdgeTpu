@@ -1,3 +1,5 @@
+// Verified headers: [atomic, thread, termios.h]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef KEYBOARD_MONITOR_H
 #define KEYBOARD_MONITOR_H
 

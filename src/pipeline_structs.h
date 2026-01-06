@@ -1,3 +1,5 @@
+// Verified headers: [vector, string, chrono, queue, mutex...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef PIPELINE_STRUCTS_H
 #define PIPELINE_STRUCTS_H
 

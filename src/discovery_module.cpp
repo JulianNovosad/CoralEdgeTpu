@@ -1,3 +1,5 @@
+// Verified headers: [discovery_module.h, util_logging.h, json.hpp, netinet/in.h, arpa/inet.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "discovery_module.h"
 #include "util_logging.h"
 #include "json.hpp"
@@ -44,7 +46,7 @@ void DiscoveryModule::stop() {
             } catch (...) {}
         });
         if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-            std::cerr << "[SHUTDOWN] DiscoveryModule beacon thread did not join within 3s, detaching." << std::endl;
+            APP_LOG_WARNING("[SHUTDOWN] DiscoveryModule beacon thread did not join within 3s, detaching.");
             if (beacon_thread_.joinable()) beacon_thread_.detach();
             joiner_thread.detach();
         } else {
@@ -62,7 +64,7 @@ void DiscoveryModule::stop() {
             } catch (...) {}
         });
         if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-            std::cerr << "[SHUTDOWN] DiscoveryModule listener thread did not join within 3s, detaching." << std::endl;
+            APP_LOG_WARNING("[SHUTDOWN] DiscoveryModule listener thread did not join within 3s, detaching.");
             if (listener_thread_.joinable()) listener_thread_.detach();
             joiner_thread.detach();
         } else {

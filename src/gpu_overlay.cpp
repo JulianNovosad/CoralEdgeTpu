@@ -1,3 +1,5 @@
+// Verified headers: [EGL/egl.h, EGL/eglext.h, gbm.h, cstring, fcntl.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <gbm.h>

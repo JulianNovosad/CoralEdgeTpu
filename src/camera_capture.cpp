@@ -1,3 +1,5 @@
+// Verified headers: [string, vector, memory, utility, chrono...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include <string>
 #include <vector>
 #include <memory>
@@ -166,6 +168,7 @@ static bool process_frame_buffer(const libcamera::FrameBuffer* fb,
 
 CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
                              unsigned int tpu_width, unsigned int tpu_height,
+                             unsigned int tpu_fps,
                              unsigned int target_tpu_width, unsigned int target_tpu_height,
                              std::shared_ptr<BufferPool<uint8_t>> image_buffer_pool,
                              std::shared_ptr<ObjectPool<ImageData>> image_data_pool,
@@ -173,7 +176,7 @@ CameraCapture::CameraCapture(unsigned int main_width, unsigned int main_height,
                              std::chrono::seconds watchdog_timeout)
     : width_(main_width), height_(main_height),
       tpu_width_(tpu_width), tpu_height_(tpu_height),
-      tpu_fps_(120),
+      tpu_fps_(tpu_fps),
       target_tpu_width_(target_tpu_width), target_tpu_height_(target_tpu_height),
       image_processor_input_queue_(image_processor_input_queue),
       image_buffer_pool_(image_buffer_pool),
@@ -251,8 +254,9 @@ bool CameraCapture::start() {
     camera_->requestCompleted.connect(this, &CameraCapture::request_complete_callback);
 
     libcamera::ControlList controls_to_set;
-    // Hard FPS Lock & Exposure (120 FPS Mandate) - Removed FPS throttling to allow native max FPS
-    // controls_to_set.set(libcamera::controls::FrameDurationLimits, libcamera::Span<const int64_t, 2>({frame_duration_us, frame_duration_us}));
+    // [REQ-007] Hard FPS Lock & Exposure (120 FPS Mandate)
+    int64_t frame_duration_us = 1000000 / tpu_fps_;
+    controls_to_set.set(libcamera::controls::FrameDurationLimits, libcamera::Span<const int64_t, 2>({frame_duration_us, frame_duration_us}));
     controls_to_set.set(libcamera::controls::AeEnable, false);
     controls_to_set.set(libcamera::controls::ExposureTime, 8000);
     controls_to_set.set(libcamera::controls::AnalogueGain, 8.0f);
@@ -377,7 +381,7 @@ bool CameraCapture::setup_camera() {
     mainCfg.pixelFormat = libcamera::formats::YUV420; 
     mainCfg.size.width = width_;
     mainCfg.size.height = height_;
-    mainCfg.bufferCount = 6;
+    mainCfg.bufferCount = 10;
 
     // TPU Stream (Index 1): ISP processed RGB888 for Coral TPU requirements
     libcamera::StreamConfiguration& tpuCfg = config->at(1);
@@ -499,7 +503,7 @@ void CameraCapture::request_processor_thread_func() {
         auto now_sys = std::chrono::system_clock::now();
         long long epoch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now_sys.time_since_epoch()).count();
         
-        // Authoritative Monotonic Raw Clock (Unified across all modules)
+        // [REQ-009] Authoritative Monotonic Raw Clock (Unified across all modules)
         uint64_t t_capture_ms = get_time_raw_ms();
         auto capture_time = now_mon; 
         

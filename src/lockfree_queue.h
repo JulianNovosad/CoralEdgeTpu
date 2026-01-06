@@ -1,3 +1,5 @@
+// Verified headers: [queue, mutex, condition_variable, atomic, chrono...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef LOCKFREE_QUEUE_H
 #define LOCKFREE_QUEUE_H
 

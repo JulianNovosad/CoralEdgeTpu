@@ -1,3 +1,5 @@
+// Verified headers: [memory, thread, atomic, mutex, string...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef MPEGTS_SERVER_H
 #define MPEGTS_SERVER_H
 

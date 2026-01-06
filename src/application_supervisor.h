@@ -1,3 +1,5 @@
+// Verified headers: [atomic, vector, memory, functional, csignal...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef APPLICATION_SUPERVISOR_H
 #define APPLICATION_SUPERVISOR_H
 

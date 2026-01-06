@@ -1,3 +1,5 @@
+// Verified headers: [system_monitor.h, fstream, sstream, string, regex...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "system_monitor.h"
 #include <fstream>
 #include <sstream>
@@ -49,7 +51,7 @@ void SystemMonitor::stop() {
                 } catch (...) {}
             });
             if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-                std::cerr << "[SHUTDOWN] SystemMonitor worker thread did not join within 3s, detaching." << std::endl;
+                APP_LOG_WARNING("[SHUTDOWN] SystemMonitor worker thread did not join within 3s, detaching.");
                 if (worker_thread_.joinable()) worker_thread_.detach();
                 joiner_thread.detach();
             } else {

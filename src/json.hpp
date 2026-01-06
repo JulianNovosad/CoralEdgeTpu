@@ -1,3 +1,5 @@
+// Verified headers: [algorithm, cstddef, functional, initializer_list, iosfwd...]
+// Verification timestamp: 2026-01-06 17:08:04
 //     __ _____ _____ _____
 //  __|  |   __|     |   | |  JSON for Modern C++
 // |  |  |__   |  |  | | | |  version 3.11.2

@@ -1,3 +1,5 @@
+// Verified headers: [image_processor.h, util_logging.h, application.h, timing.h, chrono...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "image_processor.h"
 #include "util_logging.h"
 #include "application.h"
@@ -113,7 +115,7 @@ void ImageProcessor::stop() {
             });
             
             if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-                std::cerr << "[SHUTDOWN] ImageProcessor worker thread did not join within 3s, detaching." << std::endl;
+                APP_LOG_WARNING("[SHUTDOWN] ImageProcessor worker thread did not join within 3s, detaching.");
                 if (worker_thread_.joinable()) {
                     worker_thread_.detach();
                 }
@@ -355,9 +357,7 @@ void ImageProcessor::worker_thread_func() {
                         if (conversion_success) {
                             // Ensure input_frame_mat is in the correct format for its destination
                             if (is_tpu_stream_) {
-                                // TPU expects RGB. Input is BGR.
-                                cv::cvtColor(input_frame_mat, input_frame_mat, cv::COLOR_BGR2RGB);
-                            } else {
+                                                                                        cv::cvtColor(input_frame_mat, input_frame_mat, cv::COLOR_BGR2RGB);                            } else {
                                 // Visualization/Encoder expects BGR. Input is BGR. No swap needed.
                             }
 

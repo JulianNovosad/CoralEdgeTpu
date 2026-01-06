@@ -1,3 +1,5 @@
+// Verified headers: [string, vector, atomic, thread, pipeline_structs.h]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef QUEUE_MONITOR_H
 #define QUEUE_MONITOR_H
 

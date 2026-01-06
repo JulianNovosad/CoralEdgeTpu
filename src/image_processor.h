@@ -1,3 +1,5 @@
+// Verified headers: [atomic, memory, thread, boost/lockfree/spsc_queue.hpp, pipeline_structs.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #pragma once
 
 #include <atomic>

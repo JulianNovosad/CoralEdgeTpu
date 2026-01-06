@@ -1,3 +1,5 @@
+// Verified headers: [pipeline_structs.h, orientation_sensor.h, config_loader.h, pca9685_controller.h, timing.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef LOGIC_H
 #define LOGIC_H
 
@@ -292,6 +294,7 @@ private:
 public:
     // Method to set application reference for updating counters
     void set_application_ref(class Application* app) { app_ref_ = app; }
+    std::thread& get_worker_thread() { return worker_thread_; }
     
 private:
     // Servo State Machine
@@ -313,7 +316,7 @@ private:
     std::shared_ptr<ObjectPool<ServoCommand>> servo_command_pool_;
     
     // Interlock Gates and Timing (Deterministic)
-    static constexpr uint64_t MAX_FRAME_BUDGET_RAW_MS{1000}; // Photon-to-PWM 1000ms (DEBUG RELAXED)
+    static constexpr uint64_t MAX_FRAME_BUDGET_RAW_MS{100}; // Photon-to-PWM 100ms (REQ-001)
     static constexpr uint64_t ACTUATION_DWELL_MS{50};    // 50ms dwell for stroke
     static constexpr uint64_t ACTUATION_COOLDOWN_MS{300}; // 300ms hard cooldown
     

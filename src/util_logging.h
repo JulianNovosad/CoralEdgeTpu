@@ -1,3 +1,5 @@
+// Verified headers: [string, vector, mutex, array, atomic...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef UTIL_LOGGING_H
 #define UTIL_LOGGING_H
 
@@ -170,7 +172,8 @@ private:
 
 // Utility functions
 void set_thread_name(const std::string& name);
-void write_telemetry_trace(const TelemetryFrame* buffer, size_t start_idx, size_t end_idx);
+void set_realtime_priority(std::thread& thread, int priority, int cpu_core = -1);
+
 
 inline void copy_to_array(FixedString<32>& target, const char* source) { target.assign(source); }
 inline void copy_to_array(FixedString<64>& target, const char* source) { target.assign(source); }

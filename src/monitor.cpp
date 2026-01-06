@@ -1,3 +1,5 @@
+// Verified headers: [monitor.h, application.h, util_logging.h, orientation_sensor.h, iostream...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "monitor.h"
 #include "application.h"  // Include the full definition
 #include "util_logging.h"
@@ -51,7 +53,7 @@ void Monitor::stop() {
             });
             
             if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-                std::cerr << "[SHUTDOWN] Monitor thread did not join within 3s, detaching." << std::endl;
+                APP_LOG_WARNING("[SHUTDOWN] Monitor thread did not join within 3s, detaching.");
                 if (monitor_thread_.joinable()) {
                     monitor_thread_.detach();
                 }

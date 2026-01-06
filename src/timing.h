@@ -1,3 +1,5 @@
+// Verified headers: [chrono, time.h]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef TIMING_H
 #define TIMING_H
 

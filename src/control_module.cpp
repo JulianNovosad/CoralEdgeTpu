@@ -1,3 +1,5 @@
+// Verified headers: [control_module.h, util_logging.h, netinet/in.h, unistd.h, cstring...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "control_module.h"
 #include "util_logging.h"
 #include <sys/socket.h>
@@ -78,7 +80,7 @@ void ControlModule::stop() {
             } catch (...) {}
         });
         if (future.wait_for(std::chrono::seconds(3)) == std::future_status::timeout) {
-            std::cerr << "[SHUTDOWN] ControlModule worker thread did not join within 3s, detaching." << std::endl;
+            APP_LOG_WARNING("[SHUTDOWN] ControlModule worker thread did not join within 3s, detaching.");
             if (worker_thread_.joinable()) worker_thread_.detach();
             joiner_thread.detach();
         } else {

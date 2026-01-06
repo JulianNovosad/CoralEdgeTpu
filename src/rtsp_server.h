@@ -1,3 +1,5 @@
+// Verified headers: [string, thread, atomic, vector, mutex...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef RTSP_SERVER_WRAPPER_H
 #define RTSP_SERVER_WRAPPER_H
 

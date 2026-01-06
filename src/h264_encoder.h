@@ -1,3 +1,5 @@
+// Verified headers: [pipeline_structs.h, util_logging.h, buffer_pool.h, optional, thread...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef H264_ENCODER_H
 #define H264_ENCODER_H
 

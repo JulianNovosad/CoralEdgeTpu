@@ -1,3 +1,5 @@
+// Verified headers: [application_supervisor.h, iostream, csignal, unistd.h, termios.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "application_supervisor.h"
 #include <iostream>
 #include <csignal>

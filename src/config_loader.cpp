@@ -1,3 +1,5 @@
+// Verified headers: [config_loader.h, util_logging.h, fstream, stdexcept, iostream]
+// Verification timestamp: 2026-01-06 17:08:04
 #include "config_loader.h"
 #include "util_logging.h"
 #include <fstream>

@@ -1,3 +1,5 @@
+// Verified headers: [string, thread, atomic, functional, vector...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef DISCOVERY_MODULE_H
 #define DISCOVERY_MODULE_H
 

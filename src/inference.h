@@ -1,3 +1,5 @@
+// Verified headers: [tensorflow/lite/interpreter.h, tensorflow/lite/model.h, tensorflow/lite/kernels/register.h, tensorflow/lite/c/common.h, edgetpu_c.h...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef INFERENCE_H
 #define INFERENCE_H
 
@@ -179,6 +181,7 @@ public:
     
     // Method to set application reference for updating counters
     void set_application_ref(class Application* app) { app_ref_ = app; }
+    std::vector<std::thread>& get_worker_threads() { return worker_threads_; }
     
 private:
     // Drop counters for proper queue accounting

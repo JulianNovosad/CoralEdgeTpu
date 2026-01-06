@@ -1,3 +1,5 @@
+// Verified headers: [thread, atomic, string, functional, netinet/in.h]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef CONTROL_MODULE_H
 #define CONTROL_MODULE_H
 

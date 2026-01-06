@@ -1,3 +1,5 @@
+// Verified headers: [string, chrono, json.hpp]
+// Verification timestamp: 2026-01-06 17:08:04
 /**
  * @file config_loader.h
  * @brief Laadt en beheert de applicatieconfiguratie vanuit een JSON-bestand.

@@ -1,3 +1,5 @@
+// Verified headers: [string, thread, atomic, chrono, mutex...]
+// Verification timestamp: 2026-01-06 17:08:04
 #ifndef SYSTEM_MONITOR_H
 #define SYSTEM_MONITOR_H
 
