@@ -25,6 +25,7 @@ pkg_check_modules(X264 REQUIRED x264)
 pkg_check_modules(GLESV2 REQUIRED glesv2)
 pkg_check_modules(EGL REQUIRED egl)
 pkg_check_modules(GBM REQUIRED gbm)
+pkg_check_modules(LIBDRM REQUIRED libdrm)
 
 # Include directories
 include_directories(
@@ -39,6 +40,7 @@ include_directories(
     ${GLESV2_INCLUDE_DIRS}
     ${EGL_INCLUDE_DIRS}
     ${GBM_INCLUDE_DIRS}
+    ${LIBDRM_INCLUDE_DIRS}
 )
 
 # Link directories
@@ -66,6 +68,7 @@ set(SOURCE_FILES
     src/keyboard_monitor.cpp
     src/discovery_module.cpp
     src/global_definitions.cpp
+    src/drm_display.cpp
 )
 
 add_executable(detector ${SOURCE_FILES})
@@ -82,6 +85,7 @@ target_link_libraries(detector
     ${GLESV2_LIBRARIES}
     ${EGL_LIBRARIES}
     ${GBM_LIBRARIES}
+    ${LIBDRM_LIBRARIES}
     Threads::Threads
     atomic
 )

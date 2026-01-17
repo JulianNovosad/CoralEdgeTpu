@@ -17,6 +17,7 @@
 #include "image_processor.h" // New include
 #include "keyboard_monitor.h"
 #include "discovery_module.h" // Added for auto-discovery
+#include "drm_display.h" // Added for HDMI display output
 
 #include "mpegts_server.h"
 #include "monitor.h"
@@ -68,6 +69,7 @@ public:
     std::unique_ptr<ImageProcessor> image_processor_; // New module
     std::unique_ptr<InferenceEngine> inference_engine_;
     std::unique_ptr<CameraCapture> primary_camera_;
+    std::unique_ptr<DrmDisplay> drm_display_; // Changed to regular pointer for debugging
     // std::unique_ptr<VideoOverlayProcessor> overlay_processor_;
     std::unique_ptr<H264Encoder> h264_encoder_;
 
@@ -168,6 +170,11 @@ private:
     std::thread h264_consumer_thread_;
     std::atomic<bool> h264_consumer_running_{false};
     void h264_queue_consumer_thread_func();
+
+    // Thread for consuming frames for DRM display
+    std::thread drm_consumer_thread_;
+    std::atomic<bool> drm_consumer_running_{false};
+    void drm_queue_consumer_thread_func();
 
     // Recovery mechanisms
     std::atomic<bool> recovery_running_{false};

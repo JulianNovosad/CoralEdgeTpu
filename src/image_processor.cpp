@@ -211,6 +211,30 @@ void ImageProcessor::worker_thread_func() {
                 image_data_pool_->release(input_image_ptr);
                 continue;
             }
+            
+            // Intelligent frame dropping: Check output queue pressure
+            if (!is_tpu_stream_) {
+                // For visualization stream, check if output queue is getting full
+                static int consecutive_skipped = 0;
+                size_t output_queue_depth = output_queue_.size_approx();
+                
+                // Skip frame if queue is more than 75% full
+                if (output_queue_depth > 38) {  // 75% of 50 capacity
+                    consecutive_skipped++;
+                    if (consecutive_skipped % 30 == 0) {  // Log every 30 skipped frames
+                        printf("⏭️  VISUALIZATION: Skipping frame (queue depth: %zu/50), consecutive skips: %d\n", 
+                               output_queue_depth, consecutive_skipped);
+                    }
+                    
+                    if (app_ref_) {
+                        app_ref_->inc_cam_to_viz_dropped();
+                    }
+                    image_data_pool_->release(input_image_ptr);
+                    continue;
+                } else {
+                    consecutive_skipped = 0;  // Reset counter when we process a frame
+                }
+            }
 
             struct ProcessingGuard {
                 ImageProcessor* proc;
@@ -223,11 +247,20 @@ void ImageProcessor::worker_thread_func() {
                             // Stage 1: Camera -> TPU Processor
                             proc->app_ref_->inc_cam_to_tpu_proc_consumed();
                             
-                            // Stage 2: TPU Processor -> Inference Engine
-                            // (Every frame taken from Cam queue MUST result in either a produced or dropped frame for Inf Engine)
-                            proc->app_ref_->inc_proc_to_inf_produced();
-                            if (!output_produced) {
-                                proc->app_ref_->inc_proc_to_inf_dropped();
+                            // Intelligent frame dropping for TPU stream
+                            size_t output_queue_depth = proc->output_queue_.size_approx();
+                            if (output_queue_depth > 38) {  // 75% of 50 capacity
+                                // Drop this frame to relieve pressure
+                                if (!output_produced) {
+                                    proc->app_ref_->inc_proc_to_inf_dropped();
+                                }
+                            } else {
+                                // Stage 2: TPU Processor -> Inference Engine
+                                // (Every frame taken from Cam queue MUST result in either a produced or dropped frame for Inf Engine)
+                                proc->app_ref_->inc_proc_to_inf_produced();
+                                if (!output_produced) {
+                                    proc->app_ref_->inc_proc_to_inf_dropped();
+                                }
                             }
                         } else {
                             // Stage 1: Camera -> Viz Processor

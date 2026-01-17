@@ -5,6 +5,7 @@
 #include "util_logging.h"
 #include "queue_monitor.h"
 #include "timing.h"
+#include "drm_display.h"
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -133,6 +134,9 @@ void Application::stop() {
     h264_consumer_running_ = false;
     timed_join_thread(h264_consumer_thread_, "H264ConsumerThread");
 
+    drm_consumer_running_ = false;
+    timed_join_thread(drm_consumer_thread_, "DRMConsumerThread");
+
     // 7. Drain all queues to release all shared_ptrs and pooled buffers
     APP_LOG_INFO("[SHUTDOWN] Draining queues...");
     drain_queues();
@@ -161,17 +165,17 @@ void Application::setup_pools_and_queues() {
     
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
-    // Reduced for Pi stability (avoid OOM) -> Increased to 300 to fix starvation
-    size_t image_pool_count = 300; 
+    // Reduced for Pi stability (avoid OOM) -> Increased to 300 to fix starvation -> Now reduced for faster cycling
+    size_t image_pool_count = 50;  // Reduced from 300 
 
     image_pool_ = std::make_shared<BufferPool<uint8_t>>(image_pool_count, image_buffer_size, "ImagePool");
     APP_LOG_INFO("ImagePool created with " + std::to_string(image_pool_count) + " buffers, total memory: " + std::to_string(image_pool_count * image_buffer_size / (1024 * 1024)) + " MB.");
-    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(300, 200, "DetectionPool"); 
-    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(20, 4 * 1024 * 1024, "H264Pool"); 
+    detection_pool_ = std::make_shared<BufferPool<DetectionResult>>(50, 200, "DetectionPool");  // Reduced from 300
+    h264_pool_ = std::make_shared<BufferPool<uint8_t>>(8, 4 * 1024 * 1024, "H264Pool");  // Reduced from 20 
     
     // Object pools for lock-free queue elements
-    image_data_pool_ = std::make_shared<ObjectPool<ImageData>>(image_pool_count, "ImageDataPool");
-    result_token_pool_ = std::make_shared<ObjectPool<ResultToken>>(400, "ResultTokenPool");
+    image_data_pool_ = std::make_shared<ObjectPool<ImageData>>(50, "ImageDataPool");  // Reduced from image_pool_count
+    result_token_pool_ = std::make_shared<ObjectPool<ResultToken>>(80, "ResultTokenPool");  // Reduced from 400
 }
 
 bool Application::initialize_modules(const std::string& model_path, const std::string& labels_path) {
@@ -344,6 +348,10 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         APP_LOG_INFO("MpegTsServer created.");
 
         // Create Discovery Module
+        APP_LOG_INFO("Creating DrmDisplay for HDMI output...");
+        drm_display_ = std::make_unique<DrmDisplay>();
+        APP_LOG_INFO("DrmDisplay object created, will initialize after camera startup");
+
         APP_LOG_INFO("Creating DiscoveryModule...");
         discovery_module_ = std::make_unique<DiscoveryModule>();
         discovery_module_->on_peer_discovered([this](const DiscoveryModule::PeerInfo& peer) {
@@ -423,7 +431,20 @@ bool Application::start_modules() {
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-
+    // Initialize DRM display for HDMI output
+    if (drm_display_) {
+        // Use display resolution (1280x720) instead of camera resolution
+        const unsigned int display_w = 1280;
+        const unsigned int display_h = 720;
+            
+        APP_LOG_INFO("Initializing DRM display with resolution: " + std::to_string(display_w) + "x" + std::to_string(display_h));
+        if (!drm_display_->initialize(display_w, display_h)) {
+            APP_LOG_ERROR("Failed to initialize DRM display");
+            // Don't return false - continue without HDMI output
+        } else {
+            APP_LOG_INFO("DRM display initialized successfully");
+        }
+    }
 
         // 3. Start processing modules (Middlware)
 
@@ -437,7 +458,13 @@ bool Application::start_modules() {
 
 
 
-        if (visualization_processor_) start_ok &= visualization_processor_->start();
+        // Start the visualization processor
+        if (visualization_processor_) {
+            start_ok &= visualization_processor_->start();
+            // Force START signal for visualization processor in standalone mode
+            visualization_processor_->start("127.0.0.1");  // Send START signal
+            APP_LOG_INFO("Visualization processor START signal sent");
+        }
 
 
 
@@ -494,7 +521,7 @@ bool Application::start_modules() {
 
 
 
-        if (visualization_processor_) visualization_processor_->start("");
+        if (h264_encoder_) h264_encoder_->start();
 
 
 
@@ -511,6 +538,10 @@ bool Application::start_modules() {
     h264_consumer_running_ = true;
 
     h264_consumer_thread_ = std::thread(&Application::h264_queue_consumer_thread_func, this);
+
+    // Start DRM display consumer thread (it waits for overlaid frames)
+    drm_consumer_running_ = true;
+    drm_consumer_thread_ = std::thread(&Application::drm_queue_consumer_thread_func, this);
 
 
 
@@ -570,6 +601,13 @@ void Application::register_shutdown_handlers() {
         h264_consumer_running_ = false;
         if (!timed_join_thread(h264_consumer_thread_, "H264ConsumerThread", std::chrono::seconds(3))) {
             APP_LOG_ERROR("H264 consumer thread failed to join within timeout");
+        }
+    });
+
+    supervisor_.register_module_stop("DRMConsumer", [&]() {
+        drm_consumer_running_ = false;
+        if (!timed_join_thread(drm_consumer_thread_, "DRMConsumerThread", std::chrono::seconds(3))) {
+            APP_LOG_ERROR("DRM consumer thread failed to join within timeout");
         }
     });
     supervisor_.register_module_stop("Monitor", [&]() { monitor_->stop(); });
@@ -1113,6 +1151,47 @@ void Application::h264_queue_consumer_thread_func() {
     APP_LOG_INFO("H264 queue consumer thread stopped. Total frames processed: " + std::to_string(frame_counter));
 }
 
+void Application::drm_queue_consumer_thread_func() {
+    APP_LOG_INFO("DRM queue consumer thread started.");
+    
+    ImageData* image_data_ptr = nullptr;
+    int frame_counter = 0;
+    
+    while (drm_consumer_running_ && g_running.load(std::memory_order_acquire)) {
+        // Attempt to pop a buffer pointer from the overlaid video queue
+        if (overlaid_video_queue_->pop(image_data_ptr)) {
+            // Wrap the raw pointer in a shared_ptr with a custom deleter that returns it to the pool
+            std::shared_ptr<ImageData> image_data(image_data_ptr, [this](ImageData* img) {
+                if (img && img->buffer) this->image_pool_->release_raw(img->buffer.get());
+                delete img; // Delete the ImageData wrapper
+            });
+
+            if (image_data && image_data->buffer && !image_data->buffer->data.empty() && 
+                image_data->width > 0 && image_data->height > 0) {
+                // Render frame to DRM display
+                if (drm_display_) {
+                    drm_display_->render_frame(
+                        image_data->buffer->data.data(), 
+                        image_data->width, 
+                        image_data->height
+                    );
+                    frame_counter++;
+                }
+                
+                // Log occasional frames for debugging
+                if (frame_counter % 60 == 0) {  // Log every 60th frame
+                    APP_LOG_INFO("DRM Consumer: Frame " + std::to_string(frame_counter) + 
+                                ", Size: " + std::to_string(image_data->width) + "x" + std::to_string(image_data->height));
+                }
+            }
+        } else {
+            // If no data was available, sleep briefly to avoid busy-waiting
+            std::this_thread::sleep_for(std::chrono::microseconds(25));
+        }
+    }
+    APP_LOG_INFO("DRM queue consumer thread stopped. Total frames processed: " + std::to_string(frame_counter));
+}
+
 int Application::run() {
     APP_LOG_INFO("Application starting...");
     
@@ -1160,7 +1239,7 @@ int Application::run() {
     // Main loop - wait for shutdown signal
     auto last_monitoring_check = std::chrono::high_resolution_clock::now();
     const auto monitoring_interval = std::chrono::milliseconds(500); // Check every 500ms
-    const auto max_run_time = std::chrono::minutes(5); // Max run time to prevent hanging
+    const auto max_run_time = std::chrono::minutes(60); // Extended to 1 hour for testing
     auto start_time = std::chrono::high_resolution_clock::now();
     
     while (g_running.load(std::memory_order_acquire)) {

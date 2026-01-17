@@ -261,7 +261,7 @@ private:
 
 
 /// @brief Type alias for a lock-free queue holding ImageData pointers.
-typedef LockFreeQueue<ImageData*, 256> ImageQueue;
+typedef LockFreeQueue<ImageData*, 64> ImageQueue;
 
 // Define a type for a pooled buffer of detection results
 using DetectionResultBuffer = PooledBuffer<DetectionResult>;
@@ -313,11 +313,11 @@ private:
 };
 
 /// @brief Type alias for a thread-safe MPMC queue holding ResultToken pointers.
-using DetectionResultsQueue = LockFreeQueue<ResultToken*>;
+using DetectionResultsQueue = LockFreeQueue<ResultToken*, 32>;
 
 // Define a type for a pooled buffer of H.264 NAL units
 using H264Buffer = PooledBuffer<uint8_t>;
 /// @brief Type alias for a thread-safe MPMC queue holding pooled H.264 buffer pointers.
-using H264Queue = LockFreeQueue<H264Buffer*>;
+using H264Queue = LockFreeQueue<H264Buffer*, 16>;
 
 #endif // PIPELINE_STRUCTS_H

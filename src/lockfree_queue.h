@@ -75,6 +75,11 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         return queue_.size();
     }
+    
+    // Add method to get current capacity
+    static constexpr size_t capacity() {
+        return Capacity;
+    }
 
     bool try_pop(T& data) {
         return pop(data);
