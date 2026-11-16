@@ -203,7 +203,11 @@ void H264Encoder::worker_thread_func() {
             try {
                 // 2. Color conversion
                 cv::Mat frame_yuv;
-                if (image_data.format == libcamera::formats::BGR888) {
+                if (image_data.format == libcamera::formats::XRGB8888) {
+                    // Overlay path now emits XRGB8888 (B,G,R,X = CV_8UC4 BGRA).
+                    cv::Mat frame_xrgb(image_data.height, image_data.width, CV_8UC4, image_data.buffer->data.data());
+                    cv::cvtColor(frame_xrgb, frame_yuv, cv::COLOR_BGRA2YUV_I420);
+                } else if (image_data.format == libcamera::formats::BGR888) {
                     cv::Mat frame_bgr_raw(image_data.height, image_data.width, CV_8UC3, image_data.buffer->data.data());
                     cv::cvtColor(frame_bgr_raw, frame_yuv, cv::COLOR_BGR2YUV_I420);
                 } else {

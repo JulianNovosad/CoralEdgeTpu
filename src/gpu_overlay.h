@@ -14,7 +14,7 @@ public:
     ~GpuOverlay();
 
     bool initialize();
-    void render(uint8_t* bgr_data, const DetectionResults& detections, const OverlayBallisticPoint* ballistic_point, uint64_t frame_counter);
+    void render(uint8_t* xrgb_data, const DetectionResults& detections, const OverlayBallisticPoint* ballistic_point, uint64_t frame_counter);
 
 private:
     int width_;

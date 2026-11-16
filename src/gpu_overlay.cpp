@@ -409,7 +409,9 @@ void GpuOverlay::setup_shaders() {
 void GpuOverlay::setup_textures() {
     glGenTextures(1, &texture_id_);
     glBindTexture(GL_TEXTURE_2D, texture_id_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    // RGBA texture fed with XRGB8888 bytes (B,G,R,X): the fragment shader's
+    // existing R/B swap turns that back into proper RGB.
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -442,7 +444,7 @@ bool GpuOverlay::setup_fbo() {
 
     glGenTextures(1, &fbo_texture_id_);
     glBindTexture(GL_TEXTURE_2D, fbo_texture_id_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -472,7 +474,7 @@ struct Vertex {
     int type;
 };
 
-void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, const OverlayBallisticPoint* ballistic_point, uint64_t frame_counter) {
+void GpuOverlay::render(uint8_t* xrgb_data, const DetectionResults& detections, const OverlayBallisticPoint* ballistic_point, uint64_t frame_counter) {
     // Bind our FBO for off-screen rendering
     glBindFramebuffer(GL_FRAMEBUFFER, fbo_id_);
     check_error("BindFramebuffer");
@@ -488,7 +490,7 @@ void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, c
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture_id_);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGB, GL_UNSIGNED_BYTE, bgr_data);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, xrgb_data);
     check_error("UpdateTexture");
 
     // Draw background quad
@@ -573,25 +575,21 @@ void GpuOverlay::render(uint8_t* bgr_data, const DetectionResults& detections, c
     glReadPixels(0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, readback_buffer_.data());
     check_error("ReadPixels");
 
-    const int dst_stride = width_ * 3;
+    const int dst_stride = width_ * 4;
     const int src_stride = width_ * 4;
     
     for (int y = 0; y < height_; ++y) {
         // Source is GL (bottom-up), Dest is App (top-down)
-        // src row y=0 is bottom
-        // dst row y=height-1 is bottom
         const uint8_t* src_row = readback_buffer_.data() + (y * src_stride);
-        uint8_t* dst_row = bgr_data + ((height_ - 1 - y) * dst_stride);
+        uint8_t* dst_row = xrgb_data + ((height_ - 1 - y) * dst_stride);
         
         for (int x = 0; x < width_; ++x) {
-            // FIX: Correct assignment for BGR destination from RGB source
-            // glReadPixels returns RGBA. 
-            // src[0] = R, src[1] = G, src[2] = B
-            // dst is BGR. dst[0] = B, dst[1] = G, dst[2] = R
-            
-            dst_row[x * 3 + 0] = src_row[x * 4 + 2]; // Blue channel (from src Blue)
-            dst_row[x * 3 + 1] = src_row[x * 4 + 1]; // Green
-            dst_row[x * 3 + 2] = src_row[x * 4 + 0]; // Red channel (from src Red)
+            // glReadPixels returns RGBA (R,G,B,A); destination is XRGB8888
+            // (B,G,R,X in memory). The 4th byte is ignored by the display.
+            dst_row[x * 4 + 0] = src_row[x * 4 + 2]; // Blue
+            dst_row[x * 4 + 1] = src_row[x * 4 + 1]; // Green
+            dst_row[x * 4 + 2] = src_row[x * 4 + 0]; // Red
+            dst_row[x * 4 + 3] = 0xFF;
         }
     }
     

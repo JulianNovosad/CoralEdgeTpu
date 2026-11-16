@@ -376,9 +376,10 @@ bool CameraCapture::setup_camera() {
     sensorConfig.outputSize = {1536, 864};
     config->sensorConfig = sensorConfig;
 
-    // Main Stream (Index 0): ISP processed YUV for encoder compatibility
+    // Main Stream (Index 0): ISP processed XRGB8888 — the exact byte layout
+    // of DRM_FORMAT_XRGB8888 framebuffers, so the display path is memcpy-only.
     libcamera::StreamConfiguration& mainCfg = config->at(0);
-    mainCfg.pixelFormat = libcamera::formats::YUV420; 
+    mainCfg.pixelFormat = libcamera::formats::XRGB8888; 
     mainCfg.size.width = width_;
     mainCfg.size.height = height_;
     mainCfg.bufferCount = 10;
@@ -454,7 +455,7 @@ bool CameraCapture::setup_camera() {
         requests_.push_back(std::move(request));
     }
     
-    APP_LOG_INFO("ISP Engaged. Camera configured with " + std::to_string(requests_.size()) + " dual-buffered YUV/RGB requests.");
+    APP_LOG_INFO("ISP Engaged. Camera configured with " + std::to_string(requests_.size()) + " dual-buffered XRGB/RGB requests.");
     return true;
 }
 

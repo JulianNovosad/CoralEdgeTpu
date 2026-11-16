@@ -16,6 +16,7 @@
 extern std::atomic<bool> g_running;
 
 int libcamera_pixel_format_to_opencv_type(const libcamera::PixelFormat& format) {
+    if (format.fourcc() == libcamera::formats::XRGB8888.fourcc()) return CV_8UC4;
     if (format.fourcc() == libcamera::formats::BGRA8888.fourcc()) return CV_8UC4;
     if (format.fourcc() == libcamera::formats::BGR888.fourcc()) return CV_8UC3;
     if (format.fourcc() == libcamera::formats::RGBA8888.fourcc()) return CV_8UC4;
@@ -379,9 +380,18 @@ void ImageProcessor::worker_thread_func() {
                         if (input_image.format == libcamera::formats::RGB888) {
                             // AUTHORITY: The stream is labeled RGB888 but contains BGR888 data.
                             input_frame_mat = cv::Mat(input_image.height, input_image.width, CV_8UC3, frame_data_ptr);
-                        } else if (input_image.format == libcamera::formats::YUV420) {
-                            cv::Mat yuv_mat = cv::Mat(input_image.height * 3 / 2, input_image.width, CV_8UC1, frame_data_ptr);
-                            cv::cvtColor(yuv_mat, input_frame_mat, cv::COLOR_YUV2BGR_I420);
+                        } else if (input_image.format == libcamera::formats::XRGB8888) {
+                            // Main video stream: XRGB8888 in memory is B,G,R,X,
+                            // i.e. a CV_8UC4 BGRA mat (the 4th byte is don't-care).
+                            // The ISP output may be stride-padded; pack it once.
+                            const size_t row_bytes = (size_t)input_image.width * 4;
+                            const size_t stride = (input_image.stride >= row_bytes) ? input_image.stride : row_bytes;
+                            cv::Mat src(input_image.height, input_image.width, CV_8UC4, frame_data_ptr, stride);
+                            if (stride == row_bytes) {
+                                input_frame_mat = src;
+                            } else {
+                                input_frame_mat = src.clone(); // packs stride -> width*4
+                            }
                         } else {
                             APP_LOG_ERROR("ImageProcessor: Unsupported format: " + input_image.format.toString());
                             conversion_success = false;
@@ -391,7 +401,7 @@ void ImageProcessor::worker_thread_func() {
                             // Ensure input_frame_mat is in the correct format for its destination
                             if (is_tpu_stream_) {
                                                                                         cv::cvtColor(input_frame_mat, input_frame_mat, cv::COLOR_BGR2RGB);                            } else {
-                                // Visualization/Encoder expects BGR. Input is BGR. No swap needed.
+                                // Visualization/Encoder/Display expect XRGB8888. Input is XRGB8888. No swap needed.
                             }
 
                             cv::Mat processed_mat;
@@ -453,8 +463,8 @@ void ImageProcessor::worker_thread_func() {
                                         *output_image_data = ImageData(input_image.capture_time, input_image.frame_id);
                                         output_image_data->width = output_width_;
                                         output_image_data->height = output_height_;
-                                        // Use correct format for the next stage (Inference Engine needs RGB, Encoder needs BGR)
-                                        output_image_data->format = (is_tpu_stream_) ? libcamera::formats::RGB888 : libcamera::formats::BGR888;
+                                        // Use correct format for the next stage (Inference Engine needs RGB, Display/Encoder need XRGB8888)
+                                        output_image_data->format = (is_tpu_stream_) ? libcamera::formats::RGB888 : libcamera::formats::XRGB8888;
                                         output_image_data->buffer = processed_buffer_data;
                                         output_image_data->fd = -1;
                                         output_image_data->t_capture_raw_ms = input_image.t_capture_raw_ms;

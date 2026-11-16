@@ -160,8 +160,8 @@ void Application::setup_pools_and_queues() {
         config_loader_.get_reduced_res_height() : 
         config_loader_.get_high_res_height();
     
-    size_t image_buffer_size = cam_w * cam_h * 3; // BGR888
-    APP_LOG_INFO("Image buffer size per frame (BGR888): " + std::to_string(image_buffer_size) + " bytes.");
+    size_t image_buffer_size = cam_w * cam_h * 4; // XRGB8888 (buffers grow to the strided ISP size on demand)
+    APP_LOG_INFO("Image buffer size per frame (XRGB8888): " + std::to_string(image_buffer_size) + " bytes.");
     
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
     // Determine pool size for images from config, default to a reasonable value if not set or invalid
@@ -179,12 +179,27 @@ void Application::setup_pools_and_queues() {
 }
 
 bool Application::initialize_modules(const std::string& model_path, const std::string& labels_path) {
-    const unsigned int cam_w = use_reduced_resolution_ ? 
-        config_loader_.get_reduced_res_width() : 
-        config_loader_.get_high_res_width();
-    const unsigned int cam_h = use_reduced_resolution_ ? 
-        config_loader_.get_reduced_res_height() : 
-        config_loader_.get_high_res_height();
+    // Initialize the DRM display FIRST: the display's native mode defines the
+    // resolution of the entire video path (camera main stream, pools,
+    // visualization processor, encoder). It is independent of the camera.
+    drm_display_ = std::make_unique<DrmDisplay>();
+    if (drm_display_->initialize(0, 0)) { // 0,0 = use the display's native (preferred) mode
+        APP_LOG_INFO("DRM display initialized at native mode: " + std::to_string(drm_display_->display_width()) + "x" + std::to_string(drm_display_->display_height()));
+    } else {
+        APP_LOG_ERROR("Failed to initialize DRM display; continuing without HDMI output.");
+        drm_display_.reset();
+    }
+
+    // Video path resolution: the display's native mode, unless the
+    // reduced-resolution override is set (the DRM fallback rescales it).
+    const unsigned int native_w = drm_display_ ? drm_display_->display_width() : 0;
+    const unsigned int native_h = drm_display_ ? drm_display_->display_height() : 0;
+    const unsigned int cam_w = use_reduced_resolution_ ? config_loader_.get_reduced_res_width() :
+        (native_w ? native_w : config_loader_.get_high_res_width());
+    const unsigned int cam_h = use_reduced_resolution_ ? config_loader_.get_reduced_res_height() :
+        (native_h ? native_h : config_loader_.get_high_res_height());
+    video_width_ = cam_w;
+    video_height_ = cam_h;
     const std::chrono::seconds camera_watchdog_timeout = config_loader_.get_camera_watchdog_timeout();
     
     // --- Labels ---
@@ -347,12 +362,8 @@ bool Application::initialize_modules(const std::string& model_path, const std::s
         );
         APP_LOG_INFO("MpegTsServer created.");
 
-        // Create Discovery Module
-        APP_LOG_INFO("Creating DrmDisplay for HDMI output...");
-        drm_display_ = std::make_unique<DrmDisplay>();
-        APP_LOG_INFO("DrmDisplay object created, will initialize after camera startup");
-
-        APP_LOG_INFO("Creating DiscoveryModule...");
+        // Discovery Module — DrmDisplay is created and initialized at the top
+        // of this function so its native mode can size the video path.
         discovery_module_ = std::make_unique<DiscoveryModule>();
         discovery_module_->on_peer_discovered([this](const DiscoveryModule::PeerInfo& peer) {
             APP_LOG_INFO("Application: Auto-discovered peer " + peer.name + " at " + peer.ip);
@@ -431,20 +442,8 @@ bool Application::start_modules() {
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    // Initialize DRM display for HDMI output
-    if (drm_display_) {
-        // Use display resolution (1280x720) instead of camera resolution
-        const unsigned int display_w = 1280;
-        const unsigned int display_h = 720;
-            
-        APP_LOG_INFO("Initializing DRM display with resolution: " + std::to_string(display_w) + "x" + std::to_string(display_h));
-        if (!drm_display_->initialize(display_w, display_h)) {
-            APP_LOG_ERROR("Failed to initialize DRM display");
-            // Don't return false - continue without HDMI output
-        } else {
-            APP_LOG_INFO("DRM display initialized successfully");
-        }
-    }
+    // DRM display was initialized in initialize_modules() (before the camera),
+    // so the whole video path is sized to the display's native mode.
 
         // 3. Start processing modules (Middlware)
 
@@ -770,12 +769,8 @@ bool Application::restart_camera_subsystem() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
         // Get camera configuration
-        const unsigned int cam_w = use_reduced_resolution_ ? 
-            config_loader_.get_reduced_res_width() : 
-            config_loader_.get_high_res_width();
-        const unsigned int cam_h = use_reduced_resolution_ ? 
-            config_loader_.get_reduced_res_height() : 
-            config_loader_.get_high_res_height();
+        const unsigned int cam_w = video_width_;
+        const unsigned int cam_h = video_height_;
         const std::chrono::seconds camera_watchdog_timeout = config_loader_.get_camera_watchdog_timeout();
         
         // Recreate the camera capture object
@@ -916,12 +911,8 @@ bool Application::restart_visualization_subsystem() {
             visualization_processor_->stop();
         }
         // Get main camera dimensions
-        const unsigned int cam_w = use_reduced_resolution_ ? 
-            config_loader_.get_reduced_res_width() : 
-            config_loader_.get_high_res_width();
-        const unsigned int cam_h = use_reduced_resolution_ ? 
-            config_loader_.get_reduced_res_height() : 
-            config_loader_.get_high_res_height();
+        const unsigned int cam_w = video_width_;
+        const unsigned int cam_h = video_height_;
         
                 // Recreate the visualization processor
                 visualization_processor_ = std::make_unique<ImageProcessor>(
@@ -959,12 +950,8 @@ bool Application::restart_encoder_subsystem() {
         }
         
         // Recreate the encoder
-        const unsigned int cam_w = use_reduced_resolution_ ? 
-            config_loader_.get_reduced_res_width() : 
-            config_loader_.get_high_res_width();
-        const unsigned int cam_h = use_reduced_resolution_ ? 
-            config_loader_.get_reduced_res_height() : 
-            config_loader_.get_high_res_height();
+        const unsigned int cam_w = video_width_;
+        const unsigned int cam_h = video_height_;
         
         h264_encoder_ = std::make_unique<H264Encoder>(*overlaid_video_queue_, *h264_output_queue_, h264_pool_, image_data_pool_, cam_w, cam_h, config_loader_.get_camera_fps());
         

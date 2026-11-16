@@ -1,298 +1,271 @@
+// drm_display.cpp — minimal correct DRM output.
+//
+// What the old version did wrong:
+//   1. ONE dumb buffer written in place while the CRTC was scanning it out
+//      (torn rows = the RGB banding), and page-flips issued to the already
+//      displayed framebuffer (no-ops).
+//   2. A per-pixel scalar loop with two float divisions per pixel plus
+//      bounds-check `continue`s that left stale pixels behind (latency
+//      buildup + more banding).
+//   3. DRM_MODE_PAGE_FLIP_EVENT with no event handler — events queued and
+//      never drained; a second flip before vsync returned -EBUSY forever.
+//
+// What this version does:
+//   - Two dumb buffers; every frame is rendered into the buffer that is NOT
+//     being scanned out.
+//   - The pipeline delivers XRGB8888 at the display's native mode, so the
+//     hot path is a plain memcpy. If the camera was constrained to a smaller
+//     resolution (reduced-res config), one NEON cv::resize is used instead.
+//   - vsync-locked: flip with DRM_MODE_PAGE_FLIP_EVENT, then wait for the
+//     flip-complete event (bounded by a 100 ms poll timeout).
+//   - Assumes 4 bytes/pixel (stride = width*4), which is what the pipeline
+//     produces (ISP XRGB8888 output, packed by the visualization processor).
+
 #include "drm_display.h"
+
 #include <cstdio>
 #include <cstring>
 #include <cerrno>
+#include <fcntl.h>
+#include <poll.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <fcntl.h>
-#include <time.h>
-#include <sys/sysinfo.h>
 
-DrmDisplay::DrmDisplay() 
-    : drm_fd_(-1), crtc_id_(0), connector_id_(0), fb_id_(0), buffer_handle_(0),
-      bpp_(32), pitch_(0), size_(0), map_(nullptr),
-      last_render_time_(0), frame_interval_us_(16667),  // ~60 FPS target
-      total_frames_(0), failed_flips_(0), skipped_frames_(0),
-      last_diag_time_(0), diag_interval_ms_(5000) {     // Diagnostics every 5 seconds
-    printf("DrmDisplay constructor called\n");
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+
+namespace {
+
+void flip_handler(int, unsigned, unsigned, unsigned, void* user_data) {
+    *static_cast<bool*>(user_data) = true;
+}
+
+}  // namespace
+
+DrmDisplay::DrmDisplay()
+    : drm_fd_(-1), crtc_id_(0), connector_id_(0),
+      cur_(0), bpp_(32), pitch_(0), size_(0),
+      total_frames_(0), failed_flips_(0) {
+    fb_[0] = fb_[1] = 0;
+    handle_[0] = handle_[1] = 0;
+    map_[0] = map_[1] = nullptr;
+    memset(&mode_, 0, sizeof(mode_));
 }
 
 DrmDisplay::~DrmDisplay() {
-    printf("DrmDisplay destructor called\n");
     print_diagnostics();
     cleanup();
 }
 
-void DrmDisplay::print_diagnostics() {
-    printf("\n=== DRM DISPLAY DIAGNOSTICS ===\n");
-    printf("Total frames rendered: %lu\n", total_frames_);
-    printf("Failed page flips: %lu (%.2f%%)\n", failed_flips_, 
-           total_frames_ > 0 ? (failed_flips_ * 100.0 / total_frames_) : 0.0);
-    printf("Skipped frames: %lu (%.2f%%)\n", skipped_frames_,
-           total_frames_ > 0 ? (skipped_frames_ * 100.0 / total_frames_) : 0.0);
-    printf("Current framebuffer: ID=%u, Size=%u bytes\n", fb_id_, size_);
-    printf("Display mode: %ux%u @ %uHz\n", mode_.hdisplay, mode_.vdisplay, mode_.vrefresh);
-    printf("===============================\n\n");
-}
-
-uint64_t DrmDisplay::get_time_us() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000;
-}
-
-void DrmDisplay::check_system_health() {
-    uint64_t now = get_time_us();
-    if ((now - last_diag_time_) / 1000 >= diag_interval_ms_) {
-        // Print system memory info
-        struct sysinfo si;
-        if (sysinfo(&si) == 0) {
-            printf("[HEALTH] Free RAM: %lu MB, Load: %.2f\n", 
-                   si.freeram * si.mem_unit / (1024*1024),
-                   (double)si.loads[0] / (1 << SI_LOAD_SHIFT));
-        }
-        
-        // Print DRM diagnostics
-        print_diagnostics();
-        last_diag_time_ = now;
-    }
-}
-
-bool DrmDisplay::should_render_now() {
-    uint64_t now = get_time_us();
-    return (now - last_render_time_) >= frame_interval_us_;
-}
-
 bool DrmDisplay::initialize(uint32_t width, uint32_t height) {
-    printf("🎯 INITIALIZING MINIMAL DRM DISPLAY: %ux%u\n", width, height);
-    
-    // Open DRM device
+    // Prefer card1 (Pi 5 HDMI under vc4/v3d), fall back to card0.
     drm_fd_ = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
+    if (drm_fd_ < 0) drm_fd_ = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
     if (drm_fd_ < 0) {
-        drm_fd_ = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
-        if (drm_fd_ < 0) {
-            printf("❌ ERROR: Failed to open DRM device\n");
+        perror("DrmDisplay: open /dev/dri/cardX");
+        return false;
+    }
+
+    drmModeRes* res = drmModeGetResources(drm_fd_);
+    if (!res) {
+        fprintf(stderr, "DrmDisplay: drmModeGetResources failed\n");
+        cleanup();
+        return false;
+    }
+
+    // Enumerate; never hardcode connector/CRTC ids (they change per boot).
+    drmModeConnector* conn = nullptr;
+    for (int i = 0; i < res->count_connectors && !conn; i++) {
+        drmModeConnector* c = drmModeGetConnector(drm_fd_, res->connectors[i]);
+        if (c && c->connection == DRM_MODE_CONNECTED && c->count_modes > 0) {
+            conn = c;
+        } else {
+            drmModeFreeConnector(c);
+        }
+    }
+    if (!conn) {
+        fprintf(stderr, "DrmDisplay: no connected display found\n");
+        drmModeFreeResources(res);
+        cleanup();
+        return false;
+    }
+    connector_id_ = conn->connector_id;
+
+    // Requested mode if the display offers it, otherwise its preferred mode.
+    // width/height == 0 means: always use the native (preferred) mode.
+    mode_ = conn->modes[0];
+    if (width != 0 && height != 0) {
+        for (int i = 0; i < conn->count_modes; i++) {
+            if ((uint32_t)conn->modes[i].hdisplay == width &&
+                (uint32_t)conn->modes[i].vdisplay == height) {
+                mode_ = conn->modes[i];
+                break;
+            }
+        }
+    }
+
+    // CRTC: the connector's bound encoder first, else any possible CRTC.
+    if (conn->encoder_id) {
+        drmModeEncoder* enc = drmModeGetEncoder(drm_fd_, conn->encoder_id);
+        if (enc) {
+            crtc_id_ = enc->crtc_id;
+            drmModeFreeEncoder(enc);
+        }
+    }
+    for (int e = 0; e < conn->count_encoders && !crtc_id_; e++) {
+        drmModeEncoder* enc = drmModeGetEncoder(drm_fd_, conn->encoders[e]);
+        if (!enc) continue;
+        for (int k = 0; k < res->count_crtcs; k++) {
+            if (enc->possible_crtcs & (1u << k)) {
+                crtc_id_ = res->crtcs[k];
+                break;
+            }
+        }
+        drmModeFreeEncoder(enc);
+    }
+    drmModeFreeConnector(conn);
+    drmModeFreeResources(res);
+    if (!crtc_id_) {
+        fprintf(stderr, "DrmDisplay: no CRTC available for connector %u\n", connector_id_);
+        cleanup();
+        return false;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        if (!create_framebuffer(i, mode_.hdisplay, mode_.vdisplay)) {
+            cleanup();
             return false;
         }
     }
-    printf("✅ DRM device opened (FD: %d)\n", drm_fd_);
-    
-    // Find connector and CRTC
-    if (!find_connector_and_crtc()) {
-        printf("❌ ERROR: Failed to find connector/CRTC\n");
+    cur_ = 0;
+
+    if (drmModeSetCrtc(drm_fd_, crtc_id_, fb_[0], 0, 0, &connector_id_, 1, &mode_) != 0) {
+        perror("DrmDisplay: drmModeSetCrtc");
+        cleanup();
         return false;
     }
-    printf("✅ Connector: %u, CRTC: %u\n", connector_id_, crtc_id_);
-    
-    // Create single framebuffer
-    if (!create_framebuffer(width, height)) {
-        printf("❌ ERROR: Failed to create framebuffer\n");
-        return false;
-    }
-    printf("✅ Framebuffer created: ID=%u, Size=%u bytes\n", fb_id_, size_);
-    
-    // Setup display mode
-    if (!setup_mode()) {
-        printf("❌ ERROR: Failed to setup display mode\n");
-        return false;
-    }
-    
-    last_render_time_ = get_time_us();
-    printf("🎯 MINIMAL DRM DISPLAY READY\n");
+
+    printf("DrmDisplay: mode %ux%u, connector %u, crtc %u, pitch %u\n",
+           mode_.hdisplay, mode_.vdisplay, connector_id_, crtc_id_, pitch_);
     return true;
 }
 
-bool DrmDisplay::find_connector_and_crtc() {
-    // Use known working IDs
-    connector_id_ = 32;
-    crtc_id_ = 91;
-    return true;
-}
-
-bool DrmDisplay::create_framebuffer(uint32_t width, uint32_t height) {
-    pitch_ = width * (bpp_ / 8);
-    size_ = pitch_ * height;
-    
-    // Create dumb buffer
-    drm_mode_create_dumb create_request = {};
-    create_request.width = width;
-    create_request.height = height;
-    create_request.bpp = bpp_;
-    
-    if (drmIoctl(drm_fd_, DRM_IOCTL_MODE_CREATE_DUMB, &create_request) < 0) {
-        printf("❌ Create dumb buffer failed: %s\n", strerror(errno));
+bool DrmDisplay::create_framebuffer(int index, uint32_t width, uint32_t height) {
+    drm_mode_create_dumb create = {};
+    create.width = width;
+    create.height = height;
+    create.bpp = 32;
+    if (drmIoctl(drm_fd_, DRM_IOCTL_MODE_CREATE_DUMB, &create) != 0) {
+        perror("DrmDisplay: DRM_IOCTL_MODE_CREATE_DUMB");
         return false;
     }
-    
-    buffer_handle_ = create_request.handle;
-    
-    // Create framebuffer
-    uint32_t offsets[4] = {0};
-    uint32_t pitches[4] = {pitch_};
-    uint32_t bo_handles[4] = {buffer_handle_};
-    
+    handle_[index] = create.handle;
+    // Driver-reported pitch/size: may be aligned larger than width*4.
+    pitch_ = create.pitch;
+    size_ = create.size;
+
+    uint32_t handles[1] = { handle_[index] };
+    uint32_t pitches[1] = { create.pitch };
+    uint32_t offsets[1] = { 0 };
     if (drmModeAddFB2(drm_fd_, width, height, DRM_FORMAT_XRGB8888,
-                      bo_handles, pitches, offsets, &fb_id_, 0) != 0) {
-        if (drmModeAddFB(drm_fd_, width, height, 24, bpp_, pitch_, buffer_handle_, &fb_id_) != 0) {
-            printf("❌ Create framebuffer failed: %s\n", strerror(errno));
-            drm_mode_destroy_dumb destroy_request = {};
-            destroy_request.handle = buffer_handle_;
-            drmIoctl(drm_fd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_request);
-            return false;
-        }
-    }
-    
-    // Map buffer
-    drm_mode_map_dumb map_request = {};
-    map_request.handle = buffer_handle_;
-    
-    if (drmIoctl(drm_fd_, DRM_IOCTL_MODE_MAP_DUMB, &map_request) < 0) {
-        printf("❌ Map buffer failed: %s\n", strerror(errno));
-        drmModeRmFB(drm_fd_, fb_id_);
-        drm_mode_destroy_dumb destroy_request = {};
-        destroy_request.handle = buffer_handle_;
-        drmIoctl(drm_fd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_request);
+                      handles, pitches, offsets, &fb_[index], 0) != 0) {
+        perror("DrmDisplay: drmModeAddFB2");
         return false;
     }
-    
-    map_ = static_cast<uint8_t*>(mmap(0, size_, PROT_READ | PROT_WRITE, MAP_SHARED, drm_fd_, map_request.offset));
-    if (map_ == MAP_FAILED) {
-        printf("❌ mmap failed: %s\n", strerror(errno));
-        drmModeRmFB(drm_fd_, fb_id_);
-        drm_mode_destroy_dumb destroy_request = {};
-        destroy_request.handle = buffer_handle_;
-        drmIoctl(drm_fd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_request);
-        return false;
-    }
-    
-    return true;
-}
 
-bool DrmDisplay::setup_mode() {
-    drmModeRes* resources = drmModeGetResources(drm_fd_);
-    if (!resources) return false;
-    
-    drmModeConnector* connector = drmModeGetConnector(drm_fd_, connector_id_);
-    if (!connector || connector->count_modes == 0) {
-        drmModeFreeResources(resources);
+    drm_mode_map_dumb map_req = {};
+    map_req.handle = handle_[index];
+    if (drmIoctl(drm_fd_, DRM_IOCTL_MODE_MAP_DUMB, &map_req) != 0) {
+        perror("DrmDisplay: DRM_IOCTL_MODE_MAP_DUMB");
         return false;
     }
-    
-    mode_ = connector->modes[0];
-    
-    if (drmModeSetCrtc(drm_fd_, crtc_id_, fb_id_, 0, 0, &connector_id_, 1, &mode_) != 0) {
-        drmModeFreeConnector(connector);
-        drmModeFreeResources(resources);
+    void* m = mmap(nullptr, size_, PROT_READ | PROT_WRITE, MAP_SHARED, drm_fd_, map_req.offset);
+    if (m == MAP_FAILED) {
+        perror("DrmDisplay: mmap");
         return false;
     }
-    
-    drmModeFreeConnector(connector);
-    drmModeFreeResources(resources);
+    map_[index] = static_cast<uint8_t*>(m);
+    memset(map_[index], 0, size_);
     return true;
 }
 
 void DrmDisplay::render_frame(const uint8_t* frame_data, uint32_t frame_width, uint32_t frame_height) {
-    if (!map_ || !frame_data) {
-        printf("DRM: ❌ Invalid frame data or mapping\n");
-        return;
-    }
-    
-    // Check system health periodically
-    check_system_health();
-    
-    // Rate limit to target FPS
-    if (!should_render_now()) {
-        skipped_frames_++;
-        return;
-    }
-    
-    // Validate framebuffer integrity
-    if (size_ == 0 || pitch_ == 0) {
-        printf("DRM: ❌ Invalid framebuffer parameters\n");
-        return;
-    }
-    
-    // Simple nearest-neighbor scaling
-    uint32_t disp_width = mode_.hdisplay;
-    uint32_t disp_height = mode_.vdisplay;
-    
-    float scale_x = static_cast<float>(disp_width) / frame_width;
-    float scale_y = static_cast<float>(disp_height) / frame_height;
-    
-    // Direct BGR to ARGB conversion with scaling and bounds checking
-    for (uint32_t y = 0; y < disp_height; y++) {
-        for (uint32_t x = 0; x < disp_width; x++) {
-            uint32_t src_x = static_cast<uint32_t>(x / scale_x);
-            uint32_t src_y = static_cast<uint32_t>(y / scale_y);
-            
-            if (src_x < frame_width && src_y < frame_height) {
-                // Bounds check for source data
-                size_t src_offset = (src_y * frame_width + src_x) * 3;
-                if (src_offset + 2 >= frame_width * frame_height * 3) {
-                    continue;
-                }
-                
-                const uint8_t* src = frame_data + src_offset;
-                uint32_t* dst = reinterpret_cast<uint32_t*>(map_ + y * pitch_ + x * 4);
-                
-                // Additional bounds check for destination
-                if ((uint8_t*)dst >= map_ + size_) {
-                    continue;
-                }
-                
-                *dst = 0xFF000000 |           // Alpha
-                       (src[2] << 16) |       // Red
-                       (src[1] << 8) |        // Green
-                       src[0];                // Blue
+    if (drm_fd_ < 0 || !map_[0] || !frame_data || frame_width == 0 || frame_height == 0) return;
+
+    const uint32_t next = 1 - cur_;
+
+    if (frame_width == (uint32_t)mode_.hdisplay && frame_height == (uint32_t)mode_.vdisplay) {
+        // Frame already is XRGB8888 at the display's native mode: the whole
+        // "render" is a copy into the hidden buffer.
+        const size_t row_bytes = (size_t)frame_width * 4;
+        if ((size_t)pitch_ == row_bytes) {
+            memcpy(map_[next], frame_data, row_bytes * frame_height);
+        } else {
+            // Driver-aligned pitch (rare): copy row by row.
+            uint8_t* dst = map_[next];
+            for (uint32_t y = 0; y < frame_height; y++) {
+                memcpy(dst + (size_t)y * pitch_, frame_data + (size_t)y * row_bytes, row_bytes);
             }
         }
+    } else {
+        // Camera constrained to a smaller resolution (reduced-res config):
+        // one NEON resize into the hidden buffer.
+        const cv::Mat src(frame_height, frame_width, CV_8UC4,
+                          const_cast<uint8_t*>(frame_data), frame_width * 4);
+        const cv::Mat dst(mode_.vdisplay, mode_.hdisplay, CV_8UC4, map_[next], pitch_);
+        cv::resize(src, dst, cv::Size(mode_.hdisplay, mode_.vdisplay), 0, 0, cv::INTER_NEAREST);
     }
-    
-    // Page flip with error handling
-    int ret = drmModePageFlip(drm_fd_, crtc_id_, fb_id_, DRM_MODE_PAGE_FLIP_EVENT, nullptr);
-    last_render_time_ = get_time_us();
-    total_frames_++;
-    
-    if (ret != 0) {
-        failed_flips_++;
-        printf("❌ PAGE FLIP FAILED (%lu): %s (errno: %d)\n", 
-               failed_flips_, strerror(-ret), -ret);
-        
-        // If we're failing consistently, try to recover
-        if (failed_flips_ > 10 && (failed_flips_ * 100 / total_frames_) > 50) {
-            printf("⚠️  High flip failure rate, attempting recovery...\n");
-            // Reset timing to avoid getting stuck
-            last_render_time_ = get_time_us();
+    cur_ = next;
+
+    // Flip, then wait for the flip-complete event: the buffer just retired
+    // is never rewritten while it is still being scanned out. The poll
+    // timeout bounds the wait if events stop arriving.
+    bool flipped = false;
+    const int ret = drmModePageFlip(drm_fd_, crtc_id_, fb_[cur_],
+                                    DRM_MODE_PAGE_FLIP_EVENT, &flipped);
+    if (ret == 0) {
+        drmEventContext ctx = {};
+        ctx.version = DRM_EVENT_CONTEXT_VERSION;
+        ctx.page_flip_handler = flip_handler;
+        struct pollfd pfd = { drm_fd_, POLLIN, 0 };
+        while (!flipped && poll(&pfd, 1, 100) > 0) {
+            if (drmHandleEvent(drm_fd_, &ctx) != 0) break;
         }
-    } else if (total_frames_ % 300 == 0) {  // Log success every 300 frames
-        printf("✅ PAGE FLIP SUCCESSFUL: %lu frames rendered\n", total_frames_);
+        total_frames_++;
+    } else {
+        failed_flips_++;
+        // -EBUSY = a flip is still pending from another client; harmless,
+        // the frame is simply dropped and the next one wins.
+        if (ret != -EBUSY) {
+            fprintf(stderr, "DrmDisplay: pageflip failed: %s\n", strerror(-ret));
+        }
     }
 }
 
 void DrmDisplay::cleanup() {
-    printf("🧹 Cleaning up DRM resources...\n");
-    
-    if (map_) {
-        munmap(map_, size_);
-        map_ = nullptr;
+    for (int i = 0; i < 2; i++) {
+        if (map_[i]) {
+            munmap(map_[i], size_);
+            map_[i] = nullptr;
+        }
+        if (fb_[i]) {
+            drmModeRmFB(drm_fd_, fb_[i]);
+            fb_[i] = 0;
+        }
+        if (handle_[i]) {
+            drm_mode_destroy_dumb destroy = {};
+            destroy.handle = handle_[i];
+            drmIoctl(drm_fd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
+            handle_[i] = 0;
+        }
     }
-    
-    if (fb_id_) {
-        drmModeRmFB(drm_fd_, fb_id_);
-        fb_id_ = 0;
-    }
-    
-    if (buffer_handle_) {
-        drm_mode_destroy_dumb destroy_request = {};
-        destroy_request.handle = buffer_handle_;
-        drmIoctl(drm_fd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_request);
-        buffer_handle_ = 0;
-    }
-    
     if (drm_fd_ >= 0) {
         close(drm_fd_);
         drm_fd_ = -1;
     }
-    
-    printf("✅ DRM cleanup complete\n");
+}
+
+void DrmDisplay::print_diagnostics() {
+    printf("DrmDisplay: %llu frames rendered, %llu failed flips\n",
+           (unsigned long long)total_frames_, (unsigned long long)failed_flips_);
 }

@@ -83,6 +83,8 @@ public:
     std::unique_ptr<ImageProcessor> visualization_processor_; // Added for visualization
     std::shared_ptr<ImageQueue> main_video_queue_; // Added queue
     bool use_reduced_resolution_ = false; // Added flag
+    unsigned int video_width_ = 0;  // Video path resolution = display native mode (or reduced-res override)
+    unsigned int video_height_ = 0;
     
     // Queues (moved to public for monitor access)
     std::shared_ptr<ImageQueue> raw_image_for_processor_queue_; // New queue
